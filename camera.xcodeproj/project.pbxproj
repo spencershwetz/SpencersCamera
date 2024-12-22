@@ -10,9 +10,22 @@
 		09562D7C2D18A1EC009A9B07 /* camera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = camera.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		09562DB12D18A28C009A9B07 /* Exceptions for "camera" folder in "camera" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 09562D7B2D18A1EC009A9B07 /* camera */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		09562D7E2D18A1EC009A9B07 /* camera */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				09562DB12D18A28C009A9B07 /* Exceptions for "camera" folder in "camera" target */,
+			);
 			path = camera;
 			sourceTree = "<group>";
 		};
@@ -255,6 +268,9 @@
 				DEVELOPMENT_TEAM = 3B883XKLK8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -284,6 +300,9 @@
 				DEVELOPMENT_TEAM = 3B883XKLK8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
