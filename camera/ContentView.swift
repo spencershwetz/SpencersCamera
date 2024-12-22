@@ -21,19 +21,38 @@ struct ContentView: View {
                         .ignoresSafeArea()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
-                    // Camera controls with adaptive layout
-                    Group {
-                        if orientation.isPortrait {
-                            VStack {
-                                Spacer()
-                                controlsView
-                                    .frame(maxWidth: geometry.size.width)
+                    // Add settings button at the top
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                viewModel.isSettingsPresented = true
+                            }) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
                             }
-                        } else {
-                            HStack {
-                                Spacer()
-                                controlsView
-                                    .frame(maxWidth: geometry.size.width * 0.4)
+                            .padding()
+                        }
+                        Spacer()
+                        
+                        // Existing camera controls
+                        Group {
+                            if orientation.isPortrait {
+                                VStack {
+                                    Spacer()
+                                    controlsView
+                                        .frame(maxWidth: geometry.size.width)
+                                }
+                            } else {
+                                HStack {
+                                    Spacer()
+                                    controlsView
+                                        .frame(maxWidth: geometry.size.width * 0.4)
+                                }
                             }
                         }
                     }
@@ -42,6 +61,9 @@ struct ContentView: View {
                 }
             }
             .edgesIgnoringSafeArea(.all)
+        }
+        .sheet(isPresented: $viewModel.isSettingsPresented) {
+            SettingsView()
         }
         .alert(item: $viewModel.error) { error in
             Alert(title: Text("Error"),
