@@ -27,11 +27,13 @@ struct ContentView: View {
                             VStack {
                                 Spacer()
                                 controlsView
+                                    .frame(maxWidth: geometry.size.width)
                             }
                         } else {
                             HStack {
                                 Spacer()
                                 controlsView
+                                    .frame(maxWidth: geometry.size.width * 0.4)
                             }
                         }
                     }
