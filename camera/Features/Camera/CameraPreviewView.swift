@@ -12,12 +12,16 @@ struct CameraPreviewView: UIViewRepresentable {
         
         view.layer.addSublayer(previewLayer)
         
-        // Set rotation angle for portrait orientation (0 degrees)
-        if #available(iOS 17.0, *) {
-            previewLayer.connection?.videoRotationAngle = 0
-        } else {
-            previewLayer.connection?.videoOrientation = .portrait
-        }
+        // Initial orientation setup
+        updatePreviewLayerOrientation(previewLayer)
+        
+        // Add orientation change observer
+        NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main) { _ in
+                updatePreviewLayerOrientation(previewLayer)
+            }
         
         return view
     }
@@ -26,14 +30,19 @@ struct CameraPreviewView: UIViewRepresentable {
         DispatchQueue.main.async {
             if let layer = uiView.layer.sublayers?.first as? AVCaptureVideoPreviewLayer {
                 layer.frame = uiView.bounds
-                
-                // Maintain rotation angle
-                if #available(iOS 17.0, *) {
-                    layer.connection?.videoRotationAngle = 0
-                } else {
-                    layer.connection?.videoOrientation = .portrait
-                }
+                updatePreviewLayerOrientation(layer)
             }
+        }
+    }
+    
+    private func updatePreviewLayerOrientation(_ layer: AVCaptureVideoPreviewLayer) {
+        guard let connection = layer.connection else { return }
+        
+        // For now, we'll just handle portrait mode
+        if #available(iOS 17.0, *) {
+            connection.videoRotationAngle = 90 // Changed from 270 to 90 degrees for portrait
+        } else {
+            connection.videoOrientation = .portrait
         }
     }
 } 
