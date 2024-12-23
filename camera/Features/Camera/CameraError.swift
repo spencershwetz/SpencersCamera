@@ -1,5 +1,7 @@
+import Foundation
+
 enum CameraError: Error, Identifiable {
-    case deviceNotFound
+    case cameraUnavailable
     case setupFailed
     case configurationFailed
     case recordingFailed
@@ -9,8 +11,8 @@ enum CameraError: Error, Identifiable {
     
     var description: String {
         switch self {
-        case .deviceNotFound:
-            return "Camera device not found"
+        case .cameraUnavailable:
+            return "Camera device not available"
         case .setupFailed:
             return "Failed to setup camera"
         case .configurationFailed:

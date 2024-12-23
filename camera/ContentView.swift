@@ -21,25 +21,10 @@ struct ContentView: View {
                         .ignoresSafeArea()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     
-                    // Add settings button at the top
                     VStack {
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                viewModel.isSettingsPresented = true
-                            }) {
-                                Image(systemName: "gear")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                            }
-                            .padding()
-                        }
                         Spacer()
                         
-                        // Existing camera controls
+                        // Camera controls
                         Group {
                             if orientation.isPortrait {
                                 VStack {
@@ -61,9 +46,6 @@ struct ContentView: View {
                 }
             }
             .edgesIgnoringSafeArea(.all)
-        }
-        .sheet(isPresented: $viewModel.isSettingsPresented) {
-            SettingsView()
         }
         .alert(item: $viewModel.error) { error in
             Alert(title: Text("Error"),
@@ -103,6 +85,20 @@ struct ContentView: View {
                 }, set: { newValue in
                     viewModel.updateShutterSpeed(CMTimeMake(value: 1, timescale: Int32(newValue)))
                 }), in: 15...8000, step: 1)
+            }
+            
+            // Add Apple Log toggle if supported
+            if viewModel.isAppleLogSupported {
+                Toggle(isOn: $viewModel.isAppleLogEnabled) {
+                    HStack {
+                        Text("Apple Log")
+                        if viewModel.isAppleLogEnabled {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                .tint(.green)
             }
             
             Button(action: {

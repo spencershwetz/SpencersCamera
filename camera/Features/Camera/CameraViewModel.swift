@@ -15,6 +15,15 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false
     
+    // Turn off Apple Log by default to avoid RenderBox/metallib issues
+    @Published var isAppleLogEnabled: Bool = false {
+        didSet {
+            handleAppleLogSettingChanged()
+        }
+    }
+    
+    @Published var isAppleLogSupported: Bool = false
+    
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
     private var videoOutput: AVCaptureVideoDataOutput?
@@ -37,15 +46,33 @@ class CameraViewModel: NSObject, ObservableObject {
     
     override init() {
         super.init()
+        print("\n=== Camera Initialization ===")
         setupSession()
         
-        // Listen for Apple Log setting changes.
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAppleLogSettingChanged),
-            name: .appleLogSettingChanged,
-            object: nil
-        )
+        // Check if device supports Apple Log
+        if let device = device {
+            print("📊 Device Capabilities:")
+            print("- Name: \(device.localizedName)")
+            print("- Model ID: \(device.modelID)")
+            
+            print("\n🎨 Supported Color Spaces:")
+            device.formats.forEach { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                let codecType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+                print("""
+                    Format: \(dimensions.width)x\(dimensions.height) - Codec: \(codecType)
+                    - Color Spaces: \(format.supportedColorSpaces.map { $0.rawValue })
+                    - Supports Apple Log: \(format.supportedColorSpaces.contains(.appleLog))
+                    - Supports HDR: \(format.isVideoHDRSupported)
+                    """)
+            }
+            
+            isAppleLogSupported = device.formats.contains { format in
+                format.supportedColorSpaces.contains(.appleLog)
+            }
+            print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+        }
+        print("=== End Initialization ===\n")
     }
     
     private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {
@@ -56,220 +83,200 @@ class CameraViewModel: NSObject, ObservableObject {
             
             // Look for 4K ProRes format with Apple Log support
             let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-            let isProRes = (codecType == 2016686642) // x422 codec
+            let isProRes = (codecType == 2016686642) // 'x422' for ProRes 422
             let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
+            let hasHDR = format.isVideoHDRSupported
             
-            return is4K && isProRes && hasAppleLog
+            return is4K && isProRes && hasAppleLog && hasHDR
         }
     }
     
-    @objc private func handleAppleLogSettingChanged() {
-        guard let device = device else { return }
-        
-        do {
-            // Stop the session before reconfiguring
-            session.stopRunning()
-            
-            session.beginConfiguration()
-            try device.lockForConfiguration()
-            
-            if settingsModel.isAppleLogEnabled {
-                if let format = findBestAppleLogFormat(device) {
-                    device.activeFormat = format
-                    device.activeColorSpace = .appleLog
-                    print("Enabled Apple Log in 4K ProRes format: \(format)")
-                } else {
-                    print("No suitable Apple Log format found")
-                }
-            } else {
-                // Reset to standard format
-                device.activeColorSpace = .sRGB
-                print("Disabled Apple Log")
-            }
-            
-            device.unlockForConfiguration()
-            session.commitConfiguration()
-            
-            // Restart the session
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.session.startRunning()
-                
-                DispatchQueue.main.async {
-                    self?.isSessionRunning = self?.session.isRunning ?? false
-                }
-            }
-            
-        } catch {
-            print("Error updating Apple Log setting: \(error)")
-            self.error = .configurationFailed
-            
-            // Make sure to restart the session even if there's an error
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.session.startRunning()
-                
-                DispatchQueue.main.async {
-                    self?.isSessionRunning = self?.session.isRunning ?? false
-                }
-            }
-        }
-    }
-    
-    func setupSession() {
-        print("Setting up camera session...")
-        print("Current session running state: \(session.isRunning)")
-        
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            print("Failed to get camera device")
-            error = .deviceNotFound
+    private func handleAppleLogSettingChanged() {
+        guard let device = device else {
+            print("❌ No camera device available")
             return
         }
         
-        // Debug print for Apple Log support
-        print("Device formats:")
-        device.formats.forEach { format in
-            let colorSpaces = format.supportedColorSpaces.map { $0.rawValue }
-            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let codecType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-            print("""
-                Format: \(format)
-                - Dimensions: \(dimensions.width)x\(dimensions.height)
-                - Codec: \(codecType)
-                - Supports Apple Log: \(colorSpaces.contains(AVCaptureColorSpace.appleLog.rawValue))
-                - Supported Color Spaces: \(colorSpaces)
-                - HDR: \(format.isVideoHDRSupported)
-                ----------------
-                """)
-        }
-        
-        self.device = device
+        print("\n=== Apple Log State Change ===")
+        print("🎥 Current device: \(device.localizedName)")
+        print("📊 Current format: \(device.activeFormat.formatDescription)")
+        print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
+        print("🔄 Changing to: \(isAppleLogEnabled ? "Apple Log" : "sRGB")")
         
         do {
+            session.stopRunning()
+            print("⏸️ Session stopped for reconfiguration")
+            
+            DispatchQueue.main.async {
+                self.isSessionRunning = false
+            }
+            
+            Thread.sleep(forTimeInterval: 0.1)
             session.beginConfiguration()
-            session.sessionPreset = .high
-            print("Session preset set to: \(session.sessionPreset.rawValue)")
             
-            try device.lockForConfiguration()
-            
-            // Same logic in initial setup: search 4K ProRes + Apple Log
-            let proResFormat = device.formats.first { format in
-                let desc = format.formatDescription
-                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-                let codecType  = CMFormatDescriptionGetMediaSubType(desc)
-                
-                let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422)
-                let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
-                
-                return is4K && isProRes && hasAppleLog
-            }
-            
-            if let format = proResFormat,
-               settingsModel.isAppleLogEnabled && settingsModel.isAppleLogSupported {
-                
-                device.activeFormat = format
-                device.activeColorSpace = .appleLog
-                print("Enabled Apple Log in 4K ProRes => \(format)")
+            if isAppleLogEnabled {
+                if let format = findBestAppleLogFormat(device) {
+                    let frameRateRange = format.videoSupportedFrameRateRanges.first!
+                    print("⚙️ Setting frame rate: \(frameRateRange.minFrameRate)-\(frameRateRange.maxFrameRate) fps")
+                    
+                    try device.lockForConfiguration()
+                    device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
+                    device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
+                    device.activeFormat = format
+                    device.activeColorSpace = .appleLog
+                    device.unlockForConfiguration()
+                    
+                    print("✅ Successfully enabled Apple Log")
+                    print("📹 New format: \(format.formatDescription)")
+                } else {
+                    print("⚠️ No suitable Apple Log format found. Reverting to sRGB.")
+                    try device.lockForConfiguration()
+                    device.activeColorSpace = .sRGB
+                    device.unlockForConfiguration()
+                    isAppleLogEnabled = false
+                }
             } else {
-                print("No matching 4K ProRes + Apple Log format found, or Apple Log not enabled. Using default format => \(device.activeFormat)")
+                try device.lockForConfiguration()
+                device.activeColorSpace = .sRGB
+                device.unlockForConfiguration()
+                print("✅ Reset to sRGB color space")
             }
             
-            device.videoZoomFactor = device.minAvailableVideoZoomFactor
+            session.commitConfiguration()
+            print("💾 Configuration committed")
             
-            if device.isWhiteBalanceModeSupported(.locked) {
-                device.whiteBalanceMode = .locked
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+                print("▶️ Session restarted")
+                
+                DispatchQueue.main.async {
+                    self?.isSessionRunning = self?.session.isRunning ?? false
+                    print("📱 UI updated - session running: \(self?.session.isRunning ?? false)")
+                }
             }
-            if device.isExposureModeSupported(.custom) {
-                device.exposureMode = .custom
+        } catch {
+            print("❌ Error updating Apple Log setting: \(error.localizedDescription)")
+            self.error = .configurationFailed
+            
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+                print("🔄 Attempting session recovery")
             }
-            device.unlockForConfiguration()
-            
-            // Now add camera input
-            let input = try AVCaptureDeviceInput(device: device)
-            if session.canAddInput(input) {
-                session.addInput(input)
-                print("Added camera input to session")
+        }
+        
+        print("=== End Apple Log State Change ===\n")
+    }
+    
+    private func setupSession() {
+        session.beginConfiguration()
+        
+        // Configure camera input
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
+                                                      for: .video,
+                                                      position: .back) else {
+            error = .cameraUnavailable
+            session.commitConfiguration()
+            return
+        }
+        
+        self.device = videoDevice
+        
+        do {
+            // By default, do NOT enable Apple Log or 4K ProRes to avoid RenderBox errors
+            if isAppleLogEnabled && isAppleLogSupported {
+                if let appleLogFormat = findBestAppleLogFormat(videoDevice) {
+                    let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
+                    try videoDevice.lockForConfiguration()
+                    videoDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
+                    videoDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
+                    videoDevice.activeFormat = appleLogFormat
+                    videoDevice.activeColorSpace = .appleLog
+                    videoDevice.unlockForConfiguration()
+                    print("Initial setup: Enabled Apple Log in 4K ProRes format")
+                }
             }
             
-            // Video output
-            let videoOutput = AVCaptureVideoDataOutput()
-            videoOutput.setSampleBufferDelegate(self, queue: videoOutputQueue)
+            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+            if session.canAddInput(videoInput) {
+                session.addInput(videoInput)
+            }
             
-            // Use 8-bit or 10-bit YUV
+            // Create & add video data output
+            videoOutput = setupVideoOutput()
+            if let videoOutput = videoOutput, session.canAddOutput(videoOutput) {
+                session.addOutput(videoOutput)
+            }
+            
+            // Create & add audio data output
+            let audioOutput = AVCaptureAudioDataOutput()
+            audioOutput.setSampleBufferDelegate(self, queue: audioOutputQueue)
+            if session.canAddOutput(audioOutput) {
+                session.addOutput(audioOutput)
+                self.audioOutput = audioOutput
+            }
+            
+        } catch {
+            print("Error setting up camera: \(error)")
+            self.error = .setupFailed
+            session.commitConfiguration()
+            return
+        }
+        
+        session.commitConfiguration()
+        
+        // Start the session
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.session.startRunning()
+            DispatchQueue.main.async {
+                self?.isSessionRunning = self?.session.isRunning ?? false
+            }
+        }
+    }
+    
+    private func setupVideoOutput() -> AVCaptureVideoDataOutput {
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.setSampleBufferDelegate(self, queue: videoOutputQueue)
+        
+        // If Apple Log is enabled and supported, attempt a 10-bit format
+        if isAppleLogEnabled && isAppleLogSupported {
             let availableFormats = videoOutput.availableVideoPixelFormatTypes
-            print("Available pixel formats: \(availableFormats)")
+            print("Available video pixel formats: \(availableFormats)")
             
-            let chosenPixelFormat = availableFormats.first { fmt in
-                // 10-bit or 8-bit YUV
-                fmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
-                fmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange ||
-                fmt == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange  ||
-                fmt == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+            let preferredFormats: [OSType] = [
+                kCVPixelFormatType_422YpCbCr10,
+                kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            ]
+            let format = preferredFormats.first { availableFormats.contains($0) }
+            
+            guard let pixelFormat = format else {
+                print("No suitable pixel format found for Apple Log. Falling back to 8-bit.")
+                let fallbackSettings: [String: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                    kCVPixelBufferMetalCompatibilityKey as String: true
+                ]
+                videoOutput.videoSettings = fallbackSettings
+                return videoOutput
             }
             
-            guard let pixelFormat = chosenPixelFormat else {
-                print("No supported pixel format found")
-                error = .setupFailed
-                session.commitConfiguration()
-                return
-            }
-            
-            print("Using pixel format: \(pixelFormat)")
             let videoSettings: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: pixelFormat,
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ]
-            
             videoOutput.videoSettings = videoSettings
-            videoOutput.alwaysDiscardsLateVideoFrames = false
-            
-            if session.canAddOutput(videoOutput) {
-                session.addOutput(videoOutput)
-                print("Added video output to session")
-                
-                if let connection = videoOutput.connection(with: .video) {
-                    if connection.isVideoStabilizationSupported {
-                        connection.preferredVideoStabilizationMode = .auto
-                    }
-                    if #available(iOS 17.0, *) {
-                        connection.videoRotationAngle = 90
-                    } else {
-                        connection.videoOrientation = .portrait
-                    }
-                }
-            }
-            self.videoOutput = videoOutput
-            
-            // Audio
-            if let audioDevice = AVCaptureDevice.default(for: .audio),
-               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
-                let audioOutput = AVCaptureAudioDataOutput()
-                audioOutput.setSampleBufferDelegate(self, queue: audioOutputQueue)
-                if session.canAddOutput(audioOutput) {
-                    session.addOutput(audioOutput)
-                    print("Added audio output to session")
-                }
-                self.audioOutput = audioOutput
-            }
-            
-            session.commitConfiguration()
-            
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                print("Starting camera session...")
-                self.session.startRunning()
-                print("Session running state after start: \(self.session.isRunning)")
-                
-                DispatchQueue.main.async {
-                    self.isSessionRunning = self.session.isRunning
-                }
-            }
-        } catch {
-            print("Error configuring camera session: \(error)")
-            self.error = .setupFailed
-            session.commitConfiguration()
+            print("Configured video output for Apple Log with format: \(pixelFormat)")
+        } else {
+            // Standard 8-bit fallback
+            let videoSettings: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                kCVPixelBufferMetalCompatibilityKey as String: true
+            ]
+            videoOutput.videoSettings = videoSettings
+            print("Configured video output for standard recording")
         }
+        
+        videoOutput.alwaysDiscardsLateVideoFrames = false
+        return videoOutput
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -340,40 +347,25 @@ class CameraViewModel: NSObject, ObservableObject {
         do {
             assetWriter = try AVAssetWriter(url: videoPath, fileType: .mov)
             
-            // ProRes with Apple Log
-            var videoSettings: [String: Any] = [
-                AVVideoCodecKey: kCMVideoCodecType_AppleProRes422,
-                AVVideoWidthKey: 3840,
-                AVVideoHeightKey: 2160
+            // To avoid default.metallib issues, do not force Apple Log + 4K ProRes.
+            // Use standard H.264 or fallback if Apple Log is known to fail.
+            let videoSettings: [String: Any] = [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: NSNumber(value: 1920),
+                AVVideoHeightKey: NSNumber(value: 1080)
             ]
             
-            let sourcePixelBufferAttributes: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                kCVPixelBufferWidthKey as String: 3840,
-                kCVPixelBufferHeightKey as String: 2160,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:]
-            ]
-            
-            if settingsModel.isAppleLogEnabled && settingsModel.isAppleLogSupported {
-                // Set color properties for Apple Log
-                videoSettings[AVVideoColorPropertiesKey] = [
-                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
-                    AVVideoTransferFunctionKey: kCVImageBufferTransferFunction_ITU_R_2100_HLG,
-                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
-                ]
-                print("Configuring 4K ProRes with Apple Log")
+            // Create video input with format hint
+            if let currentFormat = device?.activeFormat {
+                videoInput = AVAssetWriterInput(mediaType: .video,
+                                                outputSettings: videoSettings,
+                                                sourceFormatHint: currentFormat.formatDescription)
             } else {
-                print("Configuring 4K ProRes (No Log)")
+                videoInput = AVAssetWriterInput(mediaType: .video,
+                                                outputSettings: videoSettings)
             }
             
-            videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             videoInput?.expectsMediaDataInRealTime = true
-            
-            let _ = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: videoInput!,
-                sourcePixelBufferAttributes: sourcePixelBufferAttributes
-            )
-            
             if let videoInput = videoInput,
                assetWriter?.canAdd(videoInput) == true {
                 assetWriter?.add(videoInput)
@@ -386,18 +378,15 @@ class CameraViewModel: NSObject, ObservableObject {
                 AVNumberOfChannelsKey: 2,
                 AVEncoderBitRateKey: 256_000
             ]
-            
             audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioInput?.expectsMediaDataInRealTime = true
-            
             if let audioInput = audioInput,
                assetWriter?.canAdd(audioInput) == true {
                 assetWriter?.add(audioInput)
             }
             
             isRecording = true
-            print("Starting 4K ProRes recording to: \(videoPath)")
-            
+            print("Starting recording to: \(videoPath)")
         } catch {
             print("Failed to create asset writer: \(error)")
             self.error = .recordingFailed
@@ -410,17 +399,63 @@ class CameraViewModel: NSObject, ObservableObject {
             return
         }
         
+        print("Stopping recording...")
         isProcessingRecording = true
         isRecording = false
         
-        videoInput?.markAsFinished()
-        audioInput?.markAsFinished()
+        guard let writer = assetWriter,
+              writer.status == .writing else {
+            print("❌ Cannot stop recording: Asset writer status is \(assetWriter?.status.rawValue ?? -1)")
+            isProcessingRecording = false
+            error = .recordingFailed
+            return
+        }
         
-        assetWriter?.finishWriting { [weak self] in
-            guard let self = self,
-                  let outputURL = self.currentRecordingURL else { return }
+        let finishGroup = DispatchGroup()
+        
+        if let videoInput = videoInput {
+            finishGroup.enter()
+            videoOutputQueue.async {
+                videoInput.markAsFinished()
+                finishGroup.leave()
+            }
+        }
+        
+        if let audioInput = audioInput {
+            finishGroup.enter()
+            audioOutputQueue.async {
+                audioInput.markAsFinished()
+                finishGroup.leave()
+            }
+        }
+        
+        finishGroup.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            print("Finishing asset writer...")
             
-            self.saveVideoToPhotoLibrary(outputURL)
+            writer.finishWriting { [weak self] in
+                guard let self = self else { return }
+                
+                if let error = writer.error {
+                    print("❌ Error finishing recording: \(error)")
+                    DispatchQueue.main.async {
+                        self.error = .recordingFailed
+                        self.isProcessingRecording = false
+                    }
+                    return
+                }
+                
+                if let outputURL = self.currentRecordingURL {
+                    print("✅ Recording finished successfully")
+                    self.saveVideoToPhotoLibrary(outputURL)
+                } else {
+                    print("❌ No output URL available")
+                    DispatchQueue.main.async {
+                        self.error = .recordingFailed
+                        self.isProcessingRecording = false
+                    }
+                }
+            }
         }
     }
     
@@ -443,7 +478,7 @@ class CameraViewModel: NSObject, ObservableObject {
             } completionHandler: { success, error in
                 DispatchQueue.main.async {
                     if success {
-                        print("ProRes video saved to photo library")
+                        print("Video saved to photo library")
                         self?.recordingFinished = true
                     } else {
                         print("Error saving video: \(String(describing: error))")
@@ -462,19 +497,52 @@ extension CameraViewModel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptu
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard isRecording,
-              let assetWriter = assetWriter else { return }
+              let writer = assetWriter else { return }
         
         let writerInput = (output is AVCaptureVideoDataOutput) ? videoInput : audioInput
+        let isVideo = output is AVCaptureVideoDataOutput
         
-        if assetWriter.status == .unknown {
-            assetWriter.startWriting()
-            assetWriter.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
-        }
-        
-        if assetWriter.status == .writing,
-           let input = writerInput,
-           input.isReadyForMoreMediaData {
-            input.append(sampleBuffer)
+        switch writer.status {
+        case .unknown:
+            let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            
+            // Start session with first video buffer
+            if isVideo {
+                print("🎥 Starting asset writer session with video buffer")
+                writer.startWriting()
+                writer.startSession(atSourceTime: timestamp)
+                print("📝 Started writing at timestamp: \(timestamp.seconds)")
+                
+                if let input = writerInput, input.isReadyForMoreMediaData {
+                    let success = input.append(sampleBuffer)
+                    if !success {
+                        print("⚠️ Failed to append first video buffer")
+                    }
+                }
+            }
+            
+        case .writing:
+            if let input = writerInput,
+               input.isReadyForMoreMediaData {
+                let success = input.append(sampleBuffer)
+                if !success {
+                    print("⚠️ Failed to append \(isVideo ? "video" : "audio") buffer")
+                }
+            }
+            
+        case .failed:
+            print("❌ Asset writer failed: \(writer.error?.localizedDescription ?? "unknown error")")
+            DispatchQueue.main.async {
+                self.error = .recordingFailed
+                self.isRecording = false
+                self.isProcessingRecording = false
+            }
+            
+        case .completed:
+            print("✅ Asset writer completed")
+            
+        default:
+            print("️ Asset writer status: \(writer.status.rawValue)")
         }
     }
     
