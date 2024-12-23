@@ -48,45 +48,69 @@ class CameraViewModel: NSObject, ObservableObject {
         )
     }
     
+    private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {
+        return device.formats.first { format in
+            let desc = format.formatDescription
+            let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
+            let codecType = CMFormatDescriptionGetMediaSubType(desc)
+            
+            // Look for 4K ProRes format with Apple Log support
+            let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
+            let isProRes = (codecType == 2016686642) // x422 codec
+            let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
+            
+            return is4K && isProRes && hasAppleLog
+        }
+    }
+    
     @objc private func handleAppleLogSettingChanged() {
         guard let device = device else { return }
         
         do {
+            // Stop the session before reconfiguring
+            session.stopRunning()
+            
             session.beginConfiguration()
             try device.lockForConfiguration()
             
-            // Attempt to find a 4K ProRes + Apple Log format
-            let proResFormat = device.formats.first { format in
-                let desc = format.formatDescription
-                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-                let codecType  = CMFormatDescriptionGetMediaSubType(desc)
-                
-                // Must be 4K, AppleProRes422, and .appleLog color space
-                let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422)
-                let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
-                
-                return is4K && isProRes && hasAppleLog
-            }
-            
-            if let format = proResFormat,
-               settingsModel.isAppleLogEnabled && settingsModel.isAppleLogSupported {
-                
-                device.activeFormat = format
-                device.activeColorSpace = .appleLog
-                print("Enabled Apple Log in 4K ProRes format => \(format)")
-                
+            if settingsModel.isAppleLogEnabled {
+                if let format = findBestAppleLogFormat(device) {
+                    device.activeFormat = format
+                    device.activeColorSpace = .appleLog
+                    print("Enabled Apple Log in 4K ProRes format: \(format)")
+                } else {
+                    print("No suitable Apple Log format found")
+                }
             } else {
+                // Reset to standard format
                 device.activeColorSpace = .sRGB
-                print("Apple Log in 4K ProRes not found or disabled. Falling back to sRGB.")
+                print("Disabled Apple Log")
             }
             
             device.unlockForConfiguration()
             session.commitConfiguration()
             
+            // Restart the session
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+                
+                DispatchQueue.main.async {
+                    self?.isSessionRunning = self?.session.isRunning ?? false
+                }
+            }
+            
         } catch {
             print("Error updating Apple Log setting: \(error)")
             self.error = .configurationFailed
+            
+            // Make sure to restart the session even if there's an error
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.session.startRunning()
+                
+                DispatchQueue.main.async {
+                    self?.isSessionRunning = self?.session.isRunning ?? false
+                }
+            }
         }
     }
     
