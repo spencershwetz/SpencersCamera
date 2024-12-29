@@ -3,8 +3,25 @@ import SwiftUI
 import Photos
 import VideoToolbox
 import CoreVideo
+import os.log
 
 class CameraViewModel: NSObject, ObservableObject {
+    enum Status {
+        case unknown
+        case running
+        case failed
+        case unauthorized
+    }
+    @Published private(set) var status: Status = .unknown
+    
+    enum CaptureMode {
+        case photo
+        case video
+    }
+    @Published var captureMode: CaptureMode = .video
+    
+    private let logger = Logger(subsystem: "com.camera", category: "CameraViewModel")
+    
     @Published var isSessionRunning = false
     @Published var error: CameraError?
     @Published var whiteBalance: Float = 5000 // Kelvin
@@ -16,13 +33,43 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var isProcessingRecording = false
     
     // Enable Apple Log (4K ProRes) by default if device supports it
-    @Published var isAppleLogEnabled: Bool = true {
+    @Published var isAppleLogEnabled = false {
         didSet {
-            handleAppleLogSettingChanged()
+            print("\n=== Apple Log Toggle ===")
+            print("🔄 Status: \(status)")
+            print("📹 Capture Mode: \(captureMode)")
+            print("✅ Attempting to set Apple Log to: \(isAppleLogEnabled)")
+            
+            guard status == .running, captureMode == .video else {
+                print("❌ Cannot configure Apple Log - Status or mode incorrect")
+                print("Required: status == .running (is: \(status))")
+                print("Required: captureMode == .video (is: \(captureMode))")
+                return
+            }
+            
+            // Use Task with proper error handling
+            Task {
+                do {
+                    if isAppleLogEnabled {
+                        print("🎥 Configuring Apple Log...")
+                        try await configureAppleLog()
+                    } else {
+                        print("↩️ Resetting Apple Log...")
+                        try await resetAppleLog()
+                    }
+                } catch {
+                    await MainActor.run {
+                        self.error = .configurationFailed
+                    }
+                    logger.error("Failed to configure Apple Log: \(error.localizedDescription)")
+                    print("❌ Apple Log configuration failed: \(error)")
+                }
+            }
+            print("=== End Apple Log Toggle ===\n")
         }
     }
     
-    @Published var isAppleLogSupported: Bool = false
+    @Published private(set) var isAppleLogSupported = false
     
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
@@ -36,6 +83,8 @@ class CameraViewModel: NSObject, ObservableObject {
     private let videoOutputQueue = DispatchQueue(label: "com.camera.videoOutput")
     private let audioOutputQueue = DispatchQueue(label: "com.camera.audioOutput")
     
+    private var defaultFormat: AVCaptureDevice.Format?
+    
     var minISO: Float {
         device?.activeFormat.minISO ?? 50
     }
@@ -46,32 +95,48 @@ class CameraViewModel: NSObject, ObservableObject {
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
-        setupSession()
         
-        // Print device capabilities
-        if let device = device {
-            print("📊 Device Capabilities:")
-            print("- Name: \(device.localizedName)")
-            print("- Model ID: \(device.modelID)")
+        do {
+            try setupSession()
             
-            print("\n🎨 Supported Color Spaces:")
-            device.formats.forEach { format in
-                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                let codecType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-                print("""
-                    Format: \(dimensions.width)x\(dimensions.height) - Codec: \(codecType)
-                    - Color Spaces: \(format.supportedColorSpaces.map { $0.rawValue })
-                    - Supports Apple Log: \(format.supportedColorSpaces.contains(.appleLog))
-                    - Supports HDR: \(format.isVideoHDRSupported)
-                    """)
+            // Print device capabilities
+            if let device = device {
+                print("📊 Device Capabilities:")
+                print("- Name: \(device.localizedName)")
+                print("- Model ID: \(device.modelID)")
+                
+                print("\n🎨 Supported Color Spaces:")
+                device.formats.forEach { format in
+                    let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    let codecType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+                    print("""
+                        Format: \(dimensions.width)x\(dimensions.height) - Codec: \(codecType)
+                        - Color Spaces: \(format.supportedColorSpaces.map { $0.rawValue })
+                        - Supports Apple Log: \(format.supportedColorSpaces.contains(.appleLog))
+                        - Supports HDR: \(format.isVideoHDRSupported)
+                        """)
+                }
+                
+                isAppleLogSupported = device.formats.contains { format in
+                    format.supportedColorSpaces.contains(.appleLog)
+                }
+                print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+            }
+            print("=== End Initialization ===\n")
+            
+            // Store default format
+            if let device = device {
+                defaultFormat = device.activeFormat
             }
             
-            isAppleLogSupported = device.formats.contains { format in
+            // Check Apple Log support
+            isAppleLogSupported = device?.formats.contains { format in
                 format.supportedColorSpaces.contains(.appleLog)
-            }
-            print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+            } ?? false
+        } catch {
+            self.error = .setupFailed
+            print("Failed to setup session: \(error)")
         }
-        print("=== End Initialization ===\n")
     }
     
     /// Returns a 4K (3840x2160) AppleProRes422 format that also supports Apple Log
@@ -89,76 +154,147 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    private func handleAppleLogSettingChanged() {
+    private func configureAppleLog() async throws {
         guard let device = device else {
             print("❌ No camera device available")
             return
         }
         
-        print("\n=== Apple Log State Change ===")
+        print("\n=== Apple Log Configuration ===")
         print("🎥 Current device: \(device.localizedName)")
         print("📊 Current format: \(device.activeFormat.formatDescription)")
         print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
-        print("🔄 Changing to: \(isAppleLogEnabled ? "Apple Log (4K ProRes)" : "sRGB")")
+        print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
+        
+        // Ensure wide color is disabled
+        session.automaticallyConfiguresCaptureDeviceForWideColor = false
+        
+        // Check if format supports Apple Log
+        let supportsAppleLog = device.formats.contains { format in
+            format.supportedColorSpaces.contains(.appleLog)
+        }
+        print("✓ Device supports Apple Log: \(supportsAppleLog)")
         
         do {
             session.stopRunning()
             print("⏸️ Session stopped for reconfiguration")
             
-            DispatchQueue.main.async {
-                self.isSessionRunning = false
-            }
-            
-            Thread.sleep(forTimeInterval: 0.1)
+            try await Task.sleep(for: .milliseconds(100))
             session.beginConfiguration()
             
-            if isAppleLogEnabled, let format = findBestAppleLogFormat(device) {
-                let frameRateRange = format.videoSupportedFrameRateRanges.first!
+            try device.lockForConfiguration()
+            defer { 
+                device.unlockForConfiguration()
+                session.commitConfiguration()
+                session.startRunning()
+            }
+            
+            // Find best Apple Log format
+            if let format = device.formats.first(where: {
+                let desc = $0.formatDescription
+                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
+                let codecType = CMFormatDescriptionGetMediaSubType(desc)
                 
-                try device.lockForConfiguration()
+                let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
+                // Check for ProRes422 or ProRes422HQ codec
+                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 || 
+                              codecType == kCMVideoCodecType_AppleProRes422HQ ||
+                              codecType == 2016686642) // This is the codec we see in the logs
+                let hasAppleLog = $0.supportedColorSpaces.contains(.appleLog)
+                
+                print("""
+                    Checking format:
+                    - Resolution: \(dimensions.width)x\(dimensions.height) (is4K: \(is4K))
+                    - Codec: \(codecType) (isProRes: \(isProRes))
+                    - Has Apple Log: \(hasAppleLog)
+                    """)
+                
+                return (is4K || dimensions.width >= 1920) && isProRes && hasAppleLog
+            }) {
+                print("✅ Found suitable Apple Log format")
+                print("📹 Format details: \(format.formatDescription)")
+                
+                // Configure frame rate
+                let frameRateRange = format.videoSupportedFrameRateRanges.first!
                 device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
                 device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
+                print("⚡️ Frame rate configured: \(frameRateRange.maxFrameRate) fps")
+                
+                // Set format and color space
                 device.activeFormat = format
                 device.activeColorSpace = .appleLog
-                device.unlockForConfiguration()
+                print("🎨 Set color space to Apple Log")
                 
-                print("✅ Successfully enabled Apple Log in 4K ProRes")
-                print("📹 New format: \(format.formatDescription)")
+                print("✅ Successfully configured Apple Log format")
             } else {
-                // fallback to sRGB
-                try device.lockForConfiguration()
-                device.activeColorSpace = .sRGB
-                device.unlockForConfiguration()
-                isAppleLogEnabled = false
-                print("✅ Reset to sRGB color space")
+                print("❌ No suitable Apple Log format found")
+                throw CameraError.configurationFailed
             }
             
-            session.commitConfiguration()
             print("💾 Configuration committed")
+            print("▶️ Session restarted")
             
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.session.startRunning()
-                print("▶️ Session restarted")
-                
-                DispatchQueue.main.async {
-                    self?.isSessionRunning = self?.session.isRunning ?? false
-                    print("📱 UI updated - session running: \(self?.session.isRunning ?? false)")
-                }
-            }
         } catch {
-            print("❌ Error updating Apple Log setting: \(error.localizedDescription)")
-            self.error = .configurationFailed
+            print("❌ Error configuring Apple Log: \(error.localizedDescription)")
             
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.session.startRunning()
-                print("🔄 Attempting session recovery")
+            // Ensure we properly clean up on error
+            device.unlockForConfiguration()
+            session.commitConfiguration()
+            session.startRunning()
+            
+            // Update UI on main thread
+            await MainActor.run {
+                self.error = .configurationFailed
             }
+            
+            print("🔄 Attempting session recovery")
+            throw error
         }
         
-        print("=== End Apple Log State Change ===\n")
+        print("=== End Apple Log Configuration ===\n")
     }
     
-    private func setupSession() {
+    private func resetAppleLog() async throws {
+        guard let device = device else {
+            print("❌ No camera device available")
+            return
+        }
+        
+        print("\n=== Resetting Apple Log Configuration ===")
+        print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
+        
+        // Ensure wide color is disabled
+        session.automaticallyConfiguresCaptureDeviceForWideColor = false
+        
+        do {
+            session.stopRunning()
+            session.beginConfiguration()
+            
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            
+            if let defaultFormat = defaultFormat {
+                device.activeFormat = defaultFormat
+            }
+            device.activeColorSpace = .sRGB
+            
+            session.commitConfiguration()
+            session.startRunning()
+            
+            print("✅ Successfully reset to sRGB color space")
+        } catch {
+            print("❌ Error resetting Apple Log: \(error.localizedDescription)")
+            self.error = .configurationFailed
+            session.startRunning()
+        }
+        
+        print("=== End Reset ===\n")
+    }
+    
+    private func setupSession() throws {
+        // Disable automatic wide color configuration
+        session.automaticallyConfiguresCaptureDeviceForWideColor = false
+        
         session.beginConfiguration()
         
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
@@ -166,6 +302,7 @@ class CameraViewModel: NSObject, ObservableObject {
                                                         position: .back)
         else {
             error = .cameraUnavailable
+            status = .failed
             session.commitConfiguration()
             return
         }
@@ -224,7 +361,18 @@ class CameraViewModel: NSObject, ObservableObject {
             self?.session.startRunning()
             DispatchQueue.main.async {
                 self?.isSessionRunning = self?.session.isRunning ?? false
+                self?.status = .running  // Set status when session starts
             }
+        }
+        
+        // Check and store Apple Log support
+        isAppleLogSupported = device?.formats.contains { format in
+            format.supportedColorSpaces.contains(.appleLog)
+        } ?? false
+        
+        // Store default format
+        if let device = device {
+            defaultFormat = device.activeFormat
         }
     }
     
