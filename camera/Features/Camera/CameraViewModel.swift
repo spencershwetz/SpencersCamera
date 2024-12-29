@@ -103,6 +103,26 @@ class CameraViewModel: NSObject, ObservableObject {
     // Add property to track interface orientation
     @Published private(set) var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
     
+    private let processingQueue = DispatchQueue(
+        label: "com.camera.processing",
+        qos: .userInitiated,
+        attributes: [],
+        autoreleaseFrequency: .workItem
+    )
+    
+    // Add properties for frame rate monitoring
+    private var lastFrameTimestamp: CFAbsoluteTime = 0
+    
+    private var lastFrameTime: CMTime?
+    private var frameCount: Int = 0
+    private var frameRateAccumulator: Double = 0
+    private var frameRateUpdateInterval: Int = 30 // Update every 30 frames
+    
+    // Add property to store supported frame rate range
+    private var supportedFrameRateRange: AVFrameRateRange? {
+        device?.activeFormat.videoSupportedFrameRateRanges.first
+    }
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -522,43 +542,43 @@ class CameraViewModel: NSObject, ObservableObject {
                 videoInput = AVAssetWriterInput(mediaType: .video,
                                           outputSettings: videoSettings,
                                           sourceFormatHint: fmt.formatDescription)
-            } else {
-                videoInput = AVAssetWriterInput(mediaType: .video,
-                                          outputSettings: videoSettings)
-            }
-            
-            // Set transform based on interface orientation
-            var transform = CGAffineTransform.identity
-            
-            switch currentInterfaceOrientation {
-            case .portrait:
-                transform = CGAffineTransform(rotationAngle: .pi/2)
-            case .portraitUpsideDown:
-                transform = CGAffineTransform(rotationAngle: -.pi/2)
-            case .landscapeLeft:
-                transform = CGAffineTransform(rotationAngle: 0)
-            case .landscapeRight:
-                transform = CGAffineTransform(rotationAngle: .pi)
-            default:
-                transform = CGAffineTransform(rotationAngle: .pi/2)
-            }
-            
-            videoInput?.transform = transform
-            
-            videoInput?.expectsMediaDataInRealTime = true
-            if let vIn = videoInput, assetWriter?.canAdd(vIn) == true {
-                assetWriter?.add(vIn)
+                
+                // Add these optimizations
+                videoInput?.performsMultiPassEncodingIfSupported = true
+                videoInput?.expectsMediaDataInRealTime = true
+                
+                // Add a pixel buffer adaptor for better performance
+                let attributes: [String: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                    kCVPixelBufferMetalCompatibilityKey as String: true,
+                    kCVPixelBufferWidthKey as String: isPortrait ? 2160 : 3840,
+                    kCVPixelBufferHeightKey as String: isPortrait ? 3840 : 2160
+                ]
+                
+                let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+                    assetWriterInput: videoInput!,
+                    sourcePixelBufferAttributes: attributes
+                )
+                
+                if assetWriter?.canAdd(videoInput!) == true {
+                    assetWriter?.add(videoInput!)
+                }
             }
             
             // Audio
             let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVFormatIDKey: kAudioFormatLinearPCM, // Use uncompressed audio
                 AVSampleRateKey: 48000,
                 AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 256_000
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false
             ]
+            
             audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioInput?.expectsMediaDataInRealTime = true
+            
             if let aIn = audioInput, assetWriter?.canAdd(aIn) == true {
                 assetWriter?.add(aIn)
             }
@@ -697,25 +717,94 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Add method to update frame rate
+    // Update frame rate setting method
     func updateFrameRate(_ fps: Double) {
-        guard let device = device else { return }
+        guard let device = device,
+              let frameRateRange = supportedFrameRateRange else { return }
         
         do {
             try device.lockForConfiguration()
             
-            // Convert fps to CMTime duration
-            let duration = CMTimeMake(value: 1000, timescale: Int32(fps * 1000))
-            device.activeVideoMinFrameDuration = duration
-            device.activeVideoMaxFrameDuration = duration
+            // Ensure requested frame rate is within supported range
+            let clampedFPS = min(max(frameRateRange.minFrameRate, fps),
+                                frameRateRange.maxFrameRate)
+            
+            // More precise frame duration calculation
+            let frameDuration: CMTime
+            switch clampedFPS {
+            case 23.976:
+                // 23.976 = 24000/1001
+                frameDuration = CMTimeMake(value: 1001, timescale: 24000)
+            case 29.97:
+                // 29.97 = 30000/1001
+                frameDuration = CMTimeMake(value: 1001, timescale: 30000)
+            default:
+                // For other frame rates, use direct calculation
+                frameDuration = CMTimeMake(value: 1, timescale: Int32(clampedFPS))
+            }
+            
+            // Only set if within supported range
+            if frameRateRange.containsFrameRate(clampedFPS) {
+                device.activeVideoMinFrameDuration = frameDuration
+                device.activeVideoMaxFrameDuration = frameDuration
+                
+                // Reset monitoring
+                frameCount = 0
+                frameRateAccumulator = 0
+                lastFrameTime = nil
+                
+                selectedFrameRate = clampedFPS
+                
+                print("""
+                    Frame rate updated:
+                    - Requested: \(fps) fps
+                    - Actual: \(clampedFPS) fps
+                    - Duration: \(frameDuration.seconds) seconds
+                    - Supported range: \(frameRateRange.minFrameRate) - \(frameRateRange.maxFrameRate) fps
+                    """)
+            } else {
+                print("""
+                    ⚠️ Requested frame rate \(fps) fps not supported
+                    Supported range: \(frameRateRange.minFrameRate) - \(frameRateRange.maxFrameRate) fps
+                    """)
+            }
             
             device.unlockForConfiguration()
-            selectedFrameRate = fps
-            
-            print("Frame rate updated to: \(fps) fps")
         } catch {
             print("Frame rate error: \(error)")
             self.error = .configurationFailed
+        }
+    }
+    
+    // Add method to fine-tune frame rate
+    private func adjustFrameRatePrecision(currentFPS: Double) {
+        guard let device = device,
+              let frameRateRange = supportedFrameRateRange else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Calculate adjustment based on deviation
+            let deviation = selectedFrameRate - currentFPS
+            let currentDuration = device.activeVideoMaxFrameDuration
+            
+            // Calculate new frame rate while respecting device limits
+            let targetFPS = currentFPS + (deviation * 0.1)
+            let clampedFPS = min(max(frameRateRange.minFrameRate,
+                                    targetFPS),
+                                frameRateRange.maxFrameRate)
+            
+            // Convert to duration
+            let duration = CMTimeMake(value: 1,
+                                    timescale: Int32(clampedFPS))
+            
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            
+            print("Frame rate adjusted: \(clampedFPS) fps (duration: \(duration.seconds) seconds)")
+            device.unlockForConfiguration()
+        } catch {
+            print("Frame rate adjustment error: \(error)")
         }
     }
     
@@ -735,41 +824,70 @@ extension CameraViewModel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptu
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
+        guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
+        
+        // Monitor frame rate for video output
+        if output is AVCaptureVideoDataOutput {
+            let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            
+            if let lastTime = lastFrameTime {
+                let delta = CMTimeGetSeconds(CMTimeSubtract(timestamp, lastTime))
+                let instantFPS = 1.0 / delta
+                
+                frameRateAccumulator += instantFPS
+                frameCount += 1
+                
+                if frameCount >= frameRateUpdateInterval {
+                    let averageFPS = frameRateAccumulator / Double(frameCount)
+                    print("Current frame rate: \(String(format: "%.3f", averageFPS)) fps")
+                    
+                    // If frame rate is off by more than 0.5 fps, try to adjust
+                    if abs(averageFPS - selectedFrameRate) > 0.5 {
+                        print("⚠️ Frame rate deviation detected: \(String(format: "%.3f", averageFPS)) fps vs target \(selectedFrameRate) fps")
+                        adjustFrameRatePrecision(currentFPS: averageFPS)
+                    }
+                    
+                    frameCount = 0
+                    frameRateAccumulator = 0
+                }
+            }
+            lastFrameTime = timestamp
+        }
+        
+        // Handle recording
         guard isRecording,
               let writer = assetWriter else { return }
         
         let isVideo = (output is AVCaptureVideoDataOutput)
         let writerInput = isVideo ? videoInput : audioInput
         
-        switch writer.status {
-        case .unknown:
-            // Start writing with first video buffer
-            if isVideo {
-                let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                print("🎥 Starting asset writer session with video buffer")
-                writer.startWriting()
-                writer.startSession(atSourceTime: pts)
-                print("📝 Started writing at timestamp: \(pts.seconds)")
-                
-                if let wI = writerInput, wI.isReadyForMoreMediaData {
-                    _ = wI.append(sampleBuffer)
+        // Process on high-priority background queue
+        processingQueue.async {
+            switch writer.status {
+            case .unknown:
+                if isVideo {
+                    let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                    writer.startWriting()
+                    writer.startSession(atSourceTime: pts)
+                    
+                    if let wI = writerInput, wI.isReadyForMoreMediaData {
+                        wI.append(sampleBuffer)
+                    }
                 }
+            case .writing:
+                if let wI = writerInput, wI.isReadyForMoreMediaData {
+                    wI.append(sampleBuffer)
+                }
+            case .failed:
+                print("❌ Asset writer failed: \(writer.error?.localizedDescription ?? "unknown error")")
+                DispatchQueue.main.async {
+                    self.error = .recordingFailed
+                    self.isRecording = false
+                    self.isProcessingRecording = false
+                }
+            default:
+                break
             }
-        case .writing:
-            if let wI = writerInput, wI.isReadyForMoreMediaData {
-                _ = wI.append(sampleBuffer)
-            }
-        case .failed:
-            print("❌ Asset writer failed: \(writer.error?.localizedDescription ?? "unknown error")")
-            DispatchQueue.main.async {
-                self.error = .recordingFailed
-                self.isRecording = false
-                self.isProcessingRecording = false
-            }
-        case .completed:
-            print("✅ Asset writer completed")
-        default:
-            break
         }
     }
     
@@ -798,5 +916,12 @@ private extension UIDeviceOrientation {
         @unknown default:
             return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
         }
+    }
+}
+
+// Add extension to AVFrameRateRange
+extension AVFrameRateRange {
+    func containsFrameRate(_ fps: Double) -> Bool {
+        return fps >= minFrameRate && fps <= maxFrameRate
     }
 }
