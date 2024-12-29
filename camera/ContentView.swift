@@ -103,14 +103,26 @@ struct ContentView: View {
             
             // Shutter
             HStack {
-                // Display shutter as 1/x
-                let fraction = Double(viewModel.shutterSpeed.timescale) / Double(viewModel.shutterSpeed.value)
-                Text("Shutter: 1/\(Int(fraction))")
-                Slider(value: .init(get: {
-                    Float(fraction)
-                }, set: { newValue in
-                    viewModel.updateShutterSpeed(CMTimeMake(value: 1, timescale: Int32(newValue)))
-                }), in: 15...8000, step: 1)
+                let currentAngle = viewModel.shutterAngle
+                Text("Shutter: \(Int(currentAngle))° (\(ShutterAngle(rawValue: currentAngle)?.shutterSpeed ?? "Custom"))")
+                
+                Picker("Shutter Angle", selection: Binding(
+                    get: {
+                        // Find the closest standard angle
+                        ShutterAngle.allCases.min(by: { abs($0.rawValue - viewModel.shutterAngle) < abs($1.rawValue - viewModel.shutterAngle) })?.rawValue ?? 180.0
+                    },
+                    set: { newValue in
+                        print("\n🎚️ Shutter Angle Changed:")
+                        print("  - New Value: \(newValue)°")
+                        viewModel.updateShutterAngle(newValue)
+                    }
+                )) {
+                    ForEach(ShutterAngle.allCases, id: \.rawValue) { angle in
+                        Text("\(Int(angle.rawValue))° (\(angle.shutterSpeed))")
+                            .tag(angle.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
             }
             
             // Apple Log toggle if supported

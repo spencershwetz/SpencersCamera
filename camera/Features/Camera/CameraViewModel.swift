@@ -26,7 +26,7 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var error: CameraError?
     @Published var whiteBalance: Float = 5000 // Kelvin
     @Published var iso: Float = 100
-    @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60) // 1/60
+    @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60) // Initialize for 180° at 30fps
     @Published var isRecording = false
     @Published var recordingFinished = false
     @Published var isSettingsPresented = false
@@ -197,6 +197,12 @@ class CameraViewModel: NSObject, ObservableObject {
                 guard let self = self,
                       let connection = self.movieOutput.connection(with: .video) else { return }
                 self.updateVideoOrientation(connection)
+        }
+        
+        // After other initialization, set initial shutter angle to 180°
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.updateShutterAngle(180.0) // Set initial shutter angle to 180°
         }
     }
     
@@ -521,12 +527,24 @@ class CameraViewModel: NSObject, ObservableObject {
     func updateShutterSpeed(_ speed: CMTime) {
         guard let device = device else { return }
         do {
+            print("\n⚡ Updating Shutter Speed:")
+            print("  - Input Time: \(speed.value)/\(speed.timescale)")
+            print("  - Duration: \(speed.seconds) seconds")
+            
             try device.lockForConfiguration()
             device.setExposureModeCustom(duration: speed, iso: device.iso) { _ in }
             device.unlockForConfiguration()
-            shutterSpeed = speed
+            
+            // Update the published property on the main thread
+            DispatchQueue.main.async {
+                self.shutterSpeed = speed
+                
+                // Calculate and log the resulting angle
+                let resultingAngle = Double(speed.value) / Double(speed.timescale) * self.selectedFrameRate * 360.0
+                print("  - Resulting Angle: \(resultingAngle)°")
+            }
         } catch {
-            print("Shutter speed error: \(error)")
+            print("❌ Shutter speed error: \(error)")
             self.error = .configurationFailed
         }
     }
@@ -697,6 +715,12 @@ class CameraViewModel: NSObject, ObservableObject {
             print("❌ Frame rate error: \(error)")
             self.error = .configurationFailed
         }
+        
+        // Store current shutter angle before changing frame rate
+        let currentAngle = shutterAngle
+        
+        // After frame rate is updated, restore the shutter angle
+        updateShutterAngle(currentAngle)
     }
     
     // Update frame rate monitoring to be less aggressive and use main thread
@@ -793,9 +817,18 @@ class CameraViewModel: NSObject, ObservableObject {
                 let currentGains = device.deviceWhiteBalanceGains
                 var newGains = currentGains
                 
-                // Adjust tint by modifying green gain relative to red/blue
-                let tintScale = 1.0 + (currentTint / 300.0) // Scale factor for tint adjustment
-                newGains.greenGain = currentGains.greenGain * Float(tintScale)
+                // Calculate tint scale factor (-1.0 to 1.0)
+                let tintScale = currentTint / 150.0 // Normalize to -1.0 to 1.0
+                
+                if tintScale > 0 {
+                    // Green tint: increase green gain
+                    newGains.greenGain = currentGains.greenGain * (1.0 + Float(tintScale))
+                } else {
+                    // Magenta tint: increase red and blue gains
+                    let magentaScale = 1.0 + Float(abs(tintScale))
+                    newGains.redGain = currentGains.redGain * magentaScale
+                    newGains.blueGain = currentGains.blueGain * magentaScale
+                }
                 
                 // Clamp gains to valid range
                 let maxGain = device.maxWhiteBalanceGain
@@ -817,6 +850,54 @@ class CameraViewModel: NSObject, ObservableObject {
     func updateTint(_ newValue: Double) {
         currentTint = newValue.clamped(to: tintRange)
         configureTintSettings()
+    }
+    
+    // Convert shutter speed to angle
+    var shutterAngle: Double {
+        get {
+            // Calculate the actual angle from the current shutter speed and frame rate
+            let angle = Double(shutterSpeed.value) / Double(shutterSpeed.timescale) * selectedFrameRate * 360.0
+            let clampedAngle = min(max(angle, 1.1), 360.0)
+            
+            print("📐 Getting Shutter Angle:")
+            print("  - Raw Angle: \(angle)°")
+            print("  - Clamped Angle: \(clampedAngle)°")
+            print("  - Current FPS: \(selectedFrameRate)")
+            print("  - Shutter Speed: 1/\(1.0/shutterSpeed.seconds)")
+            
+            return clampedAngle
+        }
+        set {
+            let clampedAngle = min(max(newValue, 1.1), 360.0)
+            
+            // Calculate the exact shutter duration needed for this angle
+            // duration = (angle/360) * (1/fps)
+            let duration = (clampedAngle/360.0) * (1.0/selectedFrameRate)
+            
+            print("🔄 Setting Shutter Angle:")
+            print("  - Requested Angle: \(newValue)°")
+            print("  - Clamped Angle: \(clampedAngle)°")
+            print("  - Calculated Duration: \(duration)")
+            
+            let time = CMTimeMakeWithSeconds(duration, preferredTimescale: 1000000)
+            
+            // Update the camera settings first
+            updateShutterSpeed(time)
+            
+            // Then update our stored value
+            DispatchQueue.main.async {
+                self.shutterSpeed = time
+            }
+        }
+    }
+    
+    // Update method to handle angle directly
+    func updateShutterAngle(_ angle: Double) {
+        print("\n🎯 Updating Shutter Angle:")
+        print("  - Requested Angle: \(angle)°")
+        
+        // Set the shutter angle through the property
+        self.shutterAngle = angle
     }
 }
 
