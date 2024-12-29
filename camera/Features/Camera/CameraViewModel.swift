@@ -4,6 +4,7 @@ import Photos
 import VideoToolbox
 import CoreVideo
 import os.log
+import CoreImage
 
 class CameraViewModel: NSObject, ObservableObject {
     enum Status {
@@ -148,6 +149,9 @@ class CameraViewModel: NSObject, ObservableObject {
             updateExposureMode()
         }
     }
+    
+    @Published var lutManager = LUTManager()
+    private var ciContext = CIContext()
     
     override init() {
         super.init()
@@ -933,6 +937,20 @@ class CameraViewModel: NSObject, ObservableObject {
             print("❌ Error setting exposure mode: \(error.localizedDescription)")
             self.error = .configurationFailed
         }
+    }
+    
+    func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CIImage? {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
+        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        if let lutFilter = lutManager.currentLUTFilter {
+            lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
+            if let outputImage = lutFilter.outputImage {
+                ciImage = outputImage
+            }
+        }
+        
+        return ciImage
     }
 }
 

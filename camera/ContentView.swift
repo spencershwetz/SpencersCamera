@@ -5,20 +5,26 @@ import CoreMedia
 struct ContentView: View {
     @StateObject private var viewModel = CameraViewModel()
     @State private var orientation = UIDevice.current.orientation
+    @StateObject private var lutManager = LUTManager()
+    @State private var isShowingSettings = false
+    @State private var isShowingDocumentPicker = false
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 if viewModel.isSessionRunning {
-                    CameraPreviewView(session: viewModel.session)
-                        .ignoresSafeArea()
-                        .frame(width: geometry.size.width,
-                               height: geometry.size.height)
+                    CameraPreviewView(
+                        session: viewModel.session,
+                        lutManager: lutManager,
+                        viewModel: viewModel
+                    )
+                    .ignoresSafeArea()
+                    .frame(width: geometry.size.width,
+                           height: geometry.size.height)
                     
                     VStack {
                         Spacer()
                         controlsView
-                            // Ensure controls are centered and fully visible on screen
                             .frame(maxWidth: geometry.size.width * 0.9)
                             .padding(.bottom, 30)
                     }
@@ -44,6 +50,15 @@ struct ContentView: View {
             Alert(title: Text("Error"),
                   message: Text(error.description),
                   dismissButton: .default(Text("OK")))
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(lutManager: lutManager)
+        }
+        .sheet(isPresented: $isShowingDocumentPicker) {
+            DocumentPicker(types: LUTManager.supportedTypes) { url in
+                lutManager.loadLUT(from: url)
+                isShowingDocumentPicker = false
+            }
         }
     }
     
@@ -128,6 +143,56 @@ struct ContentView: View {
             }
             .disabled(viewModel.isAutoExposureEnabled)
             .opacity(viewModel.isAutoExposureEnabled ? 0.6 : 1.0)
+            
+            // LUT Controls
+            VStack(spacing: 8) {
+                Toggle(isOn: Binding(
+                    get: { lutManager.currentLUTFilter != nil },
+                    set: { enabled in
+                        if !enabled {
+                            lutManager.clearLUT()
+                        }
+                    }
+                )) {
+                    HStack {
+                        Text("LUT Preview")
+                        if lutManager.currentLUTFilter != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+                .tint(.green)
+                
+                if let lutName = lutManager.selectedLUTURL?.lastPathComponent {
+                    HStack {
+                        Text(lutName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button(action: {
+                            lutManager.clearLUT()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+                
+                Button(action: {
+                    isShowingDocumentPicker = true
+                }) {
+                    HStack {
+                        Image(systemName: "photo.fill")
+                        Text("Import LUT")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+                .tint(.blue)
+            }
+            .padding(.vertical, 4)
             
             // Auto Exposure toggle
             Toggle(isOn: $viewModel.isAutoExposureEnabled) {
