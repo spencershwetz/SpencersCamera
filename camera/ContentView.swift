@@ -78,6 +78,19 @@ struct ContentView: View {
                 }
             }
             
+            // Tint Control
+            HStack {
+                Text("Tint: \(Int(viewModel.currentTint))")
+                Slider(
+                    value: $viewModel.currentTint,
+                    in: -150...150,
+                    step: 1
+                ) { _ in
+                    viewModel.updateTint(viewModel.currentTint)
+                }
+                .tint(.green)
+            }
+            
             // ISO
             HStack {
                 Text("ISO: \(Int(viewModel.iso))")

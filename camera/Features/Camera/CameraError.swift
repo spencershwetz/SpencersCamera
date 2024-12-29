@@ -6,6 +6,7 @@ enum CameraError: Error, Identifiable {
     case configurationFailed
     case recordingFailed
     case savingFailed
+    case whiteBalanceError
     
     var id: String { description }
     
@@ -21,6 +22,8 @@ enum CameraError: Error, Identifiable {
             return "Failed to record video"
         case .savingFailed:
             return "Failed to save video to photo library"
+        case .whiteBalanceError:
+            return "Failed to adjust white balance settings"
         }
     }
 } 

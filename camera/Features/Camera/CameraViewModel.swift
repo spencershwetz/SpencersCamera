@@ -138,6 +138,11 @@ class CameraViewModel: NSObject, ObservableObject {
         static let ntsc30 = CMTime(value: 1, timescale: 30)            // 30 fps
     }
     
+    @Published var currentTint: Double = 0.0 // Range: -150 to +150
+    private let tintRange = (-150.0...150.0)
+    
+    private var videoDeviceInput: AVCaptureDeviceInput?
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -389,6 +394,10 @@ class CameraViewModel: NSObject, ObservableObject {
         self.device = videoDevice
         
         do {
+            // Initialize videoDeviceInput
+            let input = try AVCaptureDeviceInput(device: videoDevice)
+            self.videoDeviceInput = input
+            
             // Configure Apple Log if enabled
             if isAppleLogEnabled, let appleLogFormat = findBestAppleLogFormat(videoDevice) {
                 let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
@@ -401,9 +410,8 @@ class CameraViewModel: NSObject, ObservableObject {
             }
             
             // Add video input
-            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
-            if session.canAddInput(videoInput) {
-                session.addInput(videoInput)
+            if session.canAddInput(input) {
+                session.addInput(input)
             }
             
             // Add audio input
@@ -772,6 +780,44 @@ class CameraViewModel: NSObject, ObservableObject {
             print("Error optimizing video capture: \(error)")
         }
     }
+    
+    private func configureTintSettings() {
+        guard let device = device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            if device.isWhiteBalanceModeSupported(.locked) {
+                device.whiteBalanceMode = .locked
+                
+                // Get current white balance gains
+                let currentGains = device.deviceWhiteBalanceGains
+                var newGains = currentGains
+                
+                // Adjust tint by modifying green gain relative to red/blue
+                let tintScale = 1.0 + (currentTint / 300.0) // Scale factor for tint adjustment
+                newGains.greenGain = currentGains.greenGain * Float(tintScale)
+                
+                // Clamp gains to valid range
+                let maxGain = device.maxWhiteBalanceGain
+                newGains.redGain = min(max(1.0, newGains.redGain), maxGain)
+                newGains.greenGain = min(max(1.0, newGains.greenGain), maxGain)
+                newGains.blueGain = min(max(1.0, newGains.blueGain), maxGain)
+                
+                // Set the white balance gains
+                device.setWhiteBalanceModeLocked(with: newGains) { _ in }
+            }
+            device.unlockForConfiguration()
+        } catch {
+            print("Error setting tint: \(error.localizedDescription)")
+            self.error = .whiteBalanceError
+        }
+    }
+    
+    // Add this function to be called when tint slider changes
+    func updateTint(_ newValue: Double) {
+        currentTint = newValue.clamped(to: tintRange)
+        configureTintSettings()
+    }
 }
 
 // MARK: - Sample Buffer Delegate
@@ -855,5 +901,11 @@ extension UIDeviceOrientation {
 extension AVFrameRateRange {
     func containsFrameRate(_ fps: Double) -> Bool {
         return fps >= minFrameRate && fps <= maxFrameRate
+    }
+}
+
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        return min(max(self, range.lowerBound), range.upperBound)
     }
 }
