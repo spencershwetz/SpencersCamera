@@ -189,12 +189,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 
                 // Fix orientation after configuration
                 if let videoConnection = videoOutput?.connection(with: .video) {
-                    if videoConnection.isVideoOrientationSupported {
-                        videoConnection.videoOrientation = .portrait
-                    }
-                    if videoConnection.isVideoMirroringSupported {
-                        videoConnection.isVideoMirrored = false
-                    }
+                    updateVideoOrientation(videoConnection)
                 }
                 
                 session.startRunning()
@@ -288,12 +283,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 
                 // Fix orientation after configuration
                 if let videoConnection = videoOutput?.connection(with: .video) {
-                    if videoConnection.isVideoOrientationSupported {
-                        videoConnection.videoOrientation = .portrait
-                    }
-                    if videoConnection.isVideoMirroringSupported {
-                        videoConnection.isVideoMirrored = false
-                    }
+                    updateVideoOrientation(videoConnection)
                 }
                 
                 session.startRunning()
@@ -365,7 +355,9 @@ class CameraViewModel: NSObject, ObservableObject {
                     kCVPixelBufferMetalCompatibilityKey as String: true
                 ]
                 // Set initial orientation
-                updateVideoOrientation()
+                if let videoConnection = videoOutput?.connection(with: .video) {
+                    updateVideoOrientation(videoConnection)
+                }
             }
             
             // Audio output
@@ -631,27 +623,45 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    private func updateVideoOrientation() {
-        guard let videoConnection = videoOutput?.connection(with: .video) else { return }
-        
-        if videoConnection.isVideoOrientationSupported {
-            let orientation = UIDevice.current.orientation
-            switch orientation {
+    private func updateVideoOrientation(_ connection: AVCaptureConnection) {
+        if #available(iOS 17.0, *) {
+            let desiredAngle: CGFloat
+            switch UIDevice.current.orientation {
             case .portrait:
-                videoConnection.videoOrientation = .portrait
+                desiredAngle = 90
             case .portraitUpsideDown:
-                videoConnection.videoOrientation = .portraitUpsideDown
+                desiredAngle = 270
             case .landscapeLeft:
-                videoConnection.videoOrientation = .landscapeRight
+                desiredAngle = 0
             case .landscapeRight:
-                videoConnection.videoOrientation = .landscapeLeft
+                desiredAngle = 180
             default:
-                videoConnection.videoOrientation = .portrait
+                desiredAngle = 90
+            }
+            
+            if connection.isVideoRotationAngleSupported(desiredAngle) {
+                connection.videoRotationAngle = desiredAngle
+            }
+        } else {
+            if connection.isVideoOrientationSupported {
+                let orientation = UIDevice.current.orientation
+                switch orientation {
+                case .portrait:
+                    connection.videoOrientation = .portrait
+                case .portraitUpsideDown:
+                    connection.videoOrientation = .portraitUpsideDown
+                case .landscapeLeft:
+                    connection.videoOrientation = .landscapeRight
+                case .landscapeRight:
+                    connection.videoOrientation = .landscapeLeft
+                default:
+                    connection.videoOrientation = .portrait
+                }
             }
         }
         
-        if videoConnection.isVideoMirroringSupported {
-            videoConnection.isVideoMirrored = false
+        if connection.isVideoMirroringSupported {
+            connection.isVideoMirrored = false
         }
     }
 }
@@ -712,16 +722,17 @@ private extension UIDeviceOrientation {
     var videoTransform: CGAffineTransform {
         switch self {
         case .landscapeRight:
-            // home button on left
-            return CGAffineTransform(rotationAngle: .pi)
+            return CGAffineTransform(rotationAngle: CGFloat.pi)
         case .portraitUpsideDown:
-            return CGAffineTransform(rotationAngle: -.pi / 2)
+            return CGAffineTransform(rotationAngle: -CGFloat.pi / 2)
         case .landscapeLeft:
-            // home button on right
             return .identity
-        default:
-            // portrait or unknown
-            return CGAffineTransform(rotationAngle: .pi / 2)
+        case .portrait:
+            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+        case .unknown, .faceUp, .faceDown:
+            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+        @unknown default:
+            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
         }
     }
 }
