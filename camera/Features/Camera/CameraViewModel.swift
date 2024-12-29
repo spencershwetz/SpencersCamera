@@ -186,6 +186,17 @@ class CameraViewModel: NSObject, ObservableObject {
             defer { 
                 device.unlockForConfiguration()
                 session.commitConfiguration()
+                
+                // Fix orientation after configuration
+                if let videoConnection = videoOutput?.connection(with: .video) {
+                    if videoConnection.isVideoOrientationSupported {
+                        videoConnection.videoOrientation = .portrait
+                    }
+                    if videoConnection.isVideoMirroringSupported {
+                        videoConnection.isVideoMirrored = false
+                    }
+                }
+                
                 session.startRunning()
             }
             
@@ -271,7 +282,22 @@ class CameraViewModel: NSObject, ObservableObject {
             session.beginConfiguration()
             
             try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
+            defer { 
+                device.unlockForConfiguration()
+                session.commitConfiguration()
+                
+                // Fix orientation after configuration
+                if let videoConnection = videoOutput?.connection(with: .video) {
+                    if videoConnection.isVideoOrientationSupported {
+                        videoConnection.videoOrientation = .portrait
+                    }
+                    if videoConnection.isVideoMirroringSupported {
+                        videoConnection.isVideoMirrored = false
+                    }
+                }
+                
+                session.startRunning()
+            }
             
             if let defaultFormat = defaultFormat {
                 device.activeFormat = defaultFormat
@@ -338,6 +364,8 @@ class CameraViewModel: NSObject, ObservableObject {
                     kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
                     kCVPixelBufferMetalCompatibilityKey as String: true
                 ]
+                // Set initial orientation
+                updateVideoOrientation()
             }
             
             // Audio output
@@ -600,6 +628,30 @@ class CameraViewModel: NSObject, ObservableObject {
                     self?.isProcessingRecording = false
                 }
             }
+        }
+    }
+    
+    private func updateVideoOrientation() {
+        guard let videoConnection = videoOutput?.connection(with: .video) else { return }
+        
+        if videoConnection.isVideoOrientationSupported {
+            let orientation = UIDevice.current.orientation
+            switch orientation {
+            case .portrait:
+                videoConnection.videoOrientation = .portrait
+            case .portraitUpsideDown:
+                videoConnection.videoOrientation = .portraitUpsideDown
+            case .landscapeLeft:
+                videoConnection.videoOrientation = .landscapeRight
+            case .landscapeRight:
+                videoConnection.videoOrientation = .landscapeLeft
+            default:
+                videoConnection.videoOrientation = .portrait
+            }
+        }
+        
+        if videoConnection.isVideoMirroringSupported {
+            videoConnection.isVideoMirrored = false
         }
     }
 }
