@@ -92,6 +92,17 @@ class CameraViewModel: NSObject, ObservableObject {
         device?.activeFormat.maxISO ?? 1600
     }
     
+    // Add new property for frame rate
+    @Published var selectedFrameRate: Double = 30.0
+    
+    // Add available frame rates
+    let availableFrameRates: [Double] = [23.976, 24.0, 25.0, 29.97, 30.0]
+    
+    private var orientationObserver: NSObjectProtocol?
+    
+    // Add property to track interface orientation
+    @Published private(set) var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -136,6 +147,22 @@ class CameraViewModel: NSObject, ObservableObject {
         } catch {
             self.error = .setupFailed
             print("Failed to setup session: \(error)")
+        }
+        
+        // Add orientation observer
+        orientationObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main) { [weak self] _ in
+                guard let self = self,
+                      let connection = self.videoOutput?.connection(with: .video) else { return }
+                self.updateVideoOrientation(connection)
+        }
+    }
+    
+    deinit {
+        if let observer = orientationObserver {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
     
@@ -220,11 +247,15 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("✅ Found suitable Apple Log format")
                 print("📹 Format details: \(format.formatDescription)")
                 
-                // Configure frame rate
-                let frameRateRange = format.videoSupportedFrameRateRanges.first!
-                device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
-                device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
-                print("⚡️ Frame rate configured: \(frameRateRange.maxFrameRate) fps")
+                // Remove this part that was resetting frame rate
+                // let frameRateRange = format.videoSupportedFrameRateRanges.first!
+                // device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
+                // device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
+                
+                // Instead, maintain current frame rate
+                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+                device.activeVideoMinFrameDuration = duration
+                device.activeVideoMaxFrameDuration = duration
                 
                 // Set format and color space
                 device.activeFormat = format
@@ -367,6 +398,15 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.addOutput(aOut)
             }
             
+            // After setting up video input, set initial frame rate
+            if let device = device {
+                try device.lockForConfiguration()
+                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+                device.activeVideoMinFrameDuration = duration
+                device.activeVideoMaxFrameDuration = duration
+                device.unlockForConfiguration()
+            }
+            
         } catch {
             print("Error setting up camera: \(error)")
             self.error = .setupFailed
@@ -462,25 +502,14 @@ class CameraViewModel: NSObject, ObservableObject {
         do {
             assetWriter = try AVAssetWriter(url: vidFile, fileType: .mov)
             
+            // Set dimensions based on current interface orientation
+            let isPortrait = currentInterfaceOrientation.isPortrait
             var videoSettings: [String: Any] = [
                 AVVideoCodecKey: AVVideoCodecType.proRes422,
-                AVVideoWidthKey: 3840,
-                AVVideoHeightKey: 2160
+                AVVideoWidthKey: isPortrait ? 2160 : 3840,
+                AVVideoHeightKey: isPortrait ? 3840 : 2160
             ]
             
-            // FIX: Must specify all three color keys or none at all.
-            // Option A (Recommended): Omit entire AVVideoColorPropertiesKey dictionary
-            // to let Apple Log pass through naturally:
-            /*
-            // Remove these lines entirely:
-            // videoSettings[AVVideoColorPropertiesKey] = [
-            //   // Nothing
-            // ]
-            */
-            
-            // Option B (If you must specify color keys):
-            // Provide *all three*: Primaries, TransferFunction, YCbCrMatrix
-            // Example forcibly using HLG for Apple Log:
             if isAppleLogEnabled {
                 videoSettings[AVVideoColorPropertiesKey] = [
                     AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
@@ -491,15 +520,30 @@ class CameraViewModel: NSObject, ObservableObject {
             
             if let fmt = device?.activeFormat {
                 videoInput = AVAssetWriterInput(mediaType: .video,
-                                                outputSettings: videoSettings,
-                                                sourceFormatHint: fmt.formatDescription)
+                                          outputSettings: videoSettings,
+                                          sourceFormatHint: fmt.formatDescription)
             } else {
                 videoInput = AVAssetWriterInput(mediaType: .video,
-                                                outputSettings: videoSettings)
+                                          outputSettings: videoSettings)
             }
             
-            // Correct orientation
-            videoInput?.transform = UIDevice.current.orientation.videoTransform
+            // Set transform based on interface orientation
+            var transform = CGAffineTransform.identity
+            
+            switch currentInterfaceOrientation {
+            case .portrait:
+                transform = CGAffineTransform(rotationAngle: .pi/2)
+            case .portraitUpsideDown:
+                transform = CGAffineTransform(rotationAngle: -.pi/2)
+            case .landscapeLeft:
+                transform = CGAffineTransform(rotationAngle: 0)
+            case .landscapeRight:
+                transform = CGAffineTransform(rotationAngle: .pi)
+            default:
+                transform = CGAffineTransform(rotationAngle: .pi/2)
+            }
+            
+            videoInput?.transform = transform
             
             videoInput?.expectsMediaDataInRealTime = true
             if let vIn = videoInput, assetWriter?.canAdd(vIn) == true {
@@ -624,28 +668,16 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection) {
-        if #available(iOS 17.0, *) {
-            let desiredAngle: CGFloat
-            switch UIDevice.current.orientation {
-            case .portrait:
-                desiredAngle = 90
-            case .portraitUpsideDown:
-                desiredAngle = 270
-            case .landscapeLeft:
-                desiredAngle = 0
-            case .landscapeRight:
-                desiredAngle = 180
-            default:
-                desiredAngle = 90
-            }
+        guard connection.isVideoOrientationSupported else { return }
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
             
-            if connection.isVideoRotationAngleSupported(desiredAngle) {
-                connection.videoRotationAngle = desiredAngle
-            }
-        } else {
-            if connection.isVideoOrientationSupported {
-                let orientation = UIDevice.current.orientation
-                switch orientation {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                let interfaceOrientation = windowScene.interfaceOrientation
+                self.currentInterfaceOrientation = interfaceOrientation
+                
+                switch interfaceOrientation {
                 case .portrait:
                     connection.videoOrientation = .portrait
                 case .portraitUpsideDown:
@@ -658,10 +690,42 @@ class CameraViewModel: NSObject, ObservableObject {
                     connection.videoOrientation = .portrait
                 }
             }
+            
+            if connection.isVideoMirroringSupported {
+                connection.isVideoMirrored = false
+            }
         }
+    }
+    
+    // Add method to update frame rate
+    func updateFrameRate(_ fps: Double) {
+        guard let device = device else { return }
         
-        if connection.isVideoMirroringSupported {
-            connection.isVideoMirrored = false
+        do {
+            try device.lockForConfiguration()
+            
+            // Convert fps to CMTime duration
+            let duration = CMTimeMake(value: 1000, timescale: Int32(fps * 1000))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            
+            device.unlockForConfiguration()
+            selectedFrameRate = fps
+            
+            print("Frame rate updated to: \(fps) fps")
+        } catch {
+            print("Frame rate error: \(error)")
+            self.error = .configurationFailed
+        }
+    }
+    
+    // Add method to update orientation
+    func updateInterfaceOrientation() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                self.currentInterfaceOrientation = windowScene.interfaceOrientation
+            }
         }
     }
 }

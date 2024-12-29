@@ -34,6 +34,12 @@ struct ContentView: View {
                 orientation = newOrientation
             }
         }
+        .onAppear {
+            viewModel.updateInterfaceOrientation()
+        }
+        .onChange(of: UIDevice.current.orientation) { _ in
+            viewModel.updateInterfaceOrientation()
+        }
         .alert(item: $viewModel.error) { error in
             Alert(title: Text("Error"),
                   message: Text(error.description),
@@ -46,6 +52,21 @@ struct ContentView: View {
         VStack(spacing: 15) {
             Text("Camera Controls")
                 .font(.headline)
+            
+            // Frame Rate Picker
+            HStack {
+                Text("FPS:")
+                Picker("Frame Rate", selection: $viewModel.selectedFrameRate) {
+                    ForEach(viewModel.availableFrameRates, id: \.self) { fps in
+                        Text(fps == 29.97 ? "29.97" : String(format: "%.0f", fps))
+                            .tag(fps)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: viewModel.selectedFrameRate) { newValue in
+                    viewModel.updateFrameRate(newValue)
+                }
+            }
             
             // White Balance
             HStack {
