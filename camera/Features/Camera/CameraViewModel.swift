@@ -245,7 +245,7 @@ class CameraViewModel: NSObject, ObservableObject {
             session.beginConfiguration()
             
             try device.lockForConfiguration()
-            defer { 
+            defer {
                 device.unlockForConfiguration()
                 session.commitConfiguration()
                 
@@ -265,7 +265,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 
                 let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
                 // Check for ProRes422 or ProRes422HQ codec
-                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 || 
+                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 ||
                               codecType == kCMVideoCodecType_AppleProRes422HQ ||
                               codecType == 2016686642) // This is the codec we see in the logs
                 let hasAppleLog = $0.supportedColorSpaces.contains(.appleLog)
@@ -343,7 +343,7 @@ class CameraViewModel: NSObject, ObservableObject {
             session.beginConfiguration()
             
             try device.lockForConfiguration()
-            defer { 
+            defer {
                 device.unlockForConfiguration()
                 session.commitConfiguration()
                 
@@ -397,7 +397,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 videoDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
                 videoDevice.activeFormat = appleLogFormat
                 videoDevice.activeColorSpace = .appleLog
-                videoDevice.unlockForConfiguration()
                 print("Initial setup: Enabled Apple Log in 4K ProRes format")
             }
             
@@ -569,9 +568,9 @@ class CameraViewModel: NSObject, ObservableObject {
                 case .portraitUpsideDown:
                     connection.videoOrientation = .portraitUpsideDown
                 case .landscapeLeft:
-                    connection.videoOrientation = .landscapeRight
-                case .landscapeRight:
                     connection.videoOrientation = .landscapeLeft
+                case .landscapeRight:
+                    connection.videoOrientation = .landscapeRight
                 default:
                     connection.videoOrientation = .portrait
                 }
