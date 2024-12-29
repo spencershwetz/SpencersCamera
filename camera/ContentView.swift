@@ -100,6 +100,8 @@ struct ContentView: View {
                     viewModel.updateISO(viewModel.iso)
                 }
             }
+            .disabled(viewModel.isAutoExposureEnabled)
+            .opacity(viewModel.isAutoExposureEnabled ? 0.6 : 1.0)
             
             // Shutter
             HStack {
@@ -124,6 +126,23 @@ struct ContentView: View {
                 }
                 .pickerStyle(.menu)
             }
+            .disabled(viewModel.isAutoExposureEnabled)
+            .opacity(viewModel.isAutoExposureEnabled ? 0.6 : 1.0)
+            
+            // Auto Exposure toggle
+            Toggle(isOn: $viewModel.isAutoExposureEnabled) {
+                HStack {
+                    Text("Auto Exposure")
+                    if viewModel.isAutoExposureEnabled {
+                        Image(systemName: "a.circle.fill")
+                            .foregroundColor(.green)
+                    } else {
+                        Image(systemName: "m.circle.fill")
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
+            .tint(.green)
             
             // Apple Log toggle if supported
             if viewModel.isAppleLogSupported {

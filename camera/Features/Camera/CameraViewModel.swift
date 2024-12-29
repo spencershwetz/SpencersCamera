@@ -143,6 +143,12 @@ class CameraViewModel: NSObject, ObservableObject {
     
     private var videoDeviceInput: AVCaptureDeviceInput?
     
+    @Published var isAutoExposureEnabled: Bool = true {
+        didSet {
+            updateExposureMode()
+        }
+    }
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -898,6 +904,35 @@ class CameraViewModel: NSObject, ObservableObject {
         
         // Set the shutter angle through the property
         self.shutterAngle = angle
+    }
+    
+    // Add this method to handle exposure mode changes
+    private func updateExposureMode() {
+        guard let device = device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            if isAutoExposureEnabled {
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                    print("📷 Auto exposure enabled")
+                }
+            } else {
+                if device.isExposureModeSupported(.custom) {
+                    device.exposureMode = .custom
+                    // Maintain current exposure settings when switching to manual
+                    device.setExposureModeCustom(duration: device.exposureDuration,
+                                               iso: device.iso) { _ in }
+                    print("📷 Manual exposure enabled")
+                }
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("❌ Error setting exposure mode: \(error.localizedDescription)")
+            self.error = .configurationFailed
+        }
     }
 }
 
