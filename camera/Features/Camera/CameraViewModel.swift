@@ -73,15 +73,10 @@ class CameraViewModel: NSObject, ObservableObject {
     
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
-    private var videoOutput: AVCaptureVideoDataOutput?
-    private var audioOutput: AVCaptureAudioDataOutput?
-    private var assetWriter: AVAssetWriter?
-    private var videoInput: AVAssetWriterInput?
-    private var audioInput: AVAssetWriterInput?
-    private var currentRecordingURL: URL?
     
-    private let videoOutputQueue = DispatchQueue(label: "com.camera.videoOutput")
-    private let audioOutputQueue = DispatchQueue(label: "com.camera.audioOutput")
+    // Add movie file output
+    private let movieOutput = AVCaptureMovieFileOutput()
+    private var currentRecordingURL: URL?
     
     private var defaultFormat: AVCaptureDevice.Format?
     
@@ -195,7 +190,7 @@ class CameraViewModel: NSObject, ObservableObject {
             object: nil,
             queue: .main) { [weak self] _ in
                 guard let self = self,
-                      let connection = self.videoOutput?.connection(with: .video) else { return }
+                      let connection = self.movieOutput.connection(with: .video) else { return }
                 self.updateVideoOrientation(connection)
         }
     }
@@ -255,7 +250,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.commitConfiguration()
                 
                 // Fix orientation after configuration
-                if let videoConnection = videoOutput?.connection(with: .video) {
+                if let videoConnection = movieOutput.connection(with: .video) {
                     updateVideoOrientation(videoConnection)
                 }
                 
@@ -353,7 +348,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.commitConfiguration()
                 
                 // Fix orientation after configuration
-                if let videoConnection = videoOutput?.connection(with: .video) {
+                if let videoConnection = movieOutput.connection(with: .video) {
                     updateVideoOrientation(videoConnection)
                 }
                 
@@ -379,24 +374,22 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func setupSession() throws {
-        // Disable automatic wide color configuration
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        
         session.beginConfiguration()
         
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                                        for: .video,
-                                                        position: .back)
-        else {
+                                                    for: .video,
+                                                    position: .back) else {
             error = .cameraUnavailable
             status = .failed
             session.commitConfiguration()
             return
         }
+        
         self.device = videoDevice
         
         do {
-            // If Apple Log is enabled, attempt best Apple Log 4K format
+            // Configure Apple Log if enabled
             if isAppleLogEnabled, let appleLogFormat = findBestAppleLogFormat(videoDevice) {
                 let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
                 try videoDevice.lockForConfiguration()
@@ -408,37 +401,35 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("Initial setup: Enabled Apple Log in 4K ProRes format")
             }
             
-            // Add camera input
-            let vidInput = try AVCaptureDeviceInput(device: videoDevice)
-            if session.canAddInput(vidInput) {
-                session.addInput(vidInput)
+            // Add video input
+            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+            if session.canAddInput(videoInput) {
+                session.addInput(videoInput)
             }
             
-            // Video output
-            videoOutput = AVCaptureVideoDataOutput()
-            videoOutput?.setSampleBufferDelegate(self, queue: videoOutputQueue)
-            videoOutput?.alwaysDiscardsLateVideoFrames = false
-            if let vOut = videoOutput, session.canAddOutput(vOut) {
-                session.addOutput(vOut)
-                // Preview only; actual recording in Apple Log/ProRes
-                vOut.videoSettings = [
-                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                    kCVPixelBufferMetalCompatibilityKey as String: true
-                ]
-                // Set initial orientation
-                if let videoConnection = videoOutput?.connection(with: .video) {
-                    updateVideoOrientation(videoConnection)
+            // Add audio input
+            if let audioDevice = AVCaptureDevice.default(for: .audio),
+               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+               session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+            }
+            
+            // Configure movie output
+            if session.canAddOutput(movieOutput) {
+                session.addOutput(movieOutput)
+                
+                // Configure for high quality
+                movieOutput.movieFragmentInterval = .invalid
+                
+                if let connection = movieOutput.connection(with: .video) {
+                    if connection.isVideoStabilizationSupported {
+                        connection.preferredVideoStabilizationMode = .auto
+                    }
+                    updateVideoOrientation(connection)
                 }
             }
             
-            // Audio output
-            audioOutput = AVCaptureAudioDataOutput()
-            audioOutput?.setSampleBufferDelegate(self, queue: audioOutputQueue)
-            if let aOut = audioOutput, session.canAddOutput(aOut) {
-                session.addOutput(aOut)
-            }
-            
-            // After setting up video input, set initial frame rate
+            // Set initial frame rate
             if let device = device {
                 try device.lockForConfiguration()
                 let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
@@ -456,7 +447,7 @@ class CameraViewModel: NSObject, ObservableObject {
         
         session.commitConfiguration()
         
-        // Add quality preset configuration
+        // Configure session preset
         if session.canSetSessionPreset(.hd4K3840x2160) {
             session.sessionPreset = .hd4K3840x2160
         } else if session.canSetSessionPreset(.hd1920x1080) {
@@ -468,19 +459,17 @@ class CameraViewModel: NSObject, ObservableObject {
             self?.session.startRunning()
             DispatchQueue.main.async {
                 self?.isSessionRunning = self?.session.isRunning ?? false
-                self?.status = .running  // Set status when session starts
+                self?.status = .running
             }
         }
         
-        // Check and store Apple Log support
+        // Check Apple Log support
         isAppleLogSupported = device?.formats.contains { format in
             format.supportedColorSpaces.contains(.appleLog)
         } ?? false
         
         // Store default format
-        if let device = device {
-            defaultFormat = device.activeFormat
-        }
+        defaultFormat = device?.activeFormat
     }
     
     // White Balance
@@ -542,80 +531,15 @@ class CameraViewModel: NSObject, ObservableObject {
             return
         }
         
-        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let vidFile = docPath.appendingPathComponent("recording-\(Date().timeIntervalSince1970).mov")
-        currentRecordingURL = vidFile
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videoName = "recording-\(Date().timeIntervalSince1970).mov"
+        let videoPath = documentsPath.appendingPathComponent(videoName)
+        currentRecordingURL = videoPath
         
-        do {
-            assetWriter = try AVAssetWriter(url: vidFile, fileType: .mov)
-            
-            // Set dimensions based on current interface orientation
-            let isPortrait = currentInterfaceOrientation.isPortrait
-            var videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.proRes422,
-                AVVideoWidthKey: isPortrait ? 2160 : 3840,
-                AVVideoHeightKey: isPortrait ? 3840 : 2160
-            ]
-            
-            if isAppleLogEnabled {
-                videoSettings[AVVideoColorPropertiesKey] = [
-                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
-                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
-                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
-                ]
-            }
-            
-            if let fmt = device?.activeFormat {
-                videoInput = AVAssetWriterInput(mediaType: .video,
-                                          outputSettings: videoSettings,
-                                          sourceFormatHint: fmt.formatDescription)
-                
-                // Add these optimizations
-                videoInput?.performsMultiPassEncodingIfSupported = true
-                videoInput?.expectsMediaDataInRealTime = true
-                
-                // Add a pixel buffer adaptor for better performance
-                let attributes: [String: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-                    kCVPixelBufferMetalCompatibilityKey as String: true,
-                    kCVPixelBufferWidthKey as String: isPortrait ? 2160 : 3840,
-                    kCVPixelBufferHeightKey as String: isPortrait ? 3840 : 2160
-                ]
-                
-                let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-                    assetWriterInput: videoInput!,
-                    sourcePixelBufferAttributes: attributes
-                )
-                
-                if assetWriter?.canAdd(videoInput!) == true {
-                    assetWriter?.add(videoInput!)
-                }
-            }
-            
-            // Audio
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM, // Use uncompressed audio
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
-            ]
-            
-            audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput?.expectsMediaDataInRealTime = true
-            
-            if let aIn = audioInput, assetWriter?.canAdd(aIn) == true {
-                assetWriter?.add(aIn)
-            }
-            
-            isRecording = true
-            print("Starting recording to: \(vidFile)")
-        } catch {
-            print("Failed to create asset writer: \(error)")
-            self.error = .recordingFailed
-        }
+        // Start recording
+        movieOutput.startRecording(to: videoPath, recordingDelegate: self)
+        isRecording = true
+        print("Starting recording to: \(videoPath.path)")
     }
     
     func stopRecording() {
@@ -626,92 +550,7 @@ class CameraViewModel: NSObject, ObservableObject {
         
         print("Stopping recording...")
         isProcessingRecording = true
-        isRecording = false
-        
-        guard let writer = assetWriter,
-              writer.status == .writing else {
-            print("❌ Cannot stop recording: Asset writer status is \(assetWriter?.status.rawValue ?? -1)")
-            isProcessingRecording = false
-            error = .recordingFailed
-            return
-        }
-        
-        let finishGroup = DispatchGroup()
-        
-        if let vIn = videoInput {
-            finishGroup.enter()
-            videoOutputQueue.async {
-                vIn.markAsFinished()
-                finishGroup.leave()
-            }
-        }
-        if let aIn = audioInput {
-            finishGroup.enter()
-            audioOutputQueue.async {
-                aIn.markAsFinished()
-                finishGroup.leave()
-            }
-        }
-        
-        finishGroup.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-            print("Finishing asset writer...")
-            
-            writer.finishWriting { [weak self] in
-                guard let self = self else { return }
-                
-                if let err = writer.error {
-                    print("❌ Error finishing recording: \(err)")
-                    DispatchQueue.main.async {
-                        self.error = .recordingFailed
-                        self.isProcessingRecording = false
-                    }
-                    return
-                }
-                
-                if let outURL = self.currentRecordingURL {
-                    print("✅ Recording finished successfully")
-                    self.saveVideoToPhotoLibrary(outURL)
-                } else {
-                    print("❌ No output URL available")
-                    DispatchQueue.main.async {
-                        self.error = .recordingFailed
-                        self.isProcessingRecording = false
-                    }
-                }
-            }
-        }
-    }
-    
-    private func saveVideoToPhotoLibrary(_ url: URL) {
-        PHPhotoLibrary.requestAuthorization { [weak self] status in
-            guard status == .authorized else {
-                DispatchQueue.main.async {
-                    self?.error = .savingFailed
-                    self?.isProcessingRecording = false
-                    print("Photo library access denied")
-                }
-                return
-            }
-            
-            PHPhotoLibrary.shared().performChanges {
-                let opts = PHAssetResourceCreationOptions()
-                opts.shouldMoveFile = true
-                let req = PHAssetCreationRequest.forAsset()
-                req.addResource(with: .video, fileURL: url, options: opts)
-            } completionHandler: { success, error in
-                DispatchQueue.main.async {
-                    if success {
-                        print("Video saved to photo library")
-                        self?.recordingFinished = true
-                    } else {
-                        print("Error saving video: \(String(describing: error))")
-                        self?.error = .savingFailed
-                    }
-                    self?.isProcessingRecording = false
-                }
-            }
-        }
+        movieOutput.stopRecording()
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection) {
@@ -901,7 +740,7 @@ class CameraViewModel: NSObject, ObservableObject {
             
             // Stabilization
             if device.activeFormat.isVideoStabilizationSupported {
-                if let connection = videoOutput?.connection(with: .video),
+                if let connection = movieOutput.connection(with: .video),
                    connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .cinematic
                 }
@@ -930,83 +769,57 @@ class CameraViewModel: NSObject, ObservableObject {
 }
 
 // MARK: - Sample Buffer Delegate
-extension CameraViewModel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput,
-                       didOutput sampleBuffer: CMSampleBuffer,
-                       from connection: AVCaptureConnection) {
-        guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
-        
-        // Monitor frame rate less frequently
-        if output is AVCaptureVideoDataOutput {
-            let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            
-            if let lastTime = lastFrameTime {
-                let delta = CMTimeGetSeconds(CMTimeSubtract(timestamp, lastTime))
-                let instantFPS = 1.0 / delta
-                
-                frameRateAccumulator += instantFPS
-                frameCount += 1
-                
-                // Increase interval for frame rate checks
-                if frameCount >= 60 { // Check every 60 frames instead of 30
-                    let averageFPS = frameRateAccumulator / Double(frameCount)
-                    print("Current frame rate: \(String(format: "%.3f", averageFPS)) fps")
-                    
-                    // Only log significant deviations
-                    if abs(averageFPS - selectedFrameRate) > 0.5 {
-                        print("⚠️ Frame rate deviation detected: \(String(format: "%.3f", averageFPS)) fps vs target \(selectedFrameRate) fps")
-                        adjustFrameRatePrecision(currentFPS: averageFPS)
-                    }
-                    
-                    frameCount = 0
-                    frameRateAccumulator = 0
-                }
-            }
-            lastFrameTime = timestamp
-        }
-        
-        // Handle recording
-        guard isRecording,
-              let writer = assetWriter else { return }
-        
-        let isVideo = (output is AVCaptureVideoDataOutput)
-        let writerInput = isVideo ? videoInput : audioInput
-        
-        // Process on high-priority background queue
-        processingQueue.async {
-            switch writer.status {
-            case .unknown:
-                if isVideo {
-                    let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                    writer.startWriting()
-                    writer.startSession(atSourceTime: pts)
-                    
-                    if let wI = writerInput, wI.isReadyForMoreMediaData {
-                        wI.append(sampleBuffer)
-                    }
-                }
-            case .writing:
-                if let wI = writerInput, wI.isReadyForMoreMediaData {
-                    wI.append(sampleBuffer)
-                }
-            case .failed:
-                print("❌ Asset writer failed: \(writer.error?.localizedDescription ?? "unknown error")")
-                DispatchQueue.main.async {
-                    self.error = .recordingFailed
-                    self.isRecording = false
-                    self.isProcessingRecording = false
-                }
-            default:
-                break
-            }
-        }
+extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
+    func fileOutput(_ output: AVCaptureFileOutput,
+                   didStartRecordingTo fileURL: URL,
+                   from connections: [AVCaptureConnection]) {
+        print("Recording started successfully")
     }
     
-    func captureOutput(_ output: AVCaptureOutput,
-                       didDrop sampleBuffer: CMSampleBuffer,
-                       from connection: AVCaptureConnection) {
-        let isVideo = (output is AVCaptureVideoDataOutput)
-        print("Dropped \(isVideo ? "video" : "audio") buffer")
+    func fileOutput(_ output: AVCaptureFileOutput,
+                   didFinishRecordingTo outputFileURL: URL,
+                   from connections: [AVCaptureConnection],
+                   error: Error?) {
+        isRecording = false
+        
+        if let error = error {
+            print("Recording failed: \(error.localizedDescription)")
+            DispatchQueue.main.async {
+                self.error = .recordingFailed
+                self.isProcessingRecording = false
+            }
+            return
+        }
+        
+        // Save to photo library
+        PHPhotoLibrary.requestAuthorization { [weak self] status in
+            guard status == .authorized else {
+                DispatchQueue.main.async {
+                    self?.error = .savingFailed
+                    self?.isProcessingRecording = false
+                    print("Photo library access denied")
+                }
+                return
+            }
+            
+            PHPhotoLibrary.shared().performChanges {
+                let options = PHAssetResourceCreationOptions()
+                options.shouldMoveFile = true
+                let creationRequest = PHAssetCreationRequest.forAsset()
+                creationRequest.addResource(with: .video, fileURL: outputFileURL, options: options)
+            } completionHandler: { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        print("Video saved to photo library")
+                        self?.recordingFinished = true
+                    } else {
+                        print("Error saving video: \(String(describing: error))")
+                        self?.error = .savingFailed
+                    }
+                    self?.isProcessingRecording = false
+                }
+            }
+        }
     }
 }
 
