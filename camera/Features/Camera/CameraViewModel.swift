@@ -123,6 +123,26 @@ class CameraViewModel: NSObject, ObservableObject {
         device?.activeFormat.videoSupportedFrameRateRanges.first
     }
     
+    // Add properties for advanced configuration
+    private var videoConfiguration: [String: Any] = [
+        AVVideoCodecKey: AVVideoCodecType.proRes422,
+        AVVideoCompressionPropertiesKey: [
+            AVVideoAverageBitRateKey: 50_000_000, // 50 Mbps
+            AVVideoMaxKeyFrameIntervalKey: 1, // Every frame is keyframe
+            AVVideoAllowFrameReorderingKey: false,
+            AVVideoExpectedSourceFrameRateKey: 30
+        ]
+    ]
+    
+    // Add these constants
+    private struct FrameRates {
+        static let ntsc23_976 = CMTime(value: 1001, timescale: 24000)  // 23.976 fps
+        static let ntsc29_97 = CMTime(value: 1001, timescale: 30000)   // 29.97 fps
+        static let film24 = CMTime(value: 1, timescale: 24)            // 24 fps
+        static let pal25 = CMTime(value: 1, timescale: 25)             // 25 fps
+        static let ntsc30 = CMTime(value: 1, timescale: 30)            // 30 fps
+    }
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -436,6 +456,13 @@ class CameraViewModel: NSObject, ObservableObject {
         
         session.commitConfiguration()
         
+        // Add quality preset configuration
+        if session.canSetSessionPreset(.hd4K3840x2160) {
+            session.sessionPreset = .hd4K3840x2160
+        } else if session.canSetSessionPreset(.hd1920x1080) {
+            session.sessionPreset = .hd1920x1080
+        }
+        
         // Start session
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.session.startRunning()
@@ -717,96 +744,129 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
+    // Add new method to find compatible format for frame rate
+    private func findCompatibleFormat(for fps: Double) -> AVCaptureDevice.Format? {
+        guard let device = device else { return nil }
+        
+        print("\n=== Checking Format Compatibility ===")
+        print("Requested frame rate: \(fps) fps")
+        
+        let formats = device.formats.filter { format in
+            // Get current dimensions
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let isHighRes = dimensions.width >= 1920 // At least 1080p
+            
+            // Check frame rate support
+            let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
+                range.minFrameRate <= fps && fps <= range.maxFrameRate
+            }
+            
+            // For Apple Log, ensure format supports it
+            if isAppleLogEnabled {
+                return isHighRes && supportsFrameRate && format.supportedColorSpaces.contains(.appleLog)
+            }
+            
+            return isHighRes && supportsFrameRate
+        }
+        
+        // Log available formats
+        formats.forEach { format in
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let ranges = format.videoSupportedFrameRateRanges
+            print("""
+                Format: \(dims.width)x\(dims.height)
+                - Frame rates: \(ranges.map { "\($0.minFrameRate)-\($0.maxFrameRate)" }.joined(separator: ", "))
+                - Supports Apple Log: \(format.supportedColorSpaces.contains(.appleLog))
+                """)
+        }
+        
+        return formats.first
+    }
+    
     // Update frame rate setting method
     func updateFrameRate(_ fps: Double) {
-        guard let device = device,
-              let frameRateRange = supportedFrameRateRange else { return }
+        guard let device = device else { return }
         
         do {
+            // Find compatible format first
+            guard let compatibleFormat = findCompatibleFormat(for: fps) else {
+                print("❌ No compatible format found for \(fps) fps")
+                return
+            }
+            
             try device.lockForConfiguration()
             
-            // Ensure requested frame rate is within supported range
-            let clampedFPS = min(max(frameRateRange.minFrameRate, fps),
-                                frameRateRange.maxFrameRate)
+            // Set format if different from current
+            if device.activeFormat != compatibleFormat {
+                print("Switching to compatible format...")
+                device.activeFormat = compatibleFormat
+            }
             
-            // More precise frame duration calculation
+            // Get precise frame duration
             let frameDuration: CMTime
-            switch clampedFPS {
+            switch fps {
             case 23.976:
-                // 23.976 = 24000/1001
-                frameDuration = CMTimeMake(value: 1001, timescale: 24000)
+                frameDuration = FrameRates.ntsc23_976
             case 29.97:
-                // 29.97 = 30000/1001
-                frameDuration = CMTimeMake(value: 1001, timescale: 30000)
+                frameDuration = FrameRates.ntsc29_97
+            case 24:
+                frameDuration = FrameRates.film24
+            case 25:
+                frameDuration = FrameRates.pal25
+            case 30:
+                frameDuration = FrameRates.ntsc30
             default:
-                // For other frame rates, use direct calculation
-                frameDuration = CMTimeMake(value: 1, timescale: Int32(clampedFPS))
+                frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
             }
             
-            // Only set if within supported range
-            if frameRateRange.containsFrameRate(clampedFPS) {
-                device.activeVideoMinFrameDuration = frameDuration
-                device.activeVideoMaxFrameDuration = frameDuration
-                
-                // Reset monitoring
-                frameCount = 0
-                frameRateAccumulator = 0
-                lastFrameTime = nil
-                
-                selectedFrameRate = clampedFPS
-                
-                print("""
-                    Frame rate updated:
-                    - Requested: \(fps) fps
-                    - Actual: \(clampedFPS) fps
-                    - Duration: \(frameDuration.seconds) seconds
-                    - Supported range: \(frameRateRange.minFrameRate) - \(frameRateRange.maxFrameRate) fps
-                    """)
-            } else {
-                print("""
-                    ⚠️ Requested frame rate \(fps) fps not supported
-                    Supported range: \(frameRateRange.minFrameRate) - \(frameRateRange.maxFrameRate) fps
-                    """)
+            // Set both min and max to the same duration for precise timing
+            device.activeVideoMinFrameDuration = frameDuration
+            device.activeVideoMaxFrameDuration = frameDuration
+            
+            // Update state on main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.selectedFrameRate = fps
+                self.frameCount = 0
+                self.frameRateAccumulator = 0
+                self.lastFrameTime = nil
             }
+            
+            print("""
+                ✅ Frame rate configured:
+                - Rate: \(fps) fps
+                - Duration: \(frameDuration.seconds) seconds
+                - Format: \(CMVideoFormatDescriptionGetDimensions(compatibleFormat.formatDescription))
+                """)
             
             device.unlockForConfiguration()
         } catch {
-            print("Frame rate error: \(error)")
+            print("❌ Frame rate error: \(error)")
             self.error = .configurationFailed
         }
     }
     
-    // Add method to fine-tune frame rate
+    // Update frame rate monitoring to be less aggressive and use main thread
     private func adjustFrameRatePrecision(currentFPS: Double) {
-        guard let device = device,
-              let frameRateRange = supportedFrameRateRange else { return }
+        // Only adjust if deviation is significant (more than 2%)
+        let deviation = abs(currentFPS - selectedFrameRate) / selectedFrameRate
+        guard deviation > 0.02 else { return }
         
-        do {
-            try device.lockForConfiguration()
-            
-            // Calculate adjustment based on deviation
-            let deviation = selectedFrameRate - currentFPS
-            let currentDuration = device.activeVideoMaxFrameDuration
-            
-            // Calculate new frame rate while respecting device limits
-            let targetFPS = currentFPS + (deviation * 0.1)
-            let clampedFPS = min(max(frameRateRange.minFrameRate,
-                                    targetFPS),
-                                frameRateRange.maxFrameRate)
-            
-            // Convert to duration
-            let duration = CMTimeMake(value: 1,
-                                    timescale: Int32(clampedFPS))
-            
-            device.activeVideoMinFrameDuration = duration
-            device.activeVideoMaxFrameDuration = duration
-            
-            print("Frame rate adjusted: \(clampedFPS) fps (duration: \(duration.seconds) seconds)")
-            device.unlockForConfiguration()
-        } catch {
-            print("Frame rate adjustment error: \(error)")
+        // Add delay between adjustments
+        let now = Date().timeIntervalSince1970
+        guard (now - lastAdjustmentTime) > 1.0 else { return } // Wait at least 1 second between adjustments
+        
+        lastAdjustmentTime = now
+        
+        // Reset frame rate to selected value instead of trying to adjust
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.updateFrameRate(self.selectedFrameRate)
         }
     }
+    
+    // Add property to track last adjustment time
+    private var lastAdjustmentTime: TimeInterval = 0
     
     // Add method to update orientation
     func updateInterfaceOrientation() {
@@ -815,6 +875,56 @@ class CameraViewModel: NSObject, ObservableObject {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 self.currentInterfaceOrientation = windowScene.interfaceOrientation
             }
+        }
+    }
+    
+    // Add HDR support
+    private func configureHDR() {
+        guard let device = device,
+              device.activeFormat.isVideoHDRSupported else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            device.automaticallyAdjustsVideoHDREnabled = false
+            device.isVideoHDREnabled = true
+            device.unlockForConfiguration()
+        } catch {
+            print("Error configuring HDR: \(error)")
+        }
+    }
+    
+    private func optimizeVideoCapture() {
+        guard let device = device else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Stabilization
+            if device.activeFormat.isVideoStabilizationSupported {
+                if let connection = videoOutput?.connection(with: .video),
+                   connection.isVideoStabilizationSupported {
+                    connection.preferredVideoStabilizationMode = .cinematic
+                }
+            }
+            
+            // Auto focus system
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            
+            // Auto exposure
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            
+            // White balance
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("Error optimizing video capture: \(error)")
         }
     }
 }
@@ -826,7 +936,7 @@ extension CameraViewModel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptu
                        from connection: AVCaptureConnection) {
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
         
-        // Monitor frame rate for video output
+        // Monitor frame rate less frequently
         if output is AVCaptureVideoDataOutput {
             let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             
@@ -837,11 +947,12 @@ extension CameraViewModel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptu
                 frameRateAccumulator += instantFPS
                 frameCount += 1
                 
-                if frameCount >= frameRateUpdateInterval {
+                // Increase interval for frame rate checks
+                if frameCount >= 60 { // Check every 60 frames instead of 30
                     let averageFPS = frameRateAccumulator / Double(frameCount)
                     print("Current frame rate: \(String(format: "%.3f", averageFPS)) fps")
                     
-                    // If frame rate is off by more than 0.5 fps, try to adjust
+                    // Only log significant deviations
                     if abs(averageFPS - selectedFrameRate) > 0.5 {
                         print("⚠️ Frame rate deviation detected: \(String(format: "%.3f", averageFPS)) fps vs target \(selectedFrameRate) fps")
                         adjustFrameRatePrecision(currentFPS: averageFPS)
