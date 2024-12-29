@@ -553,7 +553,13 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection) {
-        guard connection.isVideoOrientationSupported else { return }
+        // Check if rotation is supported for our required angles
+        let requiredAngles: [CGFloat] = [0, 90, 180, 270]
+        let supportsRotation = requiredAngles.allSatisfy { angle in
+            connection.isVideoRotationAngleSupported(angle)
+        }
+        
+        guard supportsRotation else { return }
         
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -562,17 +568,18 @@ class CameraViewModel: NSObject, ObservableObject {
                 let interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
                 
+                // Adjusted angles to fix upside down horizontal video
                 switch interfaceOrientation {
                 case .portrait:
-                    connection.videoOrientation = .portrait
+                    connection.videoRotationAngle = 90   // Keep portrait the same
                 case .portraitUpsideDown:
-                    connection.videoOrientation = .portraitUpsideDown
+                    connection.videoRotationAngle = 270  // Keep upside down portrait the same
                 case .landscapeLeft:
-                    connection.videoOrientation = .landscapeLeft
+                    connection.videoRotationAngle = 180  // Changed from 0 to 180
                 case .landscapeRight:
-                    connection.videoOrientation = .landscapeRight
+                    connection.videoRotationAngle = 0    // Changed from 180 to 0
                 default:
-                    connection.videoOrientation = .portrait
+                    connection.videoRotationAngle = 90   // Keep default the same
                 }
             }
             
@@ -738,7 +745,7 @@ class CameraViewModel: NSObject, ObservableObject {
             try device.lockForConfiguration()
             
             // Stabilization
-            if device.activeFormat.isVideoStabilizationSupported {
+            if device.activeFormat.isVideoStabilizationModeSupported(.cinematic) {
                 if let connection = movieOutput.connection(with: .video),
                    connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .cinematic
@@ -801,12 +808,14 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
                 return
             }
             
-            PHPhotoLibrary.shared().performChanges {
+            PHPhotoLibrary.shared().performChanges({
                 let options = PHAssetResourceCreationOptions()
                 options.shouldMoveFile = true
                 let creationRequest = PHAssetCreationRequest.forAsset()
-                creationRequest.addResource(with: .video, fileURL: outputFileURL, options: options)
-            } completionHandler: { success, error in
+                creationRequest.addResource(with: .video,
+                                          fileURL: outputFileURL,
+                                          options: options)
+            }) { success, error in
                 DispatchQueue.main.async {
                     if success {
                         print("Video saved to photo library")
@@ -823,7 +832,7 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
 }
 
 // MARK: - Orientation Helper
-private extension UIDeviceOrientation {
+extension UIDeviceOrientation {
     var videoTransform: CGAffineTransform {
         switch self {
         case .landscapeRight:

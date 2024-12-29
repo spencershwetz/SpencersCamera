@@ -37,7 +37,7 @@ struct ContentView: View {
         .onAppear {
             viewModel.updateInterfaceOrientation()
         }
-        .onChange(of: UIDevice.current.orientation) { _ in
+        .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
             viewModel.updateInterfaceOrientation()
         }
         .alert(item: $viewModel.error) { error in
@@ -63,7 +63,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .onChange(of: viewModel.selectedFrameRate) { newValue in
+                .onChange(of: viewModel.selectedFrameRate) { oldValue, newValue in
                     viewModel.updateFrameRate(newValue)
                 }
             }
