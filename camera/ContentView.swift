@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  camera
-//
-//  Created by spencer on 2024-12-22.
-//
-
 import SwiftUI
 import CoreData
 import CoreMedia
@@ -19,47 +12,42 @@ struct ContentView: View {
                 if viewModel.isSessionRunning {
                     CameraPreviewView(session: viewModel.session)
                         .ignoresSafeArea()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(width: geometry.size.width,
+                               height: geometry.size.height)
                     
                     VStack {
                         Spacer()
-                        
-                        // Camera controls
-                        Group {
-                            if orientation.isPortrait {
-                                VStack {
-                                    Spacer()
-                                    controlsView
-                                        .frame(maxWidth: geometry.size.width)
-                                }
-                            } else {
-                                HStack {
-                                    Spacer()
-                                    controlsView
-                                        .frame(maxWidth: geometry.size.width * 0.4)
-                                }
-                            }
-                        }
+                        controlsView
+                            // Ensure controls are centered and fully visible on screen
+                            .frame(maxWidth: geometry.size.width * 0.9)
+                            .padding(.bottom, 30)
                     }
                 } else {
+                    // Loading indicator while camera session initializes
                     ProgressView("Initializing Camera...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.7))
                 }
             }
             .edgesIgnoringSafeArea(.all)
+            .onRotate { newOrientation in
+                orientation = newOrientation
+            }
         }
         .alert(item: $viewModel.error) { error in
             Alert(title: Text("Error"),
                   message: Text(error.description),
                   dismissButton: .default(Text("OK")))
         }
-        .onRotate { newOrientation in
-            orientation = newOrientation
-        }
     }
     
-    // Extract controls into separate view
+    // Camera controls
     private var controlsView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 15) {
+            Text("Camera Controls")
+                .font(.headline)
+            
+            // White Balance
             HStack {
                 Text("WB: \(Int(viewModel.whiteBalance))K")
                 Slider(value: $viewModel.whiteBalance,
@@ -69,6 +57,7 @@ struct ContentView: View {
                 }
             }
             
+            // ISO
             HStack {
                 Text("ISO: \(Int(viewModel.iso))")
                 Slider(value: $viewModel.iso,
@@ -78,20 +67,23 @@ struct ContentView: View {
                 }
             }
             
+            // Shutter
             HStack {
-                Text("Shutter: 1/\(Int(viewModel.shutterSpeed.timescale)/Int(viewModel.shutterSpeed.value))")
+                // Display shutter as 1/x
+                let fraction = Double(viewModel.shutterSpeed.timescale) / Double(viewModel.shutterSpeed.value)
+                Text("Shutter: 1/\(Int(fraction))")
                 Slider(value: .init(get: {
-                    Float(viewModel.shutterSpeed.timescale)/Float(viewModel.shutterSpeed.value)
+                    Float(fraction)
                 }, set: { newValue in
                     viewModel.updateShutterSpeed(CMTimeMake(value: 1, timescale: Int32(newValue)))
                 }), in: 15...8000, step: 1)
             }
             
-            // Add Apple Log toggle if supported
+            // Apple Log toggle if supported
             if viewModel.isAppleLogSupported {
                 Toggle(isOn: $viewModel.isAppleLogEnabled) {
                     HStack {
-                        Text("Apple Log")
+                        Text("Apple Log (4K ProRes)")
                         if viewModel.isAppleLogEnabled {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
@@ -101,6 +93,7 @@ struct ContentView: View {
                 .tint(.green)
             }
             
+            // Record button
             Button(action: {
                 if viewModel.isRecording {
                     viewModel.stopRecording()
@@ -116,18 +109,19 @@ struct ContentView: View {
             .disabled(viewModel.isProcessingRecording)
         }
         .padding()
-        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.6))
         .cornerRadius(15)
-        .padding()
+        .foregroundColor(.white)
     }
 }
 
-// Add rotation view modifier
+// A rotation view modifier to track device orientation changes
 struct DeviceRotationViewModifier: ViewModifier {
     let action: (UIDeviceOrientation) -> Void
     
     func body(content: Content) -> some View {
-        content.onAppear()
+        content
+            .onAppear()
             .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
                 action(UIDevice.current.orientation)
             }
@@ -138,8 +132,4 @@ extension View {
     func onRotate(perform action: @escaping (UIDeviceOrientation) -> Void) -> some View {
         self.modifier(DeviceRotationViewModifier(action: action))
     }
-}
-
-#Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
 }
