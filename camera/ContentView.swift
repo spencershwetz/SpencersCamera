@@ -146,21 +146,26 @@ struct ContentView: View {
             
             // LUT Controls
             VStack(spacing: 8) {
-                Toggle(isOn: Binding(
-                    get: { lutManager.currentLUTFilter != nil },
-                    set: { enabled in
-                        if !enabled {
-                            lutManager.clearLUT()
-                        }
+                HStack {
+                    Text("LUT Preview")
+                    Spacer()
+                    if lutManager.currentLUTFilter != nil {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
                     }
-                )) {
-                    HStack {
-                        Text("LUT Preview")
-                        if lutManager.currentLUTFilter != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                    Toggle("", isOn: Binding(
+                        get: { lutManager.currentLUTFilter != nil },
+                        set: { enabled in
+                            if !enabled {
+                                lutManager.clearLUT()
+                            } else if let url = lutManager.selectedLUTURL {
+                                lutManager.loadLUT(from: url)
+                            } else {
+                                isShowingDocumentPicker = true
+                            }
                         }
-                    }
+                    ))
+                    .labelsHidden()
                 }
                 .tint(.green)
                 
@@ -193,7 +198,7 @@ struct ContentView: View {
                 .tint(.blue)
             }
             .padding(.vertical, 4)
-            
+
             // Auto Exposure toggle
             Toggle(isOn: $viewModel.isAutoExposureEnabled) {
                 HStack {

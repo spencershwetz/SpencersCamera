@@ -48,7 +48,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 return
             }
             
-            // Use Task with proper error handling
             Task {
                 do {
                     if isAppleLogEnabled {
@@ -108,7 +107,6 @@ class CameraViewModel: NSObject, ObservableObject {
     
     // Add properties for frame rate monitoring
     private var lastFrameTimestamp: CFAbsoluteTime = 0
-    
     private var lastFrameTime: CMTime?
     private var frameCount: Int = 0
     private var frameRateAccumulator: Double = 0
@@ -150,6 +148,7 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
+    // Add LUT Manager
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
     
@@ -214,6 +213,9 @@ class CameraViewModel: NSObject, ObservableObject {
             guard let self = self else { return }
             self.updateShutterAngle(180.0) // Set initial shutter angle to 180°
         }
+        
+        // **Load your LUT here** (make sure "My3DLUTFile.cube" is in your Bundle)
+        lutManager.loadLUT(named: "My3DLUTFile")
     }
     
     deinit {
@@ -285,10 +287,9 @@ class CameraViewModel: NSObject, ObservableObject {
                 let codecType = CMFormatDescriptionGetMediaSubType(desc)
                 
                 let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-                // Check for ProRes422 or ProRes422HQ codec
                 let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 ||
                               codecType == kCMVideoCodecType_AppleProRes422HQ ||
-                              codecType == 2016686642) // This is the codec we see in the logs
+                              codecType == 2016686642)
                 let hasAppleLog = $0.supportedColorSpaces.contains(.appleLog)
                 
                 print("""
@@ -303,17 +304,10 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("✅ Found suitable Apple Log format")
                 print("📹 Format details: \(format.formatDescription)")
                 
-                // Remove this part that was resetting frame rate
-                // let frameRateRange = format.videoSupportedFrameRateRanges.first!
-                // device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
-                // device.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
-                
-                // Instead, maintain current frame rate
                 let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
                 
-                // Set format and color space
                 device.activeFormat = format
                 device.activeColorSpace = .appleLog
                 print("🎨 Set color space to Apple Log")
@@ -329,17 +323,12 @@ class CameraViewModel: NSObject, ObservableObject {
             
         } catch {
             print("❌ Error configuring Apple Log: \(error.localizedDescription)")
-            
-            // Ensure we properly clean up on error
             device.unlockForConfiguration()
             session.commitConfiguration()
             session.startRunning()
-            
-            // Update UI on main thread
             await MainActor.run {
                 self.error = .configurationFailed
             }
-            
             print("🔄 Attempting session recovery")
             throw error
         }
@@ -368,7 +357,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 device.unlockForConfiguration()
                 session.commitConfiguration()
                 
-                // Fix orientation after configuration
                 if let videoConnection = movieOutput.connection(with: .video) {
                     updateVideoOrientation(videoConnection)
                 }
@@ -410,7 +398,6 @@ class CameraViewModel: NSObject, ObservableObject {
         self.device = videoDevice
         
         do {
-            // Initialize videoDeviceInput
             let input = try AVCaptureDeviceInput(device: videoDevice)
             self.videoDeviceInput = input
             
@@ -425,23 +412,19 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("Initial setup: Enabled Apple Log in 4K ProRes format")
             }
             
-            // Add video input
             if session.canAddInput(input) {
                 session.addInput(input)
             }
             
-            // Add audio input
             if let audioDevice = AVCaptureDevice.default(for: .audio),
                let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
                session.canAddInput(audioInput) {
                 session.addInput(audioInput)
             }
             
-            // Configure movie output
             if session.canAddOutput(movieOutput) {
                 session.addOutput(movieOutput)
                 
-                // Configure for high quality
                 movieOutput.movieFragmentInterval = .invalid
                 
                 if let connection = movieOutput.connection(with: .video) {
@@ -452,7 +435,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 }
             }
             
-            // Set initial frame rate
             if let device = device {
                 try device.lockForConfiguration()
                 let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
@@ -470,14 +452,12 @@ class CameraViewModel: NSObject, ObservableObject {
         
         session.commitConfiguration()
         
-        // Configure session preset
         if session.canSetSessionPreset(.hd4K3840x2160) {
             session.sessionPreset = .hd4K3840x2160
         } else if session.canSetSessionPreset(.hd1920x1080) {
             session.sessionPreset = .hd1920x1080
         }
         
-        // Start session
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.session.startRunning()
             DispatchQueue.main.async {
@@ -486,16 +466,13 @@ class CameraViewModel: NSObject, ObservableObject {
             }
         }
         
-        // Check Apple Log support
         isAppleLogSupported = device?.formats.contains { format in
             format.supportedColorSpaces.contains(.appleLog)
         } ?? false
         
-        // Store default format
         defaultFormat = device?.activeFormat
     }
     
-    // White Balance
     func updateWhiteBalance(_ temperature: Float) {
         guard let device = device else { return }
         do {
@@ -518,7 +495,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // ISO
     func updateISO(_ iso: Float) {
         guard let device = device else { return }
         do {
@@ -533,7 +509,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Shutter
     func updateShutterSpeed(_ speed: CMTime) {
         guard let device = device else { return }
         do {
@@ -545,11 +520,8 @@ class CameraViewModel: NSObject, ObservableObject {
             device.setExposureModeCustom(duration: speed, iso: device.iso) { _ in }
             device.unlockForConfiguration()
             
-            // Update the published property on the main thread
             DispatchQueue.main.async {
                 self.shutterSpeed = speed
-                
-                // Calculate and log the resulting angle
                 let resultingAngle = Double(speed.value) / Double(speed.timescale) * self.selectedFrameRate * 360.0
                 print("  - Resulting Angle: \(resultingAngle)°")
             }
@@ -559,7 +531,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Start recording in ProRes422 at 4K with Apple Log if format allows
     func startRecording() {
         guard !isRecording && !isProcessingRecording else {
             print("Cannot start recording: Already in progress or processing")
@@ -571,7 +542,6 @@ class CameraViewModel: NSObject, ObservableObject {
         let videoPath = documentsPath.appendingPathComponent(videoName)
         currentRecordingURL = videoPath
         
-        // Start recording
         movieOutput.startRecording(to: videoPath, recordingDelegate: self)
         isRecording = true
         print("Starting recording to: \(videoPath.path)")
@@ -589,7 +559,6 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection) {
-        // Check if rotation is supported for our required angles
         let requiredAngles: [CGFloat] = [0, 90, 180, 270]
         let supportsRotation = requiredAngles.allSatisfy { angle in
             connection.isVideoRotationAngleSupported(angle)
@@ -604,18 +573,17 @@ class CameraViewModel: NSObject, ObservableObject {
                 let interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
                 
-                // Adjusted angles to fix upside down horizontal video
                 switch interfaceOrientation {
                 case .portrait:
-                    connection.videoRotationAngle = 90   // Keep portrait the same
+                    connection.videoRotationAngle = 90
                 case .portraitUpsideDown:
-                    connection.videoRotationAngle = 270  // Keep upside down portrait the same
+                    connection.videoRotationAngle = 270
                 case .landscapeLeft:
-                    connection.videoRotationAngle = 180  // Changed from 0 to 180
+                    connection.videoRotationAngle = 180
                 case .landscapeRight:
-                    connection.videoRotationAngle = 0    // Changed from 180 to 0
+                    connection.videoRotationAngle = 0
                 default:
-                    connection.videoRotationAngle = 90   // Keep default the same
+                    connection.videoRotationAngle = 90
                 }
             }
             
@@ -625,7 +593,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Add new method to find compatible format for frame rate
     private func findCompatibleFormat(for fps: Double) -> AVCaptureDevice.Format? {
         guard let device = device else { return nil }
         
@@ -633,24 +600,18 @@ class CameraViewModel: NSObject, ObservableObject {
         print("Requested frame rate: \(fps) fps")
         
         let formats = device.formats.filter { format in
-            // Get current dimensions
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let isHighRes = dimensions.width >= 1920 // At least 1080p
-            
-            // Check frame rate support
+            let isHighRes = dimensions.width >= 1920
             let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
                 range.minFrameRate <= fps && fps <= range.maxFrameRate
             }
             
-            // For Apple Log, ensure format supports it
             if isAppleLogEnabled {
                 return isHighRes && supportsFrameRate && format.supportedColorSpaces.contains(.appleLog)
             }
-            
             return isHighRes && supportsFrameRate
         }
         
-        // Log available formats
         formats.forEach { format in
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let ranges = format.videoSupportedFrameRateRanges
@@ -664,12 +625,10 @@ class CameraViewModel: NSObject, ObservableObject {
         return formats.first
     }
     
-    // Update frame rate setting method
     func updateFrameRate(_ fps: Double) {
         guard let device = device else { return }
         
         do {
-            // Find compatible format first
             guard let compatibleFormat = findCompatibleFormat(for: fps) else {
                 print("❌ No compatible format found for \(fps) fps")
                 return
@@ -677,13 +636,11 @@ class CameraViewModel: NSObject, ObservableObject {
             
             try device.lockForConfiguration()
             
-            // Set format if different from current
             if device.activeFormat != compatibleFormat {
                 print("Switching to compatible format...")
                 device.activeFormat = compatibleFormat
             }
             
-            // Get precise frame duration
             let frameDuration: CMTime
             switch fps {
             case 23.976:
@@ -700,11 +657,9 @@ class CameraViewModel: NSObject, ObservableObject {
                 frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
             }
             
-            // Set both min and max to the same duration for precise timing
             device.activeVideoMinFrameDuration = frameDuration
             device.activeVideoMaxFrameDuration = frameDuration
             
-            // Update state on main thread
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.selectedFrameRate = fps
@@ -726,36 +681,27 @@ class CameraViewModel: NSObject, ObservableObject {
             self.error = .configurationFailed
         }
         
-        // Store current shutter angle before changing frame rate
         let currentAngle = shutterAngle
-        
-        // After frame rate is updated, restore the shutter angle
         updateShutterAngle(currentAngle)
     }
     
-    // Update frame rate monitoring to be less aggressive and use main thread
     private func adjustFrameRatePrecision(currentFPS: Double) {
-        // Only adjust if deviation is significant (more than 2%)
         let deviation = abs(currentFPS - selectedFrameRate) / selectedFrameRate
         guard deviation > 0.02 else { return }
         
-        // Add delay between adjustments
         let now = Date().timeIntervalSince1970
-        guard (now - lastAdjustmentTime) > 1.0 else { return } // Wait at least 1 second between adjustments
+        guard (now - lastAdjustmentTime) > 1.0 else { return }
         
         lastAdjustmentTime = now
         
-        // Reset frame rate to selected value instead of trying to adjust
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.updateFrameRate(self.selectedFrameRate)
         }
     }
     
-    // Add property to track last adjustment time
     private var lastAdjustmentTime: TimeInterval = 0
     
-    // Add method to update orientation
     func updateInterfaceOrientation() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -765,7 +711,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Add HDR support
     private func configureHDR() {
         guard let device = device,
               device.activeFormat.isVideoHDRSupported else { return }
@@ -786,7 +731,6 @@ class CameraViewModel: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             
-            // Stabilization
             if device.activeFormat.isVideoStabilizationModeSupported(.cinematic) {
                 if let connection = movieOutput.connection(with: .video),
                    connection.isVideoStabilizationSupported {
@@ -794,17 +738,14 @@ class CameraViewModel: NSObject, ObservableObject {
                 }
             }
             
-            // Auto focus system
             if device.isFocusModeSupported(.continuousAutoFocus) {
                 device.focusMode = .continuousAutoFocus
             }
             
-            // Auto exposure
             if device.isExposureModeSupported(.continuousAutoExposure) {
                 device.exposureMode = .continuousAutoExposure
             }
             
-            // White balance
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                 device.whiteBalanceMode = .continuousAutoWhiteBalance
             }
@@ -823,30 +764,23 @@ class CameraViewModel: NSObject, ObservableObject {
             if device.isWhiteBalanceModeSupported(.locked) {
                 device.whiteBalanceMode = .locked
                 
-                // Get current white balance gains
                 let currentGains = device.deviceWhiteBalanceGains
                 var newGains = currentGains
-                
-                // Calculate tint scale factor (-1.0 to 1.0)
-                let tintScale = currentTint / 150.0 // Normalize to -1.0 to 1.0
+                let tintScale = currentTint / 150.0
                 
                 if tintScale > 0 {
-                    // Green tint: increase green gain
                     newGains.greenGain = currentGains.greenGain * (1.0 + Float(tintScale))
                 } else {
-                    // Magenta tint: increase red and blue gains
                     let magentaScale = 1.0 + Float(abs(tintScale))
                     newGains.redGain = currentGains.redGain * magentaScale
                     newGains.blueGain = currentGains.blueGain * magentaScale
                 }
                 
-                // Clamp gains to valid range
                 let maxGain = device.maxWhiteBalanceGain
                 newGains.redGain = min(max(1.0, newGains.redGain), maxGain)
                 newGains.greenGain = min(max(1.0, newGains.greenGain), maxGain)
                 newGains.blueGain = min(max(1.0, newGains.blueGain), maxGain)
                 
-                // Set the white balance gains
                 device.setWhiteBalanceModeLocked(with: newGains) { _ in }
             }
             device.unlockForConfiguration()
@@ -856,16 +790,13 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Add this function to be called when tint slider changes
     func updateTint(_ newValue: Double) {
         currentTint = newValue.clamped(to: tintRange)
         configureTintSettings()
     }
     
-    // Convert shutter speed to angle
     var shutterAngle: Double {
         get {
-            // Calculate the actual angle from the current shutter speed and frame rate
             let angle = Double(shutterSpeed.value) / Double(shutterSpeed.timescale) * selectedFrameRate * 360.0
             let clampedAngle = min(max(angle, 1.1), 360.0)
             
@@ -879,9 +810,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
         set {
             let clampedAngle = min(max(newValue, 1.1), 360.0)
-            
-            // Calculate the exact shutter duration needed for this angle
-            // duration = (angle/360) * (1/fps)
             let duration = (clampedAngle/360.0) * (1.0/selectedFrameRate)
             
             print("🔄 Setting Shutter Angle:")
@@ -890,27 +818,20 @@ class CameraViewModel: NSObject, ObservableObject {
             print("  - Calculated Duration: \(duration)")
             
             let time = CMTimeMakeWithSeconds(duration, preferredTimescale: 1000000)
-            
-            // Update the camera settings first
             updateShutterSpeed(time)
             
-            // Then update our stored value
             DispatchQueue.main.async {
                 self.shutterSpeed = time
             }
         }
     }
     
-    // Update method to handle angle directly
     func updateShutterAngle(_ angle: Double) {
         print("\n🎯 Updating Shutter Angle:")
         print("  - Requested Angle: \(angle)°")
-        
-        // Set the shutter angle through the property
         self.shutterAngle = angle
     }
     
-    // Add this method to handle exposure mode changes
     private func updateExposureMode() {
         guard let device = device else { return }
         
@@ -925,9 +846,8 @@ class CameraViewModel: NSObject, ObservableObject {
             } else {
                 if device.isExposureModeSupported(.custom) {
                     device.exposureMode = .custom
-                    // Maintain current exposure settings when switching to manual
                     device.setExposureModeCustom(duration: device.exposureDuration,
-                                               iso: device.iso) { _ in }
+                                                 iso: device.iso) { _ in }
                     print("📷 Manual exposure enabled")
                 }
             }
@@ -943,6 +863,7 @@ class CameraViewModel: NSObject, ObservableObject {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
         var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         
+        // Apply LUT if present
         if let lutFilter = lutManager.currentLUTFilter {
             lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
             if let outputImage = lutFilter.outputImage {
@@ -954,18 +875,18 @@ class CameraViewModel: NSObject, ObservableObject {
     }
 }
 
-// MARK: - Sample Buffer Delegate
+// MARK: - AVCaptureFileOutputRecordingDelegate
 extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
     func fileOutput(_ output: AVCaptureFileOutput,
-                   didStartRecordingTo fileURL: URL,
-                   from connections: [AVCaptureConnection]) {
+                    didStartRecordingTo fileURL: URL,
+                    from connections: [AVCaptureConnection]) {
         print("Recording started successfully")
     }
     
     func fileOutput(_ output: AVCaptureFileOutput,
-                   didFinishRecordingTo outputFileURL: URL,
-                   from connections: [AVCaptureConnection],
-                   error: Error?) {
+                    didFinishRecordingTo outputFileURL: URL,
+                    from connections: [AVCaptureConnection],
+                    error: Error?) {
         isRecording = false
         
         if let error = error {
@@ -993,8 +914,8 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
                 options.shouldMoveFile = true
                 let creationRequest = PHAssetCreationRequest.forAsset()
                 creationRequest.addResource(with: .video,
-                                          fileURL: outputFileURL,
-                                          options: options)
+                                            fileURL: outputFileURL,
+                                            options: options)
             }) { success, error in
                 DispatchQueue.main.async {
                     if success {
@@ -1031,7 +952,6 @@ extension UIDeviceOrientation {
     }
 }
 
-// Add extension to AVFrameRateRange
 extension AVFrameRateRange {
     func containsFrameRate(_ fps: Double) -> Bool {
         return fps >= minFrameRate && fps <= maxFrameRate

@@ -47,16 +47,16 @@ struct SettingsView: View {
     }
     
     private func showDocumentPicker() {
-        let documentPicker = UIDocumentPickerViewController(
+        let picker = UIDocumentPickerViewController(
             forOpeningContentTypes: LUTManager.supportedTypes,
             asCopy: true
         )
-        documentPicker.delegate = documentDelegate
+        picker.delegate = documentDelegate
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let window = windowScene.windows.first,
            let rootViewController = window.rootViewController {
-            rootViewController.present(documentPicker, animated: true)
+            rootViewController.present(picker, animated: true)
         }
     }
 }
@@ -78,4 +78,4 @@ class LUTDocumentPickerDelegate: NSObject, UIDocumentPickerDelegate, ObservableO
 
 #Preview {
     SettingsView(lutManager: LUTManager())
-} 
+}
