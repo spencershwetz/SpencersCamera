@@ -167,17 +167,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("- Name: \(device.localizedName)")
                 print("- Model ID: \(device.modelID)")
                 
-                print("\n🎨 Supported Color Spaces:")
-                device.formats.forEach { format in
-                    let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    let codecType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-                    print("""
-                        Format: \(dimensions.width)x\(dimensions.height) - Codec: \(codecType)
-                        - Color Spaces: \(format.supportedColorSpaces.map { $0.rawValue })
-                        - Supports Apple Log: \(format.supportedColorSpaces.contains(.appleLog))
-                        - Supports HDR: \(format.isVideoHDRSupported)
-                        """)
-                }
+    
                 
                 isAppleLogSupported = device.formats.contains { format in
                     format.supportedColorSpaces.contains(.appleLog)
