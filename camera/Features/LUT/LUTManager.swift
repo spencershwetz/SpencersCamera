@@ -126,20 +126,16 @@ class LUTManager: ObservableObject {
     
     // Applies the LUT to the given CIImage using a freshly created filter instance
     func applyLUT(to image: CIImage) -> CIImage? {
-        guard let cubeData = self.cubeData else {
-            print("❌ No cube data available in LUTManager")
-            return nil
-        }
+        guard let cubeData = self.cubeData else { return nil }
         
-        guard let filter = CIFilter(name: "CIColorCube") else {
-            print("❌ Failed to create CIColorCube filter")
-            return nil
-        }
+        let params = [
+            "inputCubeDimension": cubeDimension,
+            "inputCubeData": cubeData,
+            "inputColorSpace": CGColorSpace(name: CGColorSpace.sRGB), // Explicit color space
+            kCIInputImageKey: image
+        ] as [String : Any]
         
-        filter.setValue(cubeDimension, forKey: "inputCubeDimension")
-        filter.setValue(cubeData, forKey: "inputCubeData")
-        filter.setValue(image, forKey: kCIInputImageKey)
-        return filter.outputImage
+        return CIFilter(name: "CIColorCube", parameters: params)?.outputImage
     }
     
     // Creates a basic programmatic LUT when no files are available
