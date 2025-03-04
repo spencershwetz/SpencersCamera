@@ -43,7 +43,7 @@ struct CameraPreviewView: UIViewRepresentable {
         view.videoPreviewLayer.videoGravity = .resizeAspect
         
         // Create and set up video output delegate
-        let videoDelegate = VideoOutputDelegate(lutManager: lutManager, viewModel: viewModel)
+        let videoDelegate = VideoOutputDelegate(lutManager: lutManager, viewModel: viewModel, context: CIContext.shared)
         view.setupVideoOutput(session: session, delegate: videoDelegate)
         
         // Initial orientation setup

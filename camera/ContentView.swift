@@ -56,8 +56,11 @@ struct ContentView: View {
         }
         .sheet(isPresented: $isShowingDocumentPicker) {
             DocumentPicker(types: LUTManager.supportedTypes) { url in
-                lutManager.loadLUT(from: url)
-                isShowingDocumentPicker = false
+                // Use main thread for UI updates
+                DispatchQueue.main.async {
+                    handleLUTImport(url: url)
+                    isShowingDocumentPicker = false
+                }
             }
         }
     }
@@ -222,7 +225,7 @@ struct ContentView: View {
             if viewModel.isAppleLogSupported {
                 Toggle(isOn: $viewModel.isAppleLogEnabled) {
                     HStack {
-                        Text("Apple Log (4K ProRes)")
+                        Text("Enable LOG")
                         if viewModel.isAppleLogEnabled {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
@@ -251,6 +254,47 @@ struct ContentView: View {
         .background(Color.black.opacity(0.6))
         .cornerRadius(15)
         .foregroundColor(.white)
+    }
+    
+    // MARK: - LUT File Handling
+    private func handleLUTImport(url: URL) {
+        print("\n📱 ContentView: Handling LUT import from: \(url.path)")
+        
+        // Add a longer delay to ensure the UI has fully updated before performing file operations
+        // This helps prevent view service termination errors
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            do {
+                // Check if file exists and is accessible
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    print("❌ ContentView: LUT file does not exist at path: \(url.path)")
+                    return
+                }
+                
+                // Get file attributes
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                if let fileSize = attributes[.size] as? NSNumber {
+                    print("📱 ContentView: LUT file size: \(fileSize.intValue) bytes")
+                    
+                    // Warn if file is suspiciously small
+                    if fileSize.intValue < 100 {
+                        print("⚠️ ContentView: LUT file seems unusually small (\(fileSize.intValue) bytes)")
+                    }
+                }
+                
+                // Directly pass the URL to LUTManager, which now handles the file properly
+                // without trying to create additional copies
+                self.lutManager.loadLUT(from: url)
+                
+            } catch {
+                print("❌ ContentView: Error handling LUT file: \(error.localizedDescription)")
+                if let nsError = error as NSError? {
+                    print("❌ ContentView: Error domain: \(nsError.domain), code: \(nsError.code)")
+                    if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                        print("❌ ContentView: Underlying error: \(underlyingError.localizedDescription)")
+                    }
+                }
+            }
+        }
     }
 }
 
