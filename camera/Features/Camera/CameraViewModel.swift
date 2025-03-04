@@ -216,92 +216,10 @@ class CameraViewModel: NSObject, ObservableObject {
             self.updateShutterAngle(180.0) // Set initial shutter angle to 180°
         }
         
-        // Load LUT with enhanced error handling and debugging
-        print("📱 LUT Loading: Attempting to load LUT files")
-        do {
-            // First try the original file
-            if let lutPath = Bundle.main.path(forResource: "My3DLUTFile", ofType: "cube") {
-                print("📱 Found expected LUT: \(lutPath)")
-                lutManager.loadLUT(named: "My3DLUTFile")
-            } 
-            // Then try our test file
-            else if let testLutPath = Bundle.main.path(forResource: "TestLUT", ofType: "cube") {
-                print("📱 Found test LUT: \(testLutPath)")
-                lutManager.loadLUT(named: "TestLUT")
-            }
-            // If none of the above work, search for any .cube files
-            else {
-                print("⚠️ LUT Error: No predefined LUT files found in bundle!")
-                
-                // Try to find any existing .cube files
-                let availableLUTs = Bundle.main.paths(forResourcesOfType: "cube", inDirectory: nil)
-                print("📁 Bundle path: \(Bundle.main.bundlePath)")
-                print("📁 Available .cube files: \(availableLUTs)")
-                
-                // Try using an absolute path to our test LUT files
-                let fileManager = FileManager.default
-                let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-                let projectDirectory = Bundle.main.bundleURL.deletingLastPathComponent()
-                
-                let possibleLUTPaths = [
-                    Bundle.main.bundleURL.appendingPathComponent("My3DLUTFile.cube"),
-                    Bundle.main.bundleURL.appendingPathComponent("TestLUT.cube"),
-                    documentsDirectory.appendingPathComponent("My3DLUTFile.cube"),
-                    documentsDirectory.appendingPathComponent("TestLUT.cube"),
-                    projectDirectory.appendingPathComponent("My3DLUTFile.cube"),
-                    projectDirectory.appendingPathComponent("TestLUT.cube")
-                ]
-                
-                print("🔍 Searching for LUTs in alternative locations...")
-                var lutFound = false
-                for lutPath in possibleLUTPaths {
-                    if fileManager.fileExists(atPath: lutPath.path) {
-                        print("✅ Found LUT at: \(lutPath.path)")
-                        lutManager.loadLUT(from: lutPath)
-                        lutFound = true
-                        break
-                    }
-                }
-                
-                // If still no LUT file found, create a programmatic default or throw an error
-                if lutManager.currentLUTFilter == nil {
-                    if lutFound {
-                        print("⚠️ LUT loading failed. Creating a default programmatic LUT...")
-                    } else {
-                        print("⚠️ No LUT files found. Creating a default programmatic LUT...")
-                        // Optionally throw an error to reach the catch block
-                        if availableLUTs.isEmpty && Bool.random() { // Random condition to avoid warning
-                            throw NSError(domain: "LUTManager", code: 2, 
-                                          userInfo: [NSLocalizedDescriptionKey: "No LUT files found anywhere"])
-                        }
-                    }
-                    createDefaultLUT()
-                }
-            }
-        } catch {
-            print("❌ LUT Loading Error: \(error.localizedDescription)")
-            print("⚠️ Creating a default programmatic LUT instead...")
-            createDefaultLUT()
-        }
-    }
-    
-    /// Creates a basic programmatic LUT when no files are available
-    private func createDefaultLUT() {
-        // Create a simple 2x2x2 LUT programmatically (very basic)
-        let dimension = 2
-        let data: [Float] = [
-            0.0, 0.0, 0.0,  // (0,0,0) -> (0,0,0)
-            1.0, 0.9, 0.9,  // (1,0,0) -> slightly warm red
-            0.9, 1.0, 0.9,  // (0,1,0) -> slightly cool green
-            1.0, 1.0, 0.9,  // (1,1,0) -> warmer yellow
-            0.9, 0.9, 1.0,  // (0,0,1) -> slightly cool blue
-            1.0, 0.9, 1.0,  // (1,0,1) -> warmer magenta
-            0.9, 1.0, 1.0,  // (0,1,1) -> slightly cool cyan
-            1.0, 1.0, 1.0   // (1,1,1) -> white (no change)
-        ]
+        print("📱 LUT Loading: No default LUTs will be loaded")
+        // User must import their own LUTs
         
-        print("🎨 Created programmatic LUT: dimension=\(dimension), points=\(data.count/3)")
-        lutManager.setupProgrammaticLUT(dimension: dimension, data: data)
+        // Configure camera session
     }
     
     deinit {
