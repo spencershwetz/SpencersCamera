@@ -130,7 +130,9 @@ class CameraViewModel: NSObject, ObservableObject {
     
     // Add these constants
     private struct FrameRates {
-        static let ntsc23_976 = CMTime(value: 1001, timescale: 24000)  // 23.976 fps
+        // Non-integer frame rates need precise representation
+        // For 23.976 fps, the exact fraction is 24000/1001 ≈ 23.976
+        static let ntsc23_976 = CMTime(value: 1001, timescale: 24000)  // 23.976 fps (24000/1001)
         static let ntsc29_97 = CMTime(value: 1001, timescale: 30000)   // 29.97 fps
         static let film24 = CMTime(value: 1, timescale: 24)            // 24 fps
         static let pal25 = CMTime(value: 1, timescale: 25)             // 25 fps
@@ -599,11 +601,24 @@ class CameraViewModel: NSObject, ObservableObject {
         print("\n=== Checking Format Compatibility ===")
         print("Requested frame rate: \(fps) fps")
         
+        // For 23.976 fps, we need to be more flexible with the range check
+        // Some devices might report slightly different values like 23.97 or 23.98
+        let targetFps = fps
+        let tolerance = 0.01 // Allow for small rounding differences
+        
         let formats = device.formats.filter { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let isHighRes = dimensions.width >= 1920
             let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
-                range.minFrameRate <= fps && fps <= range.maxFrameRate
+                // For 23.976 fps specifically, use a slightly more flexible check
+                if abs(targetFps - 23.976) < 0.001 {
+                    // Check if any range contains ~23.976 fps with tolerance
+                    return range.minFrameRate <= (targetFps - tolerance) && 
+                           (targetFps + tolerance) <= range.maxFrameRate
+                } else {
+                    // Standard check for other frame rates
+                    return range.minFrameRate <= targetFps && targetFps <= range.maxFrameRate
+                }
             }
             
             if isAppleLogEnabled {
@@ -631,6 +646,10 @@ class CameraViewModel: NSObject, ObservableObject {
         do {
             guard let compatibleFormat = findCompatibleFormat(for: fps) else {
                 print("❌ No compatible format found for \(fps) fps")
+                // Set error to allow user feedback
+                DispatchQueue.main.async {
+                    self.error = .configurationFailed(message: "This device doesn't support \(fps) fps recording")
+                }
                 return
             }
             
@@ -644,7 +663,9 @@ class CameraViewModel: NSObject, ObservableObject {
             let frameDuration: CMTime
             switch fps {
             case 23.976:
+                // For 23.976 fps, use the precise fraction 24000/1001
                 frameDuration = FrameRates.ntsc23_976
+                print("Setting 23.976 fps with duration \(FrameRates.ntsc23_976.value)/\(FrameRates.ntsc23_976.timescale)")
             case 29.97:
                 frameDuration = FrameRates.ntsc29_97
             case 24:
@@ -657,6 +678,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
             }
             
+            // Set both min and max durations to lock the frame rate
             device.activeVideoMinFrameDuration = frameDuration
             device.activeVideoMaxFrameDuration = frameDuration
             
@@ -672,17 +694,19 @@ class CameraViewModel: NSObject, ObservableObject {
                 ✅ Frame rate configured:
                 - Rate: \(fps) fps
                 - Duration: \(frameDuration.seconds) seconds
+                - Timescale/Value: \(frameDuration.timescale)/\(frameDuration.value)
                 - Format: \(CMVideoFormatDescriptionGetDimensions(compatibleFormat.formatDescription))
                 """)
             
             device.unlockForConfiguration()
+            
+            // Preserve current shutter angle by updating the shutter speed
+            let currentAngle = shutterAngle
+            updateShutterAngle(currentAngle)
         } catch {
             print("❌ Frame rate error: \(error)")
-            self.error = .configurationFailed
+            self.error = .configurationFailed(message: "Failed to set \(fps) fps: \(error.localizedDescription)")
         }
-        
-        let currentAngle = shutterAngle
-        updateShutterAngle(currentAngle)
     }
     
     private func adjustFrameRatePrecision(currentFPS: Double) {
@@ -961,5 +985,11 @@ extension AVFrameRateRange {
 private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         return min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+extension CameraError {
+    static func configurationFailed(message: String = "Camera configuration failed") -> CameraError {
+        return .custom(message: message)
     }
 }
