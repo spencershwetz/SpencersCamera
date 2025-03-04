@@ -73,8 +73,12 @@ struct ContentView: View {
                 Text("FPS:")
                 Picker("Frame Rate", selection: $viewModel.selectedFrameRate) {
                     ForEach(viewModel.availableFrameRates, id: \.self) { fps in
-                        Text(fps == 29.97 ? "29.97" : String(format: "%.0f", fps))
-                            .tag(fps)
+                        Text(
+                            fps == 29.97 ? "29.97" : 
+                            fps == 23.976 ? "23.98" : 
+                            String(format: "%.0f", fps)
+                        )
+                        .tag(fps)
                     }
                 }
                 .pickerStyle(.menu)
