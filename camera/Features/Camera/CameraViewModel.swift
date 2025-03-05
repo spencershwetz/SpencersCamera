@@ -266,9 +266,8 @@ class CameraViewModel: NSObject, ObservableObject {
                 device.unlockForConfiguration()
                 session.commitConfiguration()
                 
-                // Fix orientation after configuration
                 if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoOrientation(videoConnection)
+                    updateVideoOrientation(videoConnection, lockCamera: true)
                 }
                 
                 session.startRunning()
@@ -344,7 +343,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.commitConfiguration()
                 
                 if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoOrientation(videoConnection)
+                    updateVideoOrientation(videoConnection, lockCamera: true)
                 }
                 
                 session.startRunning()
@@ -417,7 +416,7 @@ class CameraViewModel: NSObject, ObservableObject {
                     if connection.isVideoStabilizationSupported {
                         connection.preferredVideoStabilizationMode = .auto
                     }
-                    updateVideoOrientation(connection)
+                    updateVideoOrientation(connection, lockCamera: true)
                 }
             }
             
@@ -538,7 +537,7 @@ class CameraViewModel: NSObject, ObservableObject {
         movieOutput.stopRecording()
     }
     
-    private func updateVideoOrientation(_ connection: AVCaptureConnection) {
+    private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
         let requiredAngles: [CGFloat] = [0, 90, 180, 270]
         let supportsRotation = requiredAngles.allSatisfy { angle in
             connection.isVideoRotationAngleSupported(angle)
@@ -553,16 +552,22 @@ class CameraViewModel: NSObject, ObservableObject {
                 let interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
                 
-                switch interfaceOrientation {
-                case .portrait:
-                    connection.videoRotationAngle = 90
-                case .portraitUpsideDown:
-                    connection.videoRotationAngle = 270
-                case .landscapeLeft:
-                    connection.videoRotationAngle = 180
-                case .landscapeRight:
-                    connection.videoRotationAngle = 0
-                default:
+                // If lockCamera is true, only set metadata but don't rotate the preview
+                if !lockCamera {
+                    switch interfaceOrientation {
+                    case .portrait:
+                        connection.videoRotationAngle = 90
+                    case .portraitUpsideDown:
+                        connection.videoRotationAngle = 270
+                    case .landscapeLeft:
+                        connection.videoRotationAngle = 180
+                    case .landscapeRight:
+                        connection.videoRotationAngle = 0
+                    default:
+                        connection.videoRotationAngle = 90
+                    }
+                } else {
+                    // When locked, camera stays in portrait orientation
                     connection.videoRotationAngle = 90
                 }
             }
@@ -683,11 +688,16 @@ class CameraViewModel: NSObject, ObservableObject {
     
     private var lastAdjustmentTime: TimeInterval = 0
     
-    func updateInterfaceOrientation() {
+    func updateInterfaceOrientation(lockCamera: Bool = false) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 self.currentInterfaceOrientation = windowScene.interfaceOrientation
+                
+                // Update video connections with the lockCamera parameter
+                if let connection = self.movieOutput.connection(with: .video) {
+                    self.updateVideoOrientation(connection, lockCamera: lockCamera)
+                }
             }
         }
     }
@@ -917,6 +927,11 @@ extension UIDeviceOrientation {
         @unknown default:
             return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
         }
+    }
+    
+    var isValidInterfaceOrientation: Bool {
+        return self == .portrait || self == .portraitUpsideDown || 
+               self == .landscapeLeft || self == .landscapeRight
     }
 }
 
