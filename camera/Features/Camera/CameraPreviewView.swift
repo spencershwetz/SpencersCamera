@@ -36,7 +36,7 @@ struct CameraPreviewView: UIViewRepresentable {
     
     func updateUIView(_ uiView: PreviewView, context: Context) {
         // SwiftUI might call this on orientation changes or other state updates
-        // We don’t do extra rotation logic here; we rely on the capture connection
+        // We do not do extra orientation logic here; we rely on the coordinator
     }
     
     func makeCoordinator() -> Coordinator {
@@ -57,16 +57,25 @@ struct CameraPreviewView: UIViewRepresentable {
         func captureOutput(_ output: AVCaptureOutput,
                            didOutput sampleBuffer: CMSampleBuffer,
                            from connection: AVCaptureConnection) {
-            // -- 1) Force or adapt orientation if needed --
-            // If you see a sideways feed, try changing this to .portrait or another fixed orientation.
-            // E.g.:
-            // connection.videoOrientation = .portrait
-            // or do logic to match device orientation, etc.
-            if let deviceOrientation = UIDevice.current.orientation.videoOrientation {
-                connection.videoOrientation = deviceOrientation
+            // -- 1) Decide rotation angle based on UIDevice orientation. --
+            // For iOS 17+, we use 'videoRotationAngle'. For older iOS, we fall back to 'videoOrientation'.
+            
+            let deviceOrientation = UIDevice.current.orientation
+            let angle = deviceOrientation.videoRotationAngle // (See extension below)
+            
+            if #available(iOS 17.0, *) {
+                // Use the new angle-based API to avoid deprecation
+                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
             } else {
-                // fallback if device orientation is .unknown
-                connection.videoOrientation = .portrait
+                // Use the older orientation-based API
+                if let legacyOrientation = deviceOrientation.legacyVideoOrientation {
+                    connection.videoOrientation = legacyOrientation
+                } else {
+                    // fallback if .unknown
+                    connection.videoOrientation = .portrait
+                }
             }
             
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
@@ -205,7 +214,7 @@ struct CameraPreviewView: UIViewRepresentable {
             transform = transform.translatedBy(x: offsetX, y: offsetY)
             transform = transform.scaledBy(x: scale, y: scale)
             
-            // If you need to tweak for LOG mode, do it here
+            // If you want to tweak for LOG mode, do it here
             var finalImage = image.transformed(by: transform)
             if isLogMode {
                 finalImage = finalImage.applyingFilter("CIColorControls", parameters: [
@@ -240,14 +249,28 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 }
 
-// MARK: - UIDeviceOrientation -> AVCaptureVideoOrientation
+// MARK: - UIDeviceOrientation -> rotation angles
 fileprivate extension UIDeviceOrientation {
-    var videoOrientation: AVCaptureVideoOrientation? {
+    /// Maps the device orientation to a rotation angle in degrees (0, 90, 180, 270)
+    var videoRotationAngle: CGFloat {
+        // 0 = landscapeRight, 90 = portrait, 180 = landscapeLeft, 270 = portraitUpsideDown
+        // Adjust if you prefer different orientation logic
+        switch self {
+        case .portrait: return 90
+        case .portraitUpsideDown: return 270
+        case .landscapeLeft: return 180
+        case .landscapeRight: return 0
+        default: return 90
+        }
+    }
+    
+    /// For older iOS versions that still use AVCaptureVideoOrientation
+    var legacyVideoOrientation: AVCaptureVideoOrientation? {
         switch self {
         case .portrait: return .portrait
         case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeRight  // iPhone device rotated left => camera rotates right
-        case .landscapeRight: return .landscapeLeft  // iPhone device rotated right => camera rotates left
+        case .landscapeLeft: return .landscapeRight // iPhone turned left => camera rotates right
+        case .landscapeRight: return .landscapeLeft // iPhone turned right => camera rotates left
         default: return nil
         }
     }
