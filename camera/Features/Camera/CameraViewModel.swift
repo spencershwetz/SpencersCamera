@@ -27,13 +27,12 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var error: CameraError?
     @Published var whiteBalance: Float = 5000 // Kelvin
     @Published var iso: Float = 100
-    @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60) // Initialize for 180° at 30fps
+    @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60)
     @Published var isRecording = false
     @Published var recordingFinished = false
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false
     
-    // Enable Apple Log (4K ProRes) by default if device supports it
     @Published var isAppleLogEnabled = false {
         didSet {
             print("\n=== Apple Log Toggle ===")
@@ -74,7 +73,6 @@ class CameraViewModel: NSObject, ObservableObject {
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
     
-    // Add movie file output
     private let movieOutput = AVCaptureMovieFileOutput()
     private var currentRecordingURL: URL?
     
@@ -87,15 +85,10 @@ class CameraViewModel: NSObject, ObservableObject {
         device?.activeFormat.maxISO ?? 1600
     }
     
-    // Add new property for frame rate
     @Published var selectedFrameRate: Double = 30.0
-    
-    // Add available frame rates
     let availableFrameRates: [Double] = [23.976, 24.0, 25.0, 29.97, 30.0]
     
     private var orientationObserver: NSObjectProtocol?
-    
-    // Add property to track interface orientation
     @Published private(set) var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
     
     private let processingQueue = DispatchQueue(
@@ -105,38 +98,32 @@ class CameraViewModel: NSObject, ObservableObject {
         autoreleaseFrequency: .workItem
     )
     
-    // Add properties for frame rate monitoring
     private var lastFrameTimestamp: CFAbsoluteTime = 0
     private var lastFrameTime: CMTime?
     private var frameCount: Int = 0
     private var frameRateAccumulator: Double = 0
-    private var frameRateUpdateInterval: Int = 30 // Update every 30 frames
+    private var frameRateUpdateInterval: Int = 30
     
-    // Add property to store supported frame rate range
     private var supportedFrameRateRange: AVFrameRateRange? {
         device?.activeFormat.videoSupportedFrameRateRanges.first
     }
     
-    // Add properties for advanced configuration
     private var videoConfiguration: [String: Any] = [
         AVVideoCodecKey: AVVideoCodecType.proRes422,
         AVVideoCompressionPropertiesKey: [
-            AVVideoAverageBitRateKey: 50_000_000, // 50 Mbps
-            AVVideoMaxKeyFrameIntervalKey: 1, // Every frame is keyframe
+            AVVideoAverageBitRateKey: 50_000_000,
+            AVVideoMaxKeyFrameIntervalKey: 1,
             AVVideoAllowFrameReorderingKey: false,
             AVVideoExpectedSourceFrameRateKey: 30
         ]
     ]
     
-    // Add these constants
     private struct FrameRates {
-        // Non-integer frame rates need precise representation
-        // For 23.976 fps, the exact fraction is 24000/1001 ≈ 23.976
-        static let ntsc23_976 = CMTime(value: 1001, timescale: 24000)  // 23.976 fps (24000/1001)
-        static let ntsc29_97 = CMTime(value: 1001, timescale: 30000)   // 29.97 fps
-        static let film24 = CMTime(value: 1, timescale: 24)            // 24 fps
-        static let pal25 = CMTime(value: 1, timescale: 25)             // 25 fps
-        static let ntsc30 = CMTime(value: 1, timescale: 30)            // 30 fps
+        static let ntsc23_976 = CMTime(value: 1001, timescale: 24000)
+        static let ntsc29_97 = CMTime(value: 1001, timescale: 30000)
+        static let film24 = CMTime(value: 1, timescale: 24)
+        static let pal25 = CMTime(value: 1, timescale: 25)
+        static let ntsc30 = CMTime(value: 1, timescale: 30)
     }
     
     @Published var currentTint: Double = 0.0 // Range: -150 to +150
@@ -150,7 +137,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    // Add LUT Manager
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
     
@@ -160,14 +146,10 @@ class CameraViewModel: NSObject, ObservableObject {
         
         do {
             try setupSession()
-            
-            // Print device capabilities
             if let device = device {
                 print("📊 Device Capabilities:")
                 print("- Name: \(device.localizedName)")
                 print("- Model ID: \(device.modelID)")
-                
-    
                 
                 isAppleLogSupported = device.formats.contains { format in
                     format.supportedColorSpaces.contains(.appleLog)
@@ -176,12 +158,10 @@ class CameraViewModel: NSObject, ObservableObject {
             }
             print("=== End Initialization ===\n")
             
-            // Store default format
             if let device = device {
                 defaultFormat = device.activeFormat
             }
             
-            // Check Apple Log support
             isAppleLogSupported = device?.formats.contains { format in
                 format.supportedColorSpaces.contains(.appleLog)
             } ?? false
@@ -190,7 +170,6 @@ class CameraViewModel: NSObject, ObservableObject {
             print("Failed to setup session: \(error)")
         }
         
-        // Add orientation observer
         orientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
@@ -200,16 +179,12 @@ class CameraViewModel: NSObject, ObservableObject {
                 self.updateVideoOrientation(connection)
         }
         
-        // After other initialization, set initial shutter angle to 180°
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.updateShutterAngle(180.0) // Set initial shutter angle to 180°
+            self.updateShutterAngle(180.0)
         }
         
         print("📱 LUT Loading: No default LUTs will be loaded")
-        // User must import their own LUTs
-        
-        // Configure camera session
     }
     
     deinit {
@@ -218,7 +193,6 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    /// Returns a 4K (3840x2160) AppleProRes422 format that also supports Apple Log
     private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {
         return device.formats.first { format in
             let desc = format.formatDescription
@@ -226,7 +200,7 @@ class CameraViewModel: NSObject, ObservableObject {
             let codecType = CMFormatDescriptionGetMediaSubType(desc)
             
             let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-            let isProRes422 = (codecType == kCMVideoCodecType_AppleProRes422) // 'x422'
+            let isProRes422 = (codecType == kCMVideoCodecType_AppleProRes422)
             let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
             
             return is4K && isProRes422 && hasAppleLog
@@ -245,10 +219,8 @@ class CameraViewModel: NSObject, ObservableObject {
         print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
         print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
         
-        // Ensure wide color is disabled
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         
-        // Check if format supports Apple Log
         let supportsAppleLog = device.formats.contains { format in
             format.supportedColorSpaces.contains(.appleLog)
         }
@@ -273,7 +245,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.startRunning()
             }
             
-            // Find best Apple Log format
             if let format = device.formats.first(where: {
                 let desc = $0.formatDescription
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
@@ -330,7 +301,6 @@ class CameraViewModel: NSObject, ObservableObject {
         print("\n=== Resetting Apple Log Configuration ===")
         print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
         
-        // Ensure wide color is disabled
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         
         do {
@@ -386,7 +356,6 @@ class CameraViewModel: NSObject, ObservableObject {
             let input = try AVCaptureDeviceInput(device: videoDevice)
             self.videoDeviceInput = input
             
-            // Configure Apple Log if enabled
             if isAppleLogEnabled, let appleLogFormat = findBestAppleLogFormat(videoDevice) {
                 let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
                 try videoDevice.lockForConfiguration()
@@ -552,7 +521,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 let interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
                 
-                // If lockCamera is true, only set metadata but don't rotate the preview
                 if !lockCamera {
                     switch interfaceOrientation {
                     case .portrait:
@@ -560,14 +528,13 @@ class CameraViewModel: NSObject, ObservableObject {
                     case .portraitUpsideDown:
                         connection.videoRotationAngle = 270
                     case .landscapeLeft:
-                        connection.videoRotationAngle = 180
-                    case .landscapeRight:
                         connection.videoRotationAngle = 0
+                    case .landscapeRight:
+                        connection.videoRotationAngle = 180
                     default:
                         connection.videoRotationAngle = 90
                     }
                 } else {
-                    // When locked, camera stays in portrait orientation
                     connection.videoRotationAngle = 90
                 }
             }
@@ -581,22 +548,17 @@ class CameraViewModel: NSObject, ObservableObject {
     private func findCompatibleFormat(for fps: Double) -> AVCaptureDevice.Format? {
         guard let device = device else { return nil }
         
-        // For 23.976 fps, we need to be more flexible with the range check
-        // Some devices might report slightly different values like 23.97 or 23.98
         let targetFps = fps
-        let tolerance = 0.01 // Allow for small rounding differences
+        let tolerance = 0.01
         
         let formats = device.formats.filter { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let isHighRes = dimensions.width >= 1920
             let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
-                // For 23.976 fps specifically, use a slightly more flexible check
                 if abs(targetFps - 23.976) < 0.001 {
-                    // Check if any range contains ~23.976 fps with tolerance
-                    return range.minFrameRate <= (targetFps - tolerance) && 
+                    return range.minFrameRate <= (targetFps - tolerance) &&
                            (targetFps + tolerance) <= range.maxFrameRate
                 } else {
-                    // Standard check for other frame rates
                     return range.minFrameRate <= targetFps && targetFps <= range.maxFrameRate
                 }
             }
@@ -616,7 +578,6 @@ class CameraViewModel: NSObject, ObservableObject {
         do {
             guard let compatibleFormat = findCompatibleFormat(for: fps) else {
                 print("❌ No compatible format found for \(fps) fps")
-                // Set error to allow user feedback
                 DispatchQueue.main.async {
                     self.error = .configurationFailed(message: "This device doesn't support \(fps) fps recording")
                 }
@@ -633,7 +594,6 @@ class CameraViewModel: NSObject, ObservableObject {
             let frameDuration: CMTime
             switch fps {
             case 23.976:
-                // For 23.976 fps, use the precise fraction 24000/1001
                 frameDuration = FrameRates.ntsc23_976
                 print("Setting 23.976 fps with duration \(FrameRates.ntsc23_976.value)/\(FrameRates.ntsc23_976.timescale)")
             case 29.97:
@@ -648,7 +608,6 @@ class CameraViewModel: NSObject, ObservableObject {
                 frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
             }
             
-            // Set both min and max durations to lock the frame rate
             device.activeVideoMinFrameDuration = frameDuration
             device.activeVideoMaxFrameDuration = frameDuration
             
@@ -662,7 +621,6 @@ class CameraViewModel: NSObject, ObservableObject {
             
             device.unlockForConfiguration()
             
-            // Preserve current shutter angle by updating the shutter speed
             let currentAngle = shutterAngle
             updateShutterAngle(currentAngle)
         } catch {
@@ -694,7 +652,6 @@ class CameraViewModel: NSObject, ObservableObject {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 self.currentInterfaceOrientation = windowScene.interfaceOrientation
                 
-                // Update video connections with the lockCamera parameter
                 if let connection = self.movieOutput.connection(with: .video) {
                     self.updateVideoOrientation(connection, lockCamera: lockCamera)
                 }
@@ -790,16 +747,13 @@ class CameraViewModel: NSObject, ObservableObject {
         get {
             let angle = Double(shutterSpeed.value) / Double(shutterSpeed.timescale) * selectedFrameRate * 360.0
             let clampedAngle = min(max(angle, 1.1), 360.0)
-            
             return clampedAngle
         }
         set {
             let clampedAngle = min(max(newValue, 1.1), 360.0)
             let duration = (clampedAngle/360.0) * (1.0/selectedFrameRate)
-            
             let time = CMTimeMakeWithSeconds(duration, preferredTimescale: 1000000)
             updateShutterSpeed(time)
-            
             DispatchQueue.main.async {
                 self.shutterSpeed = time
             }
@@ -824,9 +778,10 @@ class CameraViewModel: NSObject, ObservableObject {
             } else {
                 if device.isExposureModeSupported(.custom) {
                     device.exposureMode = .custom
+                    let clampedISO = min(max(device.activeFormat.minISO, self.iso), device.activeFormat.maxISO)
                     device.setExposureModeCustom(duration: device.exposureDuration,
-                                                 iso: device.iso) { _ in }
-                    print("📷 Manual exposure enabled")
+                                                 iso: clampedISO) { _ in }
+                    print("📷 Manual exposure enabled with ISO \(clampedISO)")
                 }
             }
             
@@ -841,7 +796,6 @@ class CameraViewModel: NSObject, ObservableObject {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
         var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         
-        // Apply LUT if present
         if let lutFilter = lutManager.currentLUTFilter {
             lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
             if let outputImage = lutFilter.outputImage {
@@ -853,7 +807,6 @@ class CameraViewModel: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVCaptureFileOutputRecordingDelegate
 extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
     func fileOutput(_ output: AVCaptureFileOutput,
                     didStartRecordingTo fileURL: URL,
@@ -876,7 +829,6 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
             return
         }
         
-        // Save to photo library
         PHPhotoLibrary.requestAuthorization { [weak self] status in
             guard status == .authorized else {
                 DispatchQueue.main.async {
@@ -910,7 +862,6 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
     }
 }
 
-// MARK: - Orientation Helper
 extension UIDeviceOrientation {
     var videoTransform: CGAffineTransform {
         switch self {
@@ -930,14 +881,8 @@ extension UIDeviceOrientation {
     }
     
     var isValidInterfaceOrientation: Bool {
-        return self == .portrait || self == .portraitUpsideDown || 
+        return self == .portrait || self == .portraitUpsideDown ||
                self == .landscapeLeft || self == .landscapeRight
-    }
-}
-
-extension AVFrameRateRange {
-    func containsFrameRate(_ fps: Double) -> Bool {
-        return fps >= minFrameRate && fps <= maxFrameRate
     }
 }
 
