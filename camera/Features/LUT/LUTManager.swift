@@ -128,12 +128,14 @@ class LUTManager: ObservableObject {
     func applyLUT(to image: CIImage) -> CIImage? {
         guard let cubeData = self.cubeData else { return nil }
         
-        let params = [
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        
+        let params: [String: Any] = [
             "inputCubeDimension": cubeDimension,
             "inputCubeData": cubeData,
-            "inputColorSpace": CGColorSpace(name: CGColorSpace.sRGB), // Explicit color space
+            "inputColorSpace": colorSpace as Any, // Explicit cast to Any
             kCIInputImageKey: image
-        ] as [String : Any]
+        ]
         
         return CIFilter(name: "CIColorCube", parameters: params)?.outputImage
     }

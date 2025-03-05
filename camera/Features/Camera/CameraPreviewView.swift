@@ -9,15 +9,18 @@ struct CameraPreviewView: UIViewRepresentable {
     let viewModel: CameraViewModel
     
     func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView()
+        // Use full screen for the preview
+        let view = PreviewView(frame: UIScreen.main.bounds)
         view.backgroundColor = .black
         view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.frame = UIScreen.main.bounds
+        view.contentMode = .scaleAspectFill
         
-        // Connect the session to the coordinator
+        // Attach session to coordinator
         context.coordinator.session = session
         context.coordinator.previewView = view
         
-        // Configure video output
+        // Add video output
         let videoOutput = AVCaptureVideoDataOutput()
         videoOutput.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
@@ -32,7 +35,7 @@ struct CameraPreviewView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: PreviewView, context: Context) {
-        // Update orientation if needed
+        // Update orientation whenever SwiftUI triggers an update
         updatePreviewOrientation(uiView)
     }
     
@@ -40,9 +43,9 @@ struct CameraPreviewView: UIViewRepresentable {
         Coordinator(parent: self)
     }
     
-    /// Compute the rotation angle based on the window scene orientation
+    /// Compute rotation angle based on device interface orientation.
     private func updatePreviewOrientation(_ previewView: PreviewView) {
-        var angle: CGFloat = 90 // default portrait rotation
+        var angle: CGFloat = 90 // Default for portrait
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             switch scene.interfaceOrientation {
             case .portrait:
@@ -60,12 +63,11 @@ struct CameraPreviewView: UIViewRepresentable {
         previewView.videoRotationAngle = angle
     }
     
+    // MARK: - Coordinator
     class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let parent: CameraPreviewView
-        let context = CIContext.shared
         var session: AVCaptureSession?
         weak var previewView: PreviewView?
-        // Remove rotation transform here so that we pass the raw CIImage to the view
         
         init(parent: CameraPreviewView) {
             self.parent = parent
@@ -80,49 +82,51 @@ struct CameraPreviewView: UIViewRepresentable {
                 return
             }
             
-            let width = CVPixelBufferGetWidth(pixelBuffer)
-            let height = CVPixelBufferGetHeight(pixelBuffer)
-            print("📐 Buffer dimensions: \(width)x\(height)")
-            print("🎨 Pixel format: \(CVPixelBufferGetPixelFormatType(pixelBuffer))")
-            
-            // Create CIImage without any rotation transform
+            // Create a base CIImage
             let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            print("🌄 CIImage created - extent: \(ciImage.extent)")
+            print("📐 Buffer dimensions: \(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer))")
             
-            // Apply LUT if available
+            // Apply LUT if present
             var finalImage = ciImage
             if let lutFilter = parent.lutManager.currentLUTFilter {
-                lutFilter.setValue(finalImage, forKey: kCIInputImageKey)
+                lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
                 if let outputImage = lutFilter.outputImage {
                     finalImage = outputImage
-                    print("✅ LUT applied successfully")
                 } else {
                     print("❌ LUT application failed - nil output")
                 }
             }
             
-            // Store the unrotated image; rotation/scaling will be applied in the Metal renderer.
+            // Pass the final CIImage to the Metal view
             DispatchQueue.main.async { [weak self] in
-                guard let self = self, let previewView = self.previewView else { return }
-                previewView.currentCIImage = finalImage
-                previewView.setNeedsDisplay()
+                guard let self = self, let preview = self.previewView else { return }
+                // Indicate whether LOG is enabled
+                preview.renderer?.isLogMode = self.parent.viewModel.isAppleLogEnabled
+                preview.currentCIImage = finalImage
+                preview.renderer?.currentCIImage = finalImage
+                preview.metalView?.draw()
             }
         }
     }
     
+    // MARK: - PreviewView
     class PreviewView: UIView {
-        // MetalKit view for rendering
-        private var metalView: MTKView?
+        var metalView: MTKView?
         var renderer: MetalRenderer?
         
-        // New property to control rotation (in degrees)
+        // Rotation angle for the video (in degrees)
         var videoRotationAngle: CGFloat = 90 {
             didSet {
                 renderer?.videoRotationAngle = videoRotationAngle
             }
         }
         
-        var currentCIImage: CIImage?
+        var currentCIImage: CIImage? {
+            didSet {
+                // Request a redraw whenever the image changes
+                metalView?.setNeedsDisplay()
+            }
+        }
         
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -144,79 +148,119 @@ struct CameraPreviewView: UIViewRepresentable {
             mtkView.framebufferOnly = false
             mtkView.colorPixelFormat = .bgra8Unorm
             mtkView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            mtkView.backgroundColor = .black
+            mtkView.contentMode = .scaleAspectFill
             
-            renderer = MetalRenderer(metalDevice: device, pixelFormat: mtkView.colorPixelFormat)
-            // Initialize with the default rotation
+            // Create a MetalRenderer
+            let renderer = MetalRenderer(metalDevice: device,
+                                         pixelFormat: mtkView.colorPixelFormat)
             renderer?.videoRotationAngle = videoRotationAngle
             mtkView.delegate = renderer
             
             addSubview(mtkView)
-            self.metalView = mtkView
+            metalView = mtkView
+            self.renderer = renderer
         }
         
         override func layoutSubviews() {
             super.layoutSubviews()
             metalView?.frame = bounds
         }
-        
-        override func setNeedsDisplay() {
-            if let _ = currentCIImage {
-                renderer?.currentCIImage = currentCIImage
-                metalView?.draw()
-            }
-        }
     }
     
+    // MARK: - MetalRenderer
     class MetalRenderer: NSObject, MTKViewDelegate {
         private let commandQueue: MTLCommandQueue
         private let ciContext: CIContext
+        
         var currentCIImage: CIImage?
-        // New property to store the rotation angle (in degrees)
         var videoRotationAngle: CGFloat = 90
+        var isLogMode: Bool = false // For any optional LOG-based adjustments
+        
+        // Simple FPS tracking
+        private var lastTime: CFTimeInterval = CACurrentMediaTime()
+        private var frameCount: Int = 0
         
         init?(metalDevice: MTLDevice, pixelFormat: MTLPixelFormat) {
             guard let queue = metalDevice.makeCommandQueue() else {
                 return nil
             }
             self.commandQueue = queue
-            self.ciContext = CIContext(mtlDevice: metalDevice, options: [.cacheIntermediates: false])
+            self.ciContext = CIContext(mtlDevice: metalDevice,
+                                       options: [.cacheIntermediates: false])
             super.init()
         }
         
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-            // Handle view size changes if needed
+            // Called whenever the view’s size changes
         }
         
         func draw(in view: MTKView) {
+            guard let image = currentCIImage else {
+                return
+            }
             guard let drawable = view.currentDrawable,
-                  let image = currentCIImage,
                   let commandBuffer = commandQueue.makeCommandBuffer() else {
                 return
             }
             
-            // 1. Apply rotation using the videoRotationAngle property.
-            let radians = videoRotationAngle * CGFloat.pi / 180
-            let rotatedImage = image.transformed(by: CGAffineTransform(rotationAngle: radians))
-            
-            // 2. Scale the rotated image to fill the drawable.
-            let imageExtent = rotatedImage.extent
             let drawableSize = view.drawableSize
-            let scaleX = drawableSize.width / imageExtent.width
-            let scaleY = drawableSize.height / imageExtent.height
+            let imageExtent = image.extent
+            
+            // 1. Convert rotation in degrees to radians
+            let radians = videoRotationAngle * .pi / 180
+            
+            // 2. Create a rotation transform around (0,0)
+            let rotation = CGAffineTransform(rotationAngle: radians)
+            
+            // 3. Apply rotation to find out the rotated bounding box
+            let rotatedExtent = imageExtent.applying(rotation)
+            
+            // 4. Compute scale to fill the drawable (aspect fill)
+            let scaleX = drawableSize.width / rotatedExtent.width
+            let scaleY = drawableSize.height / rotatedExtent.height
             let scale = max(scaleX, scaleY)
-            let scaledImage = rotatedImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             
-            // 3. Center the image.
-            let centeredX = (drawableSize.width - scaledImage.extent.width) / 2.0
-            let centeredY = (drawableSize.height - scaledImage.extent.height) / 2.0
-            let centeredImage = scaledImage.transformed(by: CGAffineTransform(translationX: centeredX, y: centeredY))
+            // 5. Build the final transform
+            //    a) rotate around (0,0)
+            //    b) scale up
+            //    c) translate so that the image is centered in the drawable
+            let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+            let scaledExtent = rotatedExtent.applying(scaleTransform)
             
-            // Render the final image.
-            ciContext.render(centeredImage,
+            let offsetX = (drawableSize.width - scaledExtent.width) / 2 - scaledExtent.minX
+            let offsetY = (drawableSize.height - scaledExtent.height) / 2 - scaledExtent.minY
+            
+            let translate = CGAffineTransform(translationX: offsetX, y: offsetY)
+            
+            let finalTransform = rotation.concatenating(scaleTransform).concatenating(translate)
+            var finalImage = image.transformed(by: finalTransform)
+            
+            // Optional: mild color adjustments if isLogMode
+            if isLogMode {
+                finalImage = finalImage.applyingFilter("CIColorControls", parameters: [
+                    kCIInputContrastKey: 1.1,
+                    kCIInputBrightnessKey: 0.05
+                ])
+            }
+            
+            // 6. Render into the drawable
+            ciContext.render(finalImage,
                              to: drawable.texture,
                              commandBuffer: commandBuffer,
                              bounds: CGRect(origin: .zero, size: drawableSize),
                              colorSpace: CGColorSpaceCreateDeviceRGB())
+            
+            // Track simple FPS
+            frameCount += 1
+            let now = CACurrentMediaTime()
+            let elapsed = now - lastTime
+            if elapsed >= 1.0 {
+                let fps = Double(frameCount) / elapsed
+                print("🎞 FPS: \(Int(fps))")
+                frameCount = 0
+                lastTime = now
+            }
             
             commandBuffer.present(drawable)
             commandBuffer.commit()

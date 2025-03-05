@@ -167,7 +167,7 @@ struct ContentView: View {
             .disabled(viewModel.isProcessingRecording)
         }
         .padding()
-        .background(Color.black.opacity(0.6))
+        .background(Color.black.opacity(0.3))
         .cornerRadius(15)
         .foregroundColor(.white)
     }
