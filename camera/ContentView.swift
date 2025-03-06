@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import CoreMedia
+import UIKit
 
 struct ContentView: View {
     @StateObject private var viewModel = CameraViewModel()
@@ -9,6 +10,23 @@ struct ContentView: View {
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var uiOrientation = UIDeviceOrientation.portrait
+    
+    // Add AppDelegate notification for more consistent orientation locking
+    init() {
+        setupOrientationNotifications()
+    }
+    
+    private func setupOrientationNotifications() {
+        // Register for app state changes to re-enforce orientation when app becomes active
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("DEBUG: App became active - re-enforcing camera orientation")
+            viewModel.updateInterfaceOrientation(lockCamera: true)
+        }
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -20,6 +38,13 @@ struct ContentView: View {
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()
+                    // Fixed frame that won't change with rotation
+                    .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+                    // Disable all animations that might be triggered by rotation
+                    .animation(.none)
+                    // Prevent interactions from affecting the preview
+                    .contentShape(Rectangle())
+                    .allowsHitTesting(false)
                     
                     VStack {
                         Spacer()
@@ -37,14 +62,23 @@ struct ContentView: View {
             .edgesIgnoringSafeArea(.all)
         }
         .onAppear {
+            // Double enforce the orientation lock on appear
             viewModel.updateInterfaceOrientation(lockCamera: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                viewModel.updateInterfaceOrientation(lockCamera: true)
+            }
         }
-        // Remove `.onRotate` – it doesn't exist by default in SwiftUI.
         .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
             if newValue.isValidInterfaceOrientation {
+                print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
                 uiOrientation = newValue
-                // Only update metadata, but don't rotate camera preview
+                // Always lock camera preview orientation
                 viewModel.updateInterfaceOrientation(lockCamera: true)
+                
+                // Re-enforce after a short delay to catch any late layout updates
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    viewModel.updateInterfaceOrientation(lockCamera: true)
+                }
             }
         }
         .alert(item: $viewModel.error) { error in

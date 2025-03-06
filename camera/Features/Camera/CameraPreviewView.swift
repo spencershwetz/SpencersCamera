@@ -1,221 +1,197 @@
 import SwiftUI
 import AVFoundation
-import MetalKit
 import CoreImage
+import UIKit
 
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
     let viewModel: CameraViewModel
 
-    func makeUIView(context: Context) -> PreviewView {
+    func makeUIView(context: Context) -> RotationLockedContainer {
+        // Create a rotation-locked container to hold our preview
+        let container = RotationLockedContainer(frame: UIScreen.main.bounds)
+        
+        // Create and configure the actual camera preview
         let preview = PreviewView(frame: UIScreen.main.bounds)
         preview.backgroundColor = .black
-        preview.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        preview.contentMode = .scaleAspectFill
         
-        context.coordinator.session = session
-        context.coordinator.previewView = preview
+        // Set up the AVCaptureVideoPreviewLayer
+        preview.previewLayer.session = session
+        preview.previewLayer.videoGravity = .resizeAspectFill
         
-        let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.videoSettings = [ kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA ]
-        videoOutput.setSampleBufferDelegate(context.coordinator, queue: DispatchQueue(label: "videoQueue"))
-        
-        if session.canAddOutput(videoOutput) {
-            session.addOutput(videoOutput)
+        // Force portrait orientation for the preview
+        if let connection = preview.previewLayer.connection {
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+                print("DEBUG: Set previewLayer videoRotationAngle to 90° (locked portrait orientation)")
+            }
         }
         
-        return preview
+        // Add the preview to our container
+        container.addSubview(preview)
+        
+        // Pin the preview to the container with auto layout
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.topAnchor.constraint(equalTo: container.topAnchor),
+            preview.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            preview.leftAnchor.constraint(equalTo: container.leftAnchor),
+            preview.rightAnchor.constraint(equalTo: container.rightAnchor)
+        ])
+        
+        return container
     }
     
-    func updateUIView(_ uiView: PreviewView, context: Context) { }
+    func updateUIView(_ uiView: RotationLockedContainer, context: Context) {
+        // Re-enforce the fixed frame and rotation settings
+        uiView.frame = UIScreen.main.bounds
+        
+        // Find and check the preview layer connection
+        if let preview = uiView.subviews.first as? PreviewView,
+           let connection = preview.previewLayer.connection {
+            if connection.videoRotationAngle != 90 && connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+                print("DEBUG: Re-enforced previewLayer videoRotationAngle to 90°")
+            }
+        }
+    }
     
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
     
-    class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    class Coordinator: NSObject {
         let parent: CameraPreviewView
-        var session: AVCaptureSession?
-        weak var previewView: PreviewView?
-        private var lastInterfaceOrientation: UIInterfaceOrientation?
         
         init(parent: CameraPreviewView) {
             self.parent = parent
             super.init()
         }
-        
-        func captureOutput(_ output: AVCaptureOutput,
-                           didOutput sampleBuffer: CMSampleBuffer,
-                           from connection: AVCaptureConnection) {
-            // Get current interface orientation on the main thread safely.
-            let currentOrientation: UIInterfaceOrientation = DispatchQueue.main.sync {
-                return UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
-            }
-            
-            // Desired mapping:
-            // Portrait          -> 90°
-            // Portrait UpsideDown -> 270°
-            // Landscape Left    -> 180°
-            // Landscape Right   -> 0°
-            let newAngle: CGFloat
-            switch currentOrientation {
-            case .portrait:
-                newAngle = 90
-            case .portraitUpsideDown:
-                newAngle = 270
-            case .landscapeLeft:
-                newAngle = 180
-            case .landscapeRight:
-                newAngle = 0
-            default:
-                newAngle = 90
-            }
-            
-            if lastInterfaceOrientation != currentOrientation {
-                print("🔄 Interface orientation changed: \(currentOrientation.rawValue) mapped to angle=\(newAngle)")
-                lastInterfaceOrientation = currentOrientation
-            }
-            
-            if connection.isVideoRotationAngleSupported(newAngle) {
-                connection.videoRotationAngle = newAngle
-            } else {
-                print("⚠️ videoRotationAngle \(newAngle) not supported by connection")
-            }
-            
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-                print("❌ Failed to get pixel buffer")
-                return
-            }
-            
-            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-            var finalImage = ciImage
-            if let lutFilter = parent.lutManager.currentLUTFilter {
-                lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
-                if let outputImage = lutFilter.outputImage {
-                    finalImage = outputImage
-                }
-            }
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self, let preview = self.previewView else { return }
-                preview.renderer?.isLogMode = self.parent.viewModel.isAppleLogEnabled
-                preview.currentCIImage = finalImage
-                preview.renderer?.currentCIImage = finalImage
-                preview.metalView?.draw()
-            }
-        }
     }
     
-    class PreviewView: UIView {
-        var metalView: MTKView?
-        var renderer: MetalRenderer?
-        
-        var currentCIImage: CIImage? {
-            didSet {
-                metalView?.setNeedsDisplay()
-            }
-        }
-        
+    // MARK: - Custom Views
+    
+    // A container view that actively resists rotation changes
+    class RotationLockedContainer: UIView {
         override init(frame: CGRect) {
             super.init(frame: frame)
-            setupMetalView()
+            setupView()
         }
         
         required init?(coder: NSCoder) {
             super.init(coder: coder)
-            setupMetalView()
+            setupView()
         }
         
-        private func setupMetalView() {
-            guard let device = MTLCreateSystemDefaultDevice() else {
-                print("❌ Metal is not supported on this device.")
-                return
+        private func setupView() {
+            // Basics
+            autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            backgroundColor = .black
+            clipsToBounds = true
+            
+            // Register for orientation changes
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(orientationDidChange),
+                name: UIDevice.orientationDidChangeNotification,
+                object: nil
+            )
+            
+            // Also observe interface orientation changes
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(interfaceOrientationDidChange),
+                name: UIApplication.didChangeStatusBarOrientationNotification,
+                object: nil
+            )
+            
+            print("DEBUG: RotationLockedContainer initialized")
+        }
+        
+        @objc private func orientationDidChange() {
+            print("DEBUG: Container detected device orientation change")
+            enforceBounds()
+        }
+        
+        @objc private func interfaceOrientationDidChange() {
+            print("DEBUG: Container detected interface orientation change")
+            enforceBounds()
+        }
+        
+        private func enforceBounds() {
+            // Always maintain full screen bounds regardless of rotation
+            frame = UIScreen.main.bounds
+            
+            // Re-enforce rotation settings for all subviews
+            for case let preview as PreviewView in subviews {
+                preview.frame = bounds
+                if let connection = preview.previewLayer.connection {
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    }
+                }
             }
-            
-            let mtkView = MTKView(frame: bounds, device: device)
-            mtkView.framebufferOnly = false
-            mtkView.colorPixelFormat = .bgra8Unorm
-            mtkView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            mtkView.backgroundColor = .black
-            mtkView.contentMode = .scaleAspectFill
-            
-            let metalRenderer = MetalRenderer(metalDevice: device, pixelFormat: mtkView.colorPixelFormat)
-            mtkView.delegate = metalRenderer
-            
-            addSubview(mtkView)
-            metalView = mtkView
-            renderer = metalRenderer
         }
         
+        // Override these methods to prevent rotation from affecting our view
         override func layoutSubviews() {
             super.layoutSubviews()
-            metalView?.frame = bounds
+            enforceBounds()
+        }
+        
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            enforceBounds()
+        }
+        
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            enforceBounds()
         }
     }
     
-    class MetalRenderer: NSObject, MTKViewDelegate {
-        private let commandQueue: MTLCommandQueue
-        private let ciContext: CIContext
-        
-        var currentCIImage: CIImage?
-        var isLogMode: Bool = false
-        
-        private var lastTime: CFTimeInterval = CACurrentMediaTime()
-        private var frameCount: Int = 0
-        
-        init?(metalDevice: MTLDevice, pixelFormat: MTLPixelFormat) {
-            guard let queue = metalDevice.makeCommandQueue() else { return nil }
-            commandQueue = queue
-            ciContext = CIContext(mtlDevice: metalDevice, options: [.cacheIntermediates: false])
-            super.init()
+    // The actual camera preview view with AVCaptureVideoPreviewLayer as its layer
+    class PreviewView: UIView {
+        override class var layerClass: AnyClass {
+            return AVCaptureVideoPreviewLayer.self
         }
         
-        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { }
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            return layer as! AVCaptureVideoPreviewLayer
+        }
         
-        func draw(in view: MTKView) {
-            guard let image = currentCIImage,
-                  let drawable = view.currentDrawable,
-                  let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            setupView()
+        }
+        
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            setupView()
+        }
+        
+        private func setupView() {
+            // Core setup
+            autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            backgroundColor = .black
             
-            let drawableSize = view.drawableSize
-            let imageSize = image.extent.size
-            let scaleX = drawableSize.width / imageSize.width
-            let scaleY = drawableSize.height / imageSize.height
-            let scale = max(scaleX, scaleY)
-            let scaledWidth = imageSize.width * scale
-            let scaledHeight = imageSize.height * scale
-            let offsetX = (drawableSize.width - scaledWidth) * 0.5
-            let offsetY = (drawableSize.height - scaledHeight) * 0.5
+            // Additional settings to prevent the layer from auto-rotating
+            layer.needsDisplayOnBoundsChange = true
+            clipsToBounds = true
             
-            var transform = CGAffineTransform.identity
-            transform = transform.translatedBy(x: offsetX, y: offsetY)
-            transform = transform.scaledBy(x: scale, y: scale)
+            print("DEBUG: PreviewView set up with AVCaptureVideoPreviewLayer")
+        }
+        
+        // Override to make sure our layer stays correctly sized
+        override func layoutSublayers(of layer: CALayer) {
+            super.layoutSublayers(of: layer)
+            previewLayer.frame = layer.bounds
             
-            var finalImage = image.transformed(by: transform)
-            if isLogMode {
-                finalImage = finalImage.applyingFilter("CIColorControls", parameters: [
-                    kCIInputContrastKey: 1.1,
-                    kCIInputBrightnessKey: 0.05
-                ])
+            // Re-enforce rotation whenever the layer updates
+            if let connection = previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
             }
-            
-            ciContext.render(finalImage,
-                             to: drawable.texture,
-                             commandBuffer: commandBuffer,
-                             bounds: CGRect(origin: .zero, size: drawableSize),
-                             colorSpace: CGColorSpaceCreateDeviceRGB())
-            
-            frameCount += 1
-            let now = CACurrentMediaTime()
-            if now - lastTime >= 1.0 {
-                print("🎞 FPS: \(frameCount)")
-                frameCount = 0
-                lastTime = now
-            }
-            
-            commandBuffer.present(drawable)
-            commandBuffer.commit()
         }
     }
 }

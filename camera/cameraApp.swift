@@ -9,12 +9,13 @@ import SwiftUI
 
 @main
 struct cameraApp: App {
-    let persistenceController = PersistenceController.shared
-
+    // Register AppDelegate for orientation control
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            // Wrap ContentView in OrientationFixView for strict orientation control
+            OrientationFixView(content: ContentView())
         }
     }
 }

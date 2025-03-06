@@ -140,6 +140,8 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
     
+    private var orientationMonitorTimer: Timer?
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -185,9 +187,14 @@ class CameraViewModel: NSObject, ObservableObject {
         }
         
         print("📱 LUT Loading: No default LUTs will be loaded")
+        
+        startOrientationMonitoring()
     }
     
     deinit {
+        orientationMonitorTimer?.invalidate()
+        orientationMonitorTimer = nil
+        
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -536,6 +543,7 @@ class CameraViewModel: NSObject, ObservableObject {
                     }
                 } else {
                     connection.videoRotationAngle = 90
+                    print("DEBUG: Camera orientation locked to fixed angle: 90°")
                 }
             }
             
@@ -649,11 +657,45 @@ class CameraViewModel: NSObject, ObservableObject {
     func updateInterfaceOrientation(lockCamera: Bool = false) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            print("DEBUG: Enforcing camera orientation lock...")
+            
+            // Update current orientation state
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 self.currentInterfaceOrientation = windowScene.interfaceOrientation
                 
+                // First: Lock movie output connection
                 if let connection = self.movieOutput.connection(with: .video) {
-                    self.updateVideoOrientation(connection, lockCamera: lockCamera)
+                    // Always enforce fixed rotation for video
+                    if connection.videoRotationAngle != 90 {
+                        connection.videoRotationAngle = 90
+                        print("DEBUG: CameraViewModel enforced fixed angle=90° for video connection")
+                    }
+                    
+                    // Check and set any other connections as well
+                    self.movieOutput.connections.forEach { conn in
+                        if conn !== connection && conn.isVideoRotationAngleSupported(90) && conn.videoRotationAngle != 90 {
+                            conn.videoRotationAngle = 90
+                            print("DEBUG: Set additional connection to 90°")
+                        }
+                    }
+                }
+                
+                // Second: Force all session connections to have fixed rotation
+                self.session.connections.forEach { connection in
+                    if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                        connection.videoRotationAngle = 90
+                        print("DEBUG: Set session connection to 90°")
+                    }
+                }
+                
+                // Third: Check all session outputs and their connections
+                self.session.outputs.forEach { output in
+                    output.connections.forEach { connection in
+                        if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                            connection.videoRotationAngle = 90
+                            print("DEBUG: Set output connection to 90°")
+                        }
+                    }
                 }
             }
         }
@@ -804,6 +846,35 @@ class CameraViewModel: NSObject, ObservableObject {
         }
         
         return ciImage
+    }
+    
+    private func startOrientationMonitoring() {
+        orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                self.enforceFixedOrientation()
+            }
+        }
+        
+        print("DEBUG: Started orientation monitoring timer")
+    }
+    
+    private func enforceFixedOrientation() {
+        guard isSessionRunning else { return }
+        
+        movieOutput.connections.forEach { connection in
+            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                connection.videoRotationAngle = 90
+                print("DEBUG: Timer enforced fixed angle=90° on connection")
+            }
+        }
+        
+        session.connections.forEach { connection in
+            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                connection.videoRotationAngle = 90
+            }
+        }
     }
 }
 
