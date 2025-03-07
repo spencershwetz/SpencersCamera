@@ -606,7 +606,7 @@ class CameraViewModel: NSObject, ObservableObject {
     currentRecordingURL = documentsPath.appendingPathComponent(videoName)
  
     guard let videoConnection = movieOutput.connection(with: .video),
-          videoConnection.isVideoOrientationSupported else {
+          videoConnection.isVideoRotationAngleSupported(0) else {
         error = .configurationFailed
         return
     }
@@ -615,15 +615,15 @@ class CameraViewModel: NSObject, ObservableObject {
  
     switch orientation {
     case .portrait:
-        videoConnection.videoOrientation = .portrait
+        videoConnection.videoRotationAngle = 90
     case .portraitUpsideDown:
-        videoConnection.videoOrientation = .portraitUpsideDown
+        videoConnection.videoRotationAngle = 270
     case .landscapeLeft:
-        videoConnection.videoOrientation = .landscapeRight
+        videoConnection.videoRotationAngle = 0
     case .landscapeRight:
-        videoConnection.videoOrientation = .landscapeLeft
+        videoConnection.videoRotationAngle = 180
     default:
-        videoConnection.videoOrientation = .portrait
+        videoConnection.videoRotationAngle = 90
     }
  
     movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
@@ -998,9 +998,9 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CIImage? {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { 
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             print("DEBUG: No pixel buffer in sample buffer")
-            return nil 
+            return nil
         }
         
         // Create CIImage from the pixel buffer
