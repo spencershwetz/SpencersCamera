@@ -156,6 +156,12 @@ class CameraViewModel: NSObject, ObservableObject {
     
     private var orientationMonitorTimer: Timer?
     
+    // Temporarily disable the orientation enforcement during recording
+    private var isOrientationLocked = false
+    
+    // Save the original rotation values to restore them after recording
+    private var originalRotationValues: [AVCaptureConnection: CGFloat] = [:]
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -593,20 +599,36 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     func startRecording() {
-        guard !isRecording && !isProcessingRecording else {
-            print("Cannot start recording: Already in progress or processing")
-            return
-        }
-        
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let videoName = "recording-\(Date().timeIntervalSince1970).mov"
-        let videoPath = documentsPath.appendingPathComponent(videoName)
-        currentRecordingURL = videoPath
-        
-        movieOutput.startRecording(to: videoPath, recordingDelegate: self)
-        isRecording = true
-        print("Starting recording to: \(videoPath.path)")
+    guard !isRecording && !isProcessingRecording else { return }
+ 
+    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let videoName = "recording-\(Date().timeIntervalSince1970).mov"
+    currentRecordingURL = documentsPath.appendingPathComponent(videoName)
+ 
+    guard let videoConnection = movieOutput.connection(with: .video),
+          videoConnection.isVideoOrientationSupported else {
+        error = .configurationFailed
+        return
     }
+ 
+    let orientation = UIDevice.current.orientation
+ 
+    switch orientation {
+    case .portrait:
+        videoConnection.videoOrientation = .portrait
+    case .portraitUpsideDown:
+        videoConnection.videoOrientation = .portraitUpsideDown
+    case .landscapeLeft:
+        videoConnection.videoOrientation = .landscapeRight
+    case .landscapeRight:
+        videoConnection.videoOrientation = .landscapeLeft
+    default:
+        videoConnection.videoOrientation = .portrait
+    }
+ 
+    movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
+    isRecording = true
+}
     
     func stopRecording() {
         guard isRecording else {
@@ -617,6 +639,29 @@ class CameraViewModel: NSObject, ObservableObject {
         print("Stopping recording...")
         isProcessingRecording = true
         movieOutput.stopRecording()
+        
+        // Restore orientation enforcement timer and original settings
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            
+            // Restore all original rotation values
+            for (connection, angle) in self.originalRotationValues {
+                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                    print("DEBUG: Restored connection rotation angle to \(angle)°")
+                }
+            }
+            
+            // Clear saved values
+            self.originalRotationValues.removeAll()
+            
+            // Reinitiate orientation monitoring
+            self.isOrientationLocked = false
+            self.startOrientationMonitoring()
+            
+            // Re-enforce orientation lock for UI
+            self.updateInterfaceOrientation(lockCamera: true)
+        }
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
@@ -978,10 +1023,12 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func startOrientationMonitoring() {
+        // Only start if not already locked
+        guard !isOrientationLocked else { return }
+        
         orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                
+                guard let self = self, !self.isOrientationLocked else { return }
                 self.enforceFixedOrientation()
             }
         }
@@ -990,7 +1037,7 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func enforceFixedOrientation() {
-        guard isSessionRunning else { return }
+        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
         
         movieOutput.connections.forEach { connection in
             if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
@@ -1012,6 +1059,18 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
                     didStartRecordingTo fileURL: URL,
                     from connections: [AVCaptureConnection]) {
         print("Recording started successfully")
+        
+        // Ensure connections maintain their orientation settings throughout recording
+        for connection in connections {
+            // Check if this is a video connection
+            if connection.inputPorts.contains(where: { $0.mediaType == .video }) {
+                print("DEBUG: Recording connection rotation angle: \(connection.videoRotationAngle)°")
+                
+                if connection.isVideoOrientationSupported {
+                    print("DEBUG: Recording connection orientation: \(connection.videoOrientation.rawValue)")
+                }
+            }
+        }
     }
     
     func fileOutput(_ output: AVCaptureFileOutput,

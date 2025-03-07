@@ -80,13 +80,8 @@ struct ContentView: View {
                         }
                     }
                     
-                    VStack {
-                        Spacer()
-                        controlsView
-                            .frame(maxWidth: uiOrientation.isPortrait ? geometry.size.width * 0.9 : geometry.size.width * 0.95)
-                            .padding(.bottom, uiOrientation.isPortrait ? 30 : 15)
-                            .rotationEffect(rotationAngle(for: uiOrientation))
-                    }
+                    // Adaptive camera controls that reposition for orientation
+                    adaptiveControlsView(in: geometry)
                 } else {
                     // Camera is initializing - show loading
                     ZStack {
@@ -220,6 +215,39 @@ struct ContentView: View {
         }
     }
     
+    // New adaptive controls placement based on orientation
+    private func adaptiveControlsView(in geometry: GeometryProxy) -> some View {
+        Group {
+            if uiOrientation.isPortrait {
+                // Portrait controls at the bottom
+                VStack {
+                    Spacer()
+                    controlsView
+                        .frame(maxWidth: geometry.size.width * 0.95)
+                        .padding(.bottom, 30)
+                }
+            } else if uiOrientation == .landscapeRight {
+                // Landscape Right - controls on the left side
+                HStack {
+                    controlsView
+                        .frame(maxWidth: geometry.size.width * 0.7, maxHeight: geometry.size.height * 0.9)
+                        .padding(.leading, 20)
+                    Spacer()
+                }
+                .rotationEffect(rotationAngle(for: uiOrientation))
+            } else if uiOrientation == .landscapeLeft {
+                // Landscape Left - controls on the right side
+                HStack {
+                    Spacer()
+                    controlsView
+                        .frame(maxWidth: geometry.size.width * 0.7, maxHeight: geometry.size.height * 0.9)
+                        .padding(.trailing, 20)
+                }
+                .rotationEffect(rotationAngle(for: uiOrientation))
+            }
+        }
+    }
+    
     private var controlsView: some View {
         Group {
             if uiOrientation.isPortrait {
@@ -229,7 +257,7 @@ struct ContentView: View {
             }
         }
         .padding()
-        .background(Color.black.opacity(0.3))
+        .background(Color.black.opacity(0.5))
         .cornerRadius(15)
         .foregroundColor(.white)
     }
@@ -250,14 +278,17 @@ struct ContentView: View {
     }
     
     private var landscapeControlsLayout: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .center, spacing: 20) {
+            // Left column - basic adjustments
             VStack(spacing: 15) {
                 controlsHeader
                 framerateControl
                 whiteBalanceControl
                 tintControl
             }
+            .frame(maxWidth: .infinity)
             
+            // Middle column - advanced controls
             VStack(spacing: 15) {
                 isoControl
                 shutterAngleDisplay
@@ -265,12 +296,16 @@ struct ContentView: View {
                 exposureControls
                 appleLogToggle
             }
+            .frame(maxWidth: .infinity)
             
+            // Right column - record button (always visible)
             VStack {
                 Spacer()
                 recordButton
-                    .padding(.bottom, 10)
+                    .scaleEffect(1.2)
+                Spacer()
             }
+            .frame(maxWidth: 100, maxHeight: .infinity)
         }
     }
     
@@ -462,11 +497,13 @@ struct ContentView: View {
                 viewModel.startRecording()
             }
         }) {
-            Image(systemName: viewModel.isRecording ? "stop.circle" : "record.circle")
-                .font(.system(size: 60))
+            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle.fill")
+                .font(.system(size: uiOrientation.isPortrait ? 60 : 50))
                 .foregroundColor(viewModel.isRecording ? .white : .red)
+                .background(Circle().fill(viewModel.isRecording ? Color.red : Color.clear))
                 .opacity(viewModel.isProcessingRecording ? 0.5 : 1.0)
         }
+        .buttonStyle(PlainButtonStyle())
         .disabled(viewModel.isProcessingRecording)
     }
     
