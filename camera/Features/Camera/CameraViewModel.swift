@@ -7,13 +7,16 @@ import os.log
 import CoreImage
 
 class CameraViewModel: NSObject, ObservableObject {
+    // Add property to track the view containing the camera preview
+    weak var owningView: UIView?
+    
     enum Status {
         case unknown
         case running
         case failed
         case unauthorized
     }
-    @Published private(set) var status: Status = .unknown
+    @Published var status: Status = .unknown
     
     enum CaptureMode {
         case photo
@@ -32,6 +35,17 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var recordingFinished = false
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false
+    
+    // Storage for temporarily disabling LUT preview without losing the filter
+    var tempLUTFilter: CIFilter? {
+        didSet {
+            if tempLUTFilter != nil {
+                print("DEBUG: CameraViewModel stored LUT filter temporarily")
+            } else if oldValue != nil {
+                print("DEBUG: CameraViewModel cleared temporary LUT filter")
+            }
+        }
+    }
     
     @Published var isAppleLogEnabled = false {
         didSet {
@@ -345,18 +359,21 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func setupSession() throws {
+        print("DEBUG: 🎥 Setting up camera session")
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         session.beginConfiguration()
         
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                     for: .video,
                                                     position: .back) else {
+            print("DEBUG: ❌ No camera device available")
             error = .cameraUnavailable
             status = .failed
             session.commitConfiguration()
             return
         }
         
+        print("DEBUG: ✅ Found camera device: \(videoDevice.localizedName)")
         self.device = videoDevice
         
         do {
@@ -371,20 +388,26 @@ class CameraViewModel: NSObject, ObservableObject {
                 videoDevice.activeFormat = appleLogFormat
                 videoDevice.activeColorSpace = .appleLog
                 print("Initial setup: Enabled Apple Log in 4K ProRes format")
+                videoDevice.unlockForConfiguration()
             }
             
             if session.canAddInput(input) {
                 session.addInput(input)
+                print("DEBUG: ✅ Added video input to session")
+            } else {
+                print("DEBUG: ❌ Failed to add video input to session")
             }
             
             if let audioDevice = AVCaptureDevice.default(for: .audio),
                let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
                session.canAddInput(audioInput) {
                 session.addInput(audioInput)
+                print("DEBUG: ✅ Added audio input to session")
             }
             
             if session.canAddOutput(movieOutput) {
                 session.addOutput(movieOutput)
+                print("DEBUG: ✅ Added movie output to session")
                 
                 movieOutput.movieFragmentInterval = .invalid
                 
@@ -394,6 +417,8 @@ class CameraViewModel: NSObject, ObservableObject {
                     }
                     updateVideoOrientation(connection, lockCamera: true)
                 }
+            } else {
+                print("DEBUG: ❌ Failed to add movie output to session")
             }
             
             if let device = device {
@@ -402,6 +427,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
                 device.unlockForConfiguration()
+                print("DEBUG: ✅ Set frame rate to \(selectedFrameRate) fps")
             }
             
         } catch {
@@ -412,26 +438,84 @@ class CameraViewModel: NSObject, ObservableObject {
         }
         
         session.commitConfiguration()
+        print("DEBUG: ✅ Session configuration committed")
         
         if session.canSetSessionPreset(.hd4K3840x2160) {
             session.sessionPreset = .hd4K3840x2160
+            print("DEBUG: ✅ Using 4K preset")
         } else if session.canSetSessionPreset(.hd1920x1080) {
             session.sessionPreset = .hd1920x1080
+            print("DEBUG: ✅ Using 1080p preset")
         }
         
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.session.startRunning()
-            DispatchQueue.main.async {
-                self?.isSessionRunning = self?.session.isRunning ?? false
-                self?.status = .running
-            }
-        }
+        // Request camera permissions if needed
+        checkCameraPermissionsAndStart()
         
         isAppleLogSupported = device?.formats.contains { format in
             format.supportedColorSpaces.contains(.appleLog)
         } ?? false
         
         defaultFormat = device?.activeFormat
+    }
+    
+    private func checkCameraPermissionsAndStart() {
+        let cameraAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        
+        switch cameraAuthorizationStatus {
+        case .authorized:
+            print("DEBUG: ✅ Camera access already authorized")
+            startCameraSession()
+            
+        case .notDetermined:
+            print("DEBUG: 🔄 Requesting camera authorization...")
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                if granted {
+                    print("DEBUG: ✅ Camera access granted")
+                    self.startCameraSession()
+                } else {
+                    print("DEBUG: ❌ Camera access denied")
+                    DispatchQueue.main.async {
+                        self.error = .unauthorized
+                        self.status = .unauthorized
+                    }
+                }
+            }
+            
+        case .denied, .restricted:
+            print("DEBUG: ❌ Camera access denied or restricted")
+            DispatchQueue.main.async {
+                self.error = .unauthorized
+                self.status = .unauthorized
+            }
+            
+        @unknown default:
+            print("DEBUG: ❓ Unknown camera authorization status")
+            startCameraSession()
+        }
+    }
+    
+    private func startCameraSession() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            
+            print("DEBUG: 🎬 Starting camera session...")
+            if !self.session.isRunning {
+                self.session.startRunning()
+                
+                DispatchQueue.main.async {
+                    self.isSessionRunning = self.session.isRunning
+                    self.status = self.session.isRunning ? .running : .failed
+                    print("DEBUG: 📷 Camera session running: \(self.session.isRunning)")
+                }
+            } else {
+                print("DEBUG: ⚠️ Camera session already running")
+                
+                DispatchQueue.main.async {
+                    self.isSessionRunning = true
+                    self.status = .running
+                }
+            }
+        }
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -458,14 +542,36 @@ class CameraViewModel: NSObject, ObservableObject {
     
     func updateISO(_ iso: Float) {
         guard let device = device else { return }
+        
+        // Get the current device's supported ISO range
+        let minISO = device.activeFormat.minISO
+        let maxISO = device.activeFormat.maxISO
+        
+        print("DEBUG: ISO update requested to \(iso). Device supports range: \(minISO) to \(maxISO)")
+        
+        // Ensure the ISO value is within the supported range
+        let clampedISO = min(max(minISO, iso), maxISO)
+        
+        // Log if clamping occurred
+        if clampedISO != iso {
+            print("DEBUG: Clamped ISO from \(iso) to \(clampedISO) to stay within device limits")
+        }
+        
         do {
             try device.lockForConfiguration()
-            let clamped = min(max(device.activeFormat.minISO, iso), device.activeFormat.maxISO)
-            device.setExposureModeCustom(duration: device.exposureDuration, iso: clamped) { _ in }
+            
+            // Double check that we're within range before setting
+            device.setExposureModeCustom(duration: device.exposureDuration, iso: clampedISO) { _ in }
             device.unlockForConfiguration()
-            self.iso = clamped
+            
+            // Update the published property with the actual value used
+            DispatchQueue.main.async {
+                self.iso = clampedISO
+            }
+            
+            print("DEBUG: Successfully set ISO to \(clampedISO)")
         } catch {
-            print("ISO error: \(error)")
+            print("❌ ISO error: \(error)")
             self.error = .configurationFailed
         }
     }
@@ -820,7 +926,19 @@ class CameraViewModel: NSObject, ObservableObject {
             } else {
                 if device.isExposureModeSupported(.custom) {
                     device.exposureMode = .custom
-                    let clampedISO = min(max(device.activeFormat.minISO, self.iso), device.activeFormat.maxISO)
+                    
+                    // Double check ISO range limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    let clampedISO = min(max(minISO, self.iso), maxISO)
+                    
+                    if clampedISO != self.iso {
+                        print("DEBUG: Exposure mode - Clamped ISO from \(self.iso) to \(clampedISO)")
+                        DispatchQueue.main.async {
+                            self.iso = clampedISO
+                        }
+                    }
+                    
                     device.setExposureModeCustom(duration: device.exposureDuration,
                                                  iso: clampedISO) { _ in }
                     print("📷 Manual exposure enabled with ISO \(clampedISO)")
@@ -835,16 +953,27 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CIImage? {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
-        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { 
+            print("DEBUG: No pixel buffer in sample buffer")
+            return nil 
+        }
         
+        // Create CIImage from the pixel buffer
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // Apply LUT filter if available
         if let lutFilter = lutManager.currentLUTFilter {
             lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
             if let outputImage = lutFilter.outputImage {
-                ciImage = outputImage
+                return outputImage
+            } else {
+                // If LUT application fails, return the original image
+                print("DEBUG: LUT filter failed to produce output image, using original")
+                return ciImage
             }
         }
         
+        // No LUT filter applied, return original image
         return ciImage
     }
     

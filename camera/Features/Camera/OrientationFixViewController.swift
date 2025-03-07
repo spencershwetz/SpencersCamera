@@ -27,8 +27,8 @@ class OrientationFixViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         
-        // Apply orientation lock
-        UIDevice.current.setValue(UIDeviceOrientation.portrait.rawValue, forKey: "orientation")
+        // Use the modern method to enforce orientation
+        enforcePortraitOrientation()
         
         print("DEBUG: OrientationFixViewController loaded - enforcing portrait orientation")
     }
@@ -39,11 +39,11 @@ class OrientationFixViewController: UIViewController {
         // Force portrait orientation
         AppDelegate.orientationLock = .portrait
         
-        // Apply orientation lock on appearance
-        UIDevice.current.setValue(UIDeviceOrientation.portrait.rawValue, forKey: "orientation")
+        // Use the modern method to enforce orientation
+        enforcePortraitOrientation()
         
-        // Notify the system to update orientation
-        UIViewController.attemptRotationToDeviceOrientation()
+        // Modern approach to update orientation
+        self.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
     
     override func viewWillDisappear(_ animated: Bool) {
@@ -51,6 +51,18 @@ class OrientationFixViewController: UIViewController {
         
         // Release orientation lock when view disappears
         AppDelegate.orientationLock = .all
+    }
+    
+    // Helper method to enforce portrait orientation using modern API
+    private func enforcePortraitOrientation() {
+        // Find the active window scene
+        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+            windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                // The error parameter here is not optional, it's a concrete Error
+                print("DEBUG: Error enforcing portrait orientation: \(error.localizedDescription)")
+            }
+        }
     }
     
     // Only allow portrait orientation

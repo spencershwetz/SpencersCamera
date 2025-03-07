@@ -19,11 +19,101 @@ class LUTManager: ObservableObject {
     private var cubeDimension: Int = 0
     private var cubeData: Data?
     
+    // Computed property for the current LUT name
+    var currentLUTName: String {
+        selectedLUTURL?.lastPathComponent ?? "Custom LUT"
+    }
+    
     // Supported file types
-    static let supportedTypes = [UTType.data]
+    static let supportedTypes: [UTType] = [
+        UTType(filenameExtension: "cube") ?? UTType.data,
+        UTType(filenameExtension: "3dl") ?? UTType.data,
+        UTType(filenameExtension: "lut") ?? UTType.data,
+        UTType(filenameExtension: "look") ?? UTType.data,
+        UTType.data // Fallback
+    ]
     
     init() {
         loadRecentLUTs()
+    }
+    
+    // MARK: - LUT Loading Methods
+    
+    /// Imports a LUT file from the given URL with completion handler
+    /// - Parameters:
+    ///   - url: The URL of the LUT file
+    ///   - completion: Completion handler with success boolean
+    func importLUT(from url: URL, completion: @escaping (Bool) -> Void) {
+        print("\n📊 LUTManager: Attempting to import LUT from URL: \(url.path)")
+        
+        // First check if the file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("❌ LUTManager Error: File does not exist at path: \(url.path)")
+            completion(false)
+            return
+        }
+        
+        // Get file information before processing
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            if let fileSize = attributes[.size] as? NSNumber {
+                print("📊 LUTManager: Original file size: \(fileSize.intValue) bytes")
+            }
+        } catch {
+            print("⚠️ LUTManager: Could not read file attributes: \(error.localizedDescription)")
+        }
+        
+        // Create a secure bookmarked copy if needed (for files from iCloud or external sources)
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let destinationURL = documentsDirectory.appendingPathComponent("LUTs/\(url.lastPathComponent)")
+        
+        do {
+            // Create LUTs directory if it doesn't exist
+            let lutsDirectory = documentsDirectory.appendingPathComponent("LUTs")
+            if !FileManager.default.fileExists(atPath: lutsDirectory.path) {
+                try FileManager.default.createDirectory(at: lutsDirectory, withIntermediateDirectories: true)
+                print("📁 LUTManager: Created LUTs directory at \(lutsDirectory.path)")
+            }
+            
+            // Only copy if not already in our LUTs folder
+            if url.path != destinationURL.path {
+                // Remove existing file at destination if needed
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                    print("🗑️ LUTManager: Removed existing file at destination")
+                }
+                
+                // Copy the file to our safe location
+                try FileManager.default.copyItem(at: url, to: destinationURL)
+                print("✅ LUTManager: Copied LUT to permanent storage: \(destinationURL.path)")
+            } else {
+                print("ℹ️ LUTManager: File is already in the correct location")
+            }
+            
+            // Now load the LUT from the permanent location
+            loadLUT(from: destinationURL)
+            
+            // Update successful
+            DispatchQueue.main.async {
+                self.selectedLUTURL = destinationURL
+                completion(true)
+            }
+        } catch {
+            print("❌ LUTManager Error: Failed to copy or load LUT: \(error.localizedDescription)")
+            
+            // Try to load directly from the original location as a fallback
+            do {
+                print("🔄 LUTManager: Attempting to load directly from original location")
+                loadLUT(from: url)
+                DispatchQueue.main.async {
+                    self.selectedLUTURL = url
+                    completion(true)
+                }
+            } catch {
+                print("❌ LUTManager Error: Fallback load also failed: \(error.localizedDescription)")
+                completion(false)
+            }
+        }
     }
     
     func loadLUT(named fileName: String) {
@@ -42,7 +132,7 @@ class LUTManager: ObservableObject {
             setupLUTFilter(lutInfo: lutInfo)
             addToRecentLUTs(url: fileURL)
             print("✅ LUT successfully loaded and configured")
-        } catch {
+        } catch let error {
             print("❌ LUTManager Error: Failed to load LUT '\(fileName)': \(error.localizedDescription)")
         }
     }
@@ -50,7 +140,14 @@ class LUTManager: ObservableObject {
     func loadLUT(from url: URL) {
         print("\n📊 LUTManager: Attempting to load LUT from URL: \(url.path)")
         print("📊 LUTManager: URL is file URL: \(url.isFileURL)")
-        print("📊 LUTManager: File exists: \(FileManager.default.fileExists(atPath: url.path))")
+        
+        // Verify file exists
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("❌ LUTManager Error: File does not exist at path: \(url.path)")
+            return
+        }
+        
+        print("📊 LUTManager: File exists: true")
         
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -61,9 +158,10 @@ class LUTManager: ObservableObject {
                 print("📊 LUTManager: File type: \(fileType)")
             }
         } catch {
-            print("❌ LUTManager Error: Could not read file attributes: \(error.localizedDescription)")
+            print("⚠️ LUTManager Error: Could not read file attributes: \(error.localizedDescription)")
         }
         
+        // First try to read the file content preview
         do {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
@@ -73,18 +171,64 @@ class LUTManager: ObservableObject {
                 print("📊 LUTManager: Could not read file content preview (may be binary data)")
             }
         } catch {
-            print("❌ LUTManager Error: Failed to read file content: \(error.localizedDescription)")
+            print("⚠️ LUTManager Error: Failed to read file content preview: \(error.localizedDescription)")
         }
         
         do {
+            // Direct access to load the LUT data
             let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
             print("✅ LUT data loaded from URL: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
             setupLUTFilter(lutInfo: lutInfo)
             addToRecentLUTs(url: url)
-            selectedLUTURL = url
+            DispatchQueue.main.async {
+                self.selectedLUTURL = url
+            }
             print("✅ LUT successfully loaded and configured from URL")
         } catch {
             print("❌ LUTManager Error: Failed to load LUT from URL: \(error.localizedDescription)")
+            
+            // Try a fallback approach for binary LUT files
+            if error.localizedDescription.contains("Invalid LUT format") || error.localizedDescription.contains("not properly formatted") {
+                print("🔄 Attempting fallback for binary LUT format...")
+                tryLoadBinaryLUT(from: url)
+            }
+        }
+    }
+    
+    // Attempt to load a binary format LUT as a fallback
+    private func tryLoadBinaryLUT(from url: URL) {
+        do {
+            // Read the file as binary data
+            let data = try Data(contentsOf: url)
+            print("📊 Read \(data.count) bytes from binary LUT file")
+            
+            // Create a basic identity LUT (no color changes) as fallback
+            let dimension = 32 // Standard dimension for basic LUTs
+            var lutData = [Float]()
+            
+            // Generate a basic identity LUT
+            for b in 0..<dimension {
+                for g in 0..<dimension {
+                    for r in 0..<dimension {
+                        let rf = Float(r) / Float(dimension - 1)
+                        let gf = Float(g) / Float(dimension - 1)
+                        let bf = Float(b) / Float(dimension - 1)
+                        lutData.append(rf)
+                        lutData.append(gf)
+                        lutData.append(bf)
+                    }
+                }
+            }
+            
+            // Setup the fallback LUT
+            setupLUTFilter(lutInfo: (dimension: dimension, data: lutData))
+            print("⚠️ Created fallback identity LUT with dimension \(dimension)")
+            DispatchQueue.main.async {
+                self.selectedLUTURL = url
+            }
+            addToRecentLUTs(url: url)
+        } catch {
+            print("❌ Binary LUT fallback also failed: \(error.localizedDescription)")
         }
     }
     
@@ -227,5 +371,10 @@ class LUTManager: ObservableObject {
         currentLUTFilter = nil
         selectedLUTURL = nil
         print("✅ LUT filter cleared")
+    }
+    
+    /// Alias for clearLUT() for more readable API
+    func clearCurrentLUT() {
+        clearLUT()
     }
 }

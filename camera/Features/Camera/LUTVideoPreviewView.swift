@@ -51,7 +51,7 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         NotificationCenter.default.addObserver(
             previewView,
             selector: #selector(previewView.orientationWillChange),
-            name: UIApplication.willChangeStatusBarOrientationNotification,
+            name: UIScene.willEnterForegroundNotification,
             object: nil
         )
         
