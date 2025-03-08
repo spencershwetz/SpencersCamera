@@ -434,17 +434,29 @@ struct CameraView: View {
                         if newValue {
                             // When turning preview ON, ensure the LUT filter is active in the viewModel
                             if let lutFilter = lutManager.currentLUTFilter {
+                                // First set the filter in the view model
                                 viewModel.lutManager.currentLUTFilter = lutFilter
                                 viewModel.tempLUTFilter = nil
                                 print("DEBUG: Enabled LUT in viewModel pipeline")
+                            } else if let tempFilter = viewModel.tempLUTFilter {
+                                // If we have a stored temp filter, restore it
+                                lutManager.currentLUTFilter = tempFilter
+                                viewModel.lutManager.currentLUTFilter = tempFilter
+                                viewModel.tempLUTFilter = nil
+                                print("DEBUG: Restored LUT from temporary storage")
                             }
                         } else {
                             // When turning preview OFF, remove the LUT filter from processing
                             // but save it for later restoration
                             if viewModel.lutManager.currentLUTFilter != nil {
                                 viewModel.tempLUTFilter = viewModel.lutManager.currentLUTFilter
-                                viewModel.lutManager.currentLUTFilter = nil
-                                print("DEBUG: Disabled LUT in viewModel pipeline but kept in temp storage")
+                                
+                                // Use a slight delay to ensure the overlay layer is properly removed
+                                // before changing the filter reference
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    viewModel.lutManager.currentLUTFilter = nil
+                                    print("DEBUG: Disabled LUT in viewModel pipeline but kept in temp storage")
+                                }
                             }
                         }
                     }

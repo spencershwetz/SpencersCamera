@@ -233,8 +233,26 @@ struct CameraPreviewView: UIViewRepresentable {
                     // New filter added when none existed
                     setupDataOutput()
                 } else {
-                    // Filter removed
-                    removeDataOutput()
+                    // Filter removed - first clean up any existing overlay
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        
+                        // Remove any existing LUT overlay layer before removing the data output
+                        CATransaction.begin()
+                        CATransaction.setDisableActions(true)
+                        
+                        if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                            overlay.removeFromSuperlayer()
+                            print("DEBUG: Removed LUT overlay layer during filter update")
+                        }
+                        
+                        CATransaction.commit()
+                        
+                        // Now remove the data output on the session queue to prevent freezing
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            self.removeDataOutput()
+                        }
+                    }
                 }
             }
             
@@ -246,6 +264,8 @@ struct CameraPreviewView: UIViewRepresentable {
             
             if filter != nil {
                 print("DEBUG: CustomPreviewView updated with LUT filter")
+            } else {
+                print("DEBUG: CustomPreviewView cleared LUT filter")
             }
         }
         
@@ -290,6 +310,23 @@ struct CameraPreviewView: UIViewRepresentable {
                 session.removeOutput(output)
                 session.commitConfiguration()
                 dataOutput = nil
+                
+                // Clear any existing LUT overlay to prevent freezing
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    
+                    // Remove the LUT overlay layer if it exists
+                    if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                        overlay.removeFromSuperlayer()
+                        print("DEBUG: Removed LUT overlay layer")
+                    }
+                    
+                    CATransaction.commit()
+                }
+                
                 print("DEBUG: Removed video data output for LUT processing")
             }
         }
