@@ -1066,8 +1066,27 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
             if connection.inputPorts.contains(where: { $0.mediaType == .video }) {
                 print("DEBUG: Recording connection rotation angle: \(connection.videoRotationAngle)°")
                 
-                if connection.isVideoOrientationSupported {
-                    print("DEBUG: Recording connection orientation: \(connection.videoOrientation.rawValue)")
+                // Update the video orientation based on the interface orientation
+                let requiredAngles: [CGFloat] = [0, 90, 180, 270]
+                let supportsRotation = requiredAngles.allSatisfy { angle in
+                    connection.isVideoRotationAngleSupported(angle)
+                }
+                
+                if supportsRotation {
+                    // Set rotation angle based on current interface orientation
+                    switch currentInterfaceOrientation {
+                    case .portrait:
+                        connection.videoRotationAngle = 90
+                    case .portraitUpsideDown:
+                        connection.videoRotationAngle = 270
+                    case .landscapeLeft:
+                        connection.videoRotationAngle = 0
+                    case .landscapeRight:
+                        connection.videoRotationAngle = 180
+                    default:
+                        connection.videoRotationAngle = 90
+                    }
+                    print("DEBUG: Set recording connection rotation angle to: \(connection.videoRotationAngle)°")
                 }
             }
         }
@@ -1118,30 +1137,6 @@ extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
                 }
             }
         }
-    }
-}
-
-extension UIDeviceOrientation {
-    var videoTransform: CGAffineTransform {
-        switch self {
-        case .landscapeRight:
-            return CGAffineTransform(rotationAngle: CGFloat.pi)
-        case .portraitUpsideDown:
-            return CGAffineTransform(rotationAngle: -CGFloat.pi / 2)
-        case .landscapeLeft:
-            return .identity
-        case .portrait:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
-        case .unknown, .faceUp, .faceDown:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
-        @unknown default:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
-        }
-    }
-    
-    var isValidInterfaceOrientation: Bool {
-        return self == .portrait || self == .portraitUpsideDown ||
-               self == .landscapeLeft || self == .landscapeRight
     }
 }
 

@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift":
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CIContext+Shared.swiftdeps"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CIContext+Shared.d"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CIContext+Shared.swiftconstvalues"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CIContext+Shared.dia"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CIContext+Shared.o"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/CameraOrientationLock.swift":
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraOrientationLock.dia"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraOrientationLock.d"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraOrientationLock.o"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraOrientationLock.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraOrientationLock.swiftdeps"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Extensions/AppDelegateExtension.swift":
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/AppDelegateExtension.dia"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/AppDelegateExtension.swiftdeps"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/AppDelegateExtension.swiftconstvalues"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/AppDelegateExtension.o"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/AppDelegateExtension.d"

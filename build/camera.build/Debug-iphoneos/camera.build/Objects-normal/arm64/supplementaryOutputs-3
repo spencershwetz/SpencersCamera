@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/DocumentPicker.swift":
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/DocumentPicker.swiftdeps"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/DocumentPicker.swiftconstvalues"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/DocumentPicker.dia"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/DocumentPicker.d"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/DocumentPicker.o"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/LUTProcessor.swift":
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/LUTProcessor.o"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/LUTProcessor.dia"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/LUTProcessor.d"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/LUTProcessor.swiftdeps"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/LUTProcessor.swiftconstvalues"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift":
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraViewModel.swiftdeps"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraViewModel.swiftconstvalues"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraViewModel.d"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraViewModel.o"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/CameraViewModel.dia"

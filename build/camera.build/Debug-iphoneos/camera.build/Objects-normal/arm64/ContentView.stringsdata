@@ -1,0 +1,536 @@
+{
+  "source": "/Users/spencer/Documents/GitHub/camera/camera/ContentView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "LUT ACTIVE",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "Initializing Camera...",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 100
+        }
+      },
+      {
+        "comment": "",
+        "key": "Try Again",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 116
+        }
+      },
+      {
+        "comment": "",
+        "key": "Error",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "LENS",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 294
+        }
+      },
+      {
+        "comment": "",
+        "key": "24mm",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "FPS",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 304
+        }
+      },
+      {
+        "comment": "",
+        "key": "SHUTTER",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 322
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld°",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 325
+        }
+      },
+      {
+        "comment": "",
+        "key": "IRIS",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "f1.8",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 340
+        }
+      },
+      {
+        "comment": "",
+        "key": "ISO",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 352
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 362
+        }
+      },
+      {
+        "comment": "",
+        "key": "WB",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 373
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldK",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "TINT",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 395
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 398
+        }
+      },
+      {
+        "comment": "",
+        "key": "Frame Rate",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 418
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shutter Angle: %lld°",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 452
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 486
+        }
+      },
+      {
+        "comment": "",
+        "key": "1°",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 457
+        }
+      },
+      {
+        "comment": "",
+        "key": "360°",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 467
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld°",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 475
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 536
+        }
+      },
+      {
+        "comment": "",
+        "key": "4K",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 506
+        }
+      },
+      {
+        "comment": "",
+        "key": "LOG",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 519
+        }
+      },
+      {
+        "comment": "",
+        "key": "APPLE LOG",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 568
+        }
+      },
+      {
+        "comment": "",
+        "key": "MANUAL",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 586
+        }
+      },
+      {
+        "comment": "",
+        "key": "3200",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 646
+        }
+      },
+      {
+        "comment": "",
+        "key": "1600",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 650
+        }
+      },
+      {
+        "comment": "",
+        "key": "800",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 680
+        }
+      },
+      {
+        "comment": "",
+        "key": "400",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 684
+        }
+      },
+      {
+        "comment": "",
+        "key": "200",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 688
+        }
+      },
+      {
+        "comment": "",
+        "key": "100",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 692
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 656
+        }
+      },
+      {
+        "comment": "",
+        "key": "100",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 708
+        }
+      },
+      {
+        "comment": "",
+        "key": "200",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 712
+        }
+      },
+      {
+        "comment": "",
+        "key": "400",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 716
+        }
+      },
+      {
+        "comment": "",
+        "key": "800",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 720
+        }
+      },
+      {
+        "comment": "",
+        "key": "1600",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 749
+        }
+      },
+      {
+        "comment": "",
+        "key": "3200",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 753
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 741
+        }
+      },
+      {
+        "comment": "",
+        "key": "10000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 775
+        }
+      },
+      {
+        "comment": "",
+        "key": "8000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 779
+        }
+      },
+      {
+        "comment": "",
+        "key": "6000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 802
+        }
+      },
+      {
+        "comment": "",
+        "key": "4000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 806
+        }
+      },
+      {
+        "comment": "",
+        "key": "2000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 810
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldK",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 785
+        }
+      },
+      {
+        "comment": "",
+        "key": "2000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 824
+        }
+      },
+      {
+        "comment": "",
+        "key": "4000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 828
+        }
+      },
+      {
+        "comment": "",
+        "key": "6000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 832
+        }
+      },
+      {
+        "comment": "",
+        "key": "8000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 854
+        }
+      },
+      {
+        "comment": "",
+        "key": "10000K",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 858
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldK",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 838
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tint: %lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 873
+        }
+      },
+      {
+        "comment": "",
+        "key": "-150",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 878
+        }
+      },
+      {
+        "comment": "",
+        "key": "+150",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 890
+        }
+      },
+      {
+        "comment": "",
+        "key": "LUT",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 911
+        }
+      },
+      {
+        "comment": "",
+        "key": "Focus",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 924
+        }
+      },
+      {
+        "comment": "",
+        "key": "Media",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 962
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 975
+        }
+      },
+      {
+        "comment": "",
+        "key": "Camera",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 994
+        }
+      },
+      {
+        "comment": "",
+        "key": "Media",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1007
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chat",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1020
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1033
+        }
+      }
+    ]
+  },
+  "version": 1
+}
