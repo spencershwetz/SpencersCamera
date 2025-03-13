@@ -8,6 +8,7 @@ enum CameraError: Error, Identifiable {
     case savingFailed
     case whiteBalanceError
     case unauthorized
+    case sessionFailedToStart
     case custom(message: String)
     
     var id: String { description }
@@ -28,6 +29,8 @@ enum CameraError: Error, Identifiable {
             return "Failed to adjust white balance settings"
         case .unauthorized:
             return "Camera access denied. Please allow camera access in Settings."
+        case .sessionFailedToStart:
+            return "Failed to start camera session"
         case .custom(let message):
             return message
         }

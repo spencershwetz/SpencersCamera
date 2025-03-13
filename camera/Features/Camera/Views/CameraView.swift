@@ -12,6 +12,7 @@ struct CameraView: View {
     @State private var uiOrientation = UIDeviceOrientation.portrait
     @State private var showLUTPreview = true
     @State private var rotationAnimationDuration: Double = 0.3
+    @State private var isRotating = false
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -51,125 +52,59 @@ struct CameraView: View {
                         transaction.animation = nil
                     }
                     
-                    // LUT preview indicator with smooth rotation
-                    if lutManager.currentLUTFilter != nil && showLUTPreview {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text("LUT ACTIVE")
-                                        .font(.caption.bold())
-                                        .foregroundColor(.white)
-                                    
-                                    Text(lutManager.currentLUTName)
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                }
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.black.opacity(0.7))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .strokeBorder(Color.green, lineWidth: 2)
-                                        )
-                                )
-                                .padding(.top, 50)
-                                .padding(.trailing, 16)
-                            }
-                            Spacer()
-                        }
-                        .rotationEffect(rotationAngle(for: uiOrientation))
+                    // Overlay for all UI elements that need to rotate
+                    overlayUIContainer(in: geometry)
                         .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
-                    }
-                    
-                    // Adaptive camera controls that reposition for orientation
-                    adaptiveControlsView(in: geometry)
                 } else {
-                    // Camera is initializing - show loading
-                    ZStack {
-                        // Black background
-                        Color.black.edgesIgnoringSafeArea(.all)
+                    // Show loading or error state
+                    VStack {
+                        Text("Starting camera...")
+                            .font(.headline)
+                            .foregroundColor(.white)
                         
-                        // Loading indicator
-                        VStack(spacing: 20) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.5)
-                            
-                            Text("Initializing Camera...")
-                                .foregroundColor(.white)
-                                .font(.headline)
-                            
-                            // Show error if there is one
-                            if let error = viewModel.error {
-                                Text(error.description)
-                                    .foregroundColor(.red)
-                                    .font(.subheadline)
-                                    .padding()
-                                    .background(Color.black.opacity(0.7))
-                                    .cornerRadius(8)
-                            }
-                            
-                            // Retry button
-                            if viewModel.status == .failed || viewModel.status == .unauthorized {
-                                Button("Try Again") {
-                                    print("DEBUG: Manually attempting to start camera session")
-                                    viewModel.status = .unknown
-                                    DispatchQueue.global(qos: .userInitiated).async {
-                                        viewModel.session.startRunning()
-                                        DispatchQueue.main.async {
-                                            viewModel.isSessionRunning = viewModel.session.isRunning
-                                            viewModel.status = viewModel.session.isRunning ? .running : .failed
-                                        }
-                                    }
-                                }
+                        if viewModel.status == .failed, let error = viewModel.error {
+                            Text("Error: \(error.description)")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
                                 .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                            }
                         }
                     }
-                    .rotationEffect(rotationAngle(for: uiOrientation))
-                    .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
                 }
             }
-            .edgesIgnoringSafeArea(.all)
         }
         .onAppear {
             // Start the camera session when the view appears
-            if !viewModel.isSessionRunning {
+            if !viewModel.session.isRunning {
                 DispatchQueue.global(qos: .userInitiated).async {
                     viewModel.session.startRunning()
                     DispatchQueue.main.async {
                         viewModel.isSessionRunning = viewModel.session.isRunning
                         viewModel.status = viewModel.session.isRunning ? .running : .failed
-                        print("DEBUG: Camera session now running: \(viewModel.session.isRunning)")
+                        viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
+                        print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
                     }
                 }
             }
             
-            // Double enforce the orientation lock on appear
+            // Double enforce orientation lock on view appearance
             viewModel.updateInterfaceOrientation(lockCamera: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                viewModel.updateInterfaceOrientation(lockCamera: true)
-            }
             
-            // Set up notification handler for app becoming active - PROPER place to access StateObject
+            // Setup notification for when app becomes active
             NotificationCenter.default.addObserver(
                 forName: UIApplication.didBecomeActiveNotification,
                 object: nil,
                 queue: .main
-            ) { [self] _ in
+            ) { _ in
                 print("DEBUG: App became active - re-enforcing camera orientation")
                 viewModel.updateInterfaceOrientation(lockCamera: true)
             }
             
-            // Share LUTManager between views
+            // Share the lutManager between views
             viewModel.lutManager = lutManager
             
-            // Ensure LUT preview is on by default when a LUT is loaded
+            // Enable LUT preview by default
             showLUTPreview = true
             
             // Enable device orientation notifications
@@ -196,6 +131,9 @@ struct CameraView: View {
             if newValue.isValidInterfaceOrientation {
                 print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
                 
+                // Set rotating flag to true before animation starts
+                isRotating = true
+                
                 // Use animation for smooth transition
                 withAnimation(.easeInOut(duration: rotationAnimationDuration)) {
                     uiOrientation = newValue
@@ -207,6 +145,11 @@ struct CameraView: View {
                 // Re-enforce after a short delay to catch any late layout updates
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     viewModel.updateInterfaceOrientation(lockCamera: true)
+                }
+                
+                // Reset rotating flag after animation completes
+                DispatchQueue.main.asyncAfter(deadline: .now() + rotationAnimationDuration) {
+                    isRotating = false
                 }
             }
         }
@@ -240,6 +183,48 @@ struct CameraView: View {
         }
     }
     
+    // Container for all UI elements that need to rotate
+    private func overlayUIContainer(in geometry: GeometryProxy) -> some View {
+        ZStack {
+            // LUT preview indicator with smooth rotation
+            if lutManager.currentLUTFilter != nil && showLUTPreview {
+                VStack {
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("LUT ACTIVE")
+                                .font(.caption.bold())
+                                .foregroundColor(.white)
+                            
+                            Text(lutManager.currentLUTName)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        }
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.black.opacity(0.7))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .strokeBorder(Color.green, lineWidth: 2)
+                                )
+                        )
+                        .padding(.top, 50)
+                        .padding(.trailing, 16)
+                    }
+                    Spacer()
+                }
+            }
+            
+            // Adaptive camera controls that reposition for orientation
+            adaptiveControlsView(in: geometry)
+        }
+        .rotationEffect(rotationAngle(for: uiOrientation))
+        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
+        // Use opacity transition to prevent abrupt disappearance
+        .opacity(isRotating ? 0.99 : 1.0) // Slight opacity change to trigger redraw without visible change
+    }
+    
     // New adaptive controls placement based on orientation
     private func adaptiveControlsView(in geometry: GeometryProxy) -> some View {
         Group {
@@ -251,7 +236,6 @@ struct CameraView: View {
                         .frame(maxWidth: geometry.size.width * 0.95)
                         .padding(.bottom, 30)
                 }
-                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             } else if uiOrientation == .landscapeRight {
                 // Landscape Right - controls on the left side
                 HStack {
@@ -260,8 +244,6 @@ struct CameraView: View {
                         .padding(.leading, 20)
                     Spacer()
                 }
-                .rotationEffect(rotationAngle(for: uiOrientation))
-                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             } else if uiOrientation == .landscapeLeft {
                 // Landscape Left - controls on the right side
                 HStack {
@@ -270,10 +252,9 @@ struct CameraView: View {
                         .frame(maxWidth: geometry.size.width * 0.7, maxHeight: geometry.size.height * 0.9)
                         .padding(.trailing, 20)
                 }
-                .rotationEffect(rotationAngle(for: uiOrientation))
-                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             }
         }
+        // No additional rotation effect needed here since the parent container handles rotation
     }
     
     private var controlsView: some View {
