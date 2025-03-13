@@ -11,6 +11,7 @@ struct CameraView: View {
     @State private var isShowingDocumentPicker = false
     @State private var uiOrientation = UIDeviceOrientation.portrait
     @State private var showLUTPreview = true
+    @State private var rotationAnimationDuration: Double = 0.3
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -50,7 +51,7 @@ struct CameraView: View {
                         transaction.animation = nil
                     }
                     
-                    // LUT preview indicator
+                    // LUT preview indicator with smooth rotation
                     if lutManager.currentLUTFilter != nil && showLUTPreview {
                         VStack {
                             HStack {
@@ -78,6 +79,8 @@ struct CameraView: View {
                             }
                             Spacer()
                         }
+                        .rotationEffect(rotationAngle(for: uiOrientation))
+                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
                     }
                     
                     // Adaptive camera controls that reposition for orientation
@@ -128,14 +131,15 @@ struct CameraView: View {
                             }
                         }
                     }
+                    .rotationEffect(rotationAngle(for: uiOrientation))
+                    .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
                 }
             }
             .edgesIgnoringSafeArea(.all)
         }
         .onAppear {
-            // Start the camera session if needed
-            if !viewModel.session.isRunning {
-                print("DEBUG: Camera session not running on view appear")
+            // Start the camera session when the view appears
+            if !viewModel.isSessionRunning {
                 DispatchQueue.global(qos: .userInitiated).async {
                     viewModel.session.startRunning()
                     DispatchQueue.main.async {
@@ -167,15 +171,36 @@ struct CameraView: View {
             
             // Ensure LUT preview is on by default when a LUT is loaded
             showLUTPreview = true
+            
+            // Enable device orientation notifications
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         }
         .onDisappear {
             // Remove notification observer when the view disappears
             NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+            
+            // Stop the camera session when the view disappears
+            if viewModel.session.isRunning {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    viewModel.session.stopRunning()
+                    DispatchQueue.main.async {
+                        viewModel.isSessionRunning = false
+                    }
+                }
+            }
+            
+            // Disable device orientation notifications
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
         }
         .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
             if newValue.isValidInterfaceOrientation {
                 print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
-                uiOrientation = newValue
+                
+                // Use animation for smooth transition
+                withAnimation(.easeInOut(duration: rotationAnimationDuration)) {
+                    uiOrientation = newValue
+                }
+                
                 // Always lock camera preview orientation
                 viewModel.updateInterfaceOrientation(lockCamera: true)
                 
@@ -226,6 +251,7 @@ struct CameraView: View {
                         .frame(maxWidth: geometry.size.width * 0.95)
                         .padding(.bottom, 30)
                 }
+                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             } else if uiOrientation == .landscapeRight {
                 // Landscape Right - controls on the left side
                 HStack {
@@ -235,6 +261,7 @@ struct CameraView: View {
                     Spacer()
                 }
                 .rotationEffect(rotationAngle(for: uiOrientation))
+                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             } else if uiOrientation == .landscapeLeft {
                 // Landscape Left - controls on the right side
                 HStack {
@@ -244,6 +271,7 @@ struct CameraView: View {
                         .padding(.trailing, 20)
                 }
                 .rotationEffect(rotationAngle(for: uiOrientation))
+                .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
             }
         }
     }

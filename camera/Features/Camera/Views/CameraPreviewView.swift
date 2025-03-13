@@ -77,6 +77,9 @@ struct CameraPreviewView: UIViewRepresentable {
     
     // A container view that actively resists rotation changes
     class RotationLockedContainer: UIView {
+        // Add a property to track animation state
+        private var isAnimating = false
+        
         override init(frame: CGRect) {
             super.init(frame: frame)
             setupView()
@@ -121,12 +124,18 @@ struct CameraPreviewView: UIViewRepresentable {
         
         @objc private func orientationDidChange() {
             print("DEBUG: Container detected device orientation change")
-            enforceBounds()
+            // Use animation to prevent abrupt changes
+            UIView.animate(withDuration: 0.3) {
+                self.enforceBounds()
+            }
         }
         
         @objc private func interfaceOrientationDidChange() {
             print("DEBUG: Container detected interface orientation change")
-            enforceBounds()
+            // Use animation to prevent abrupt changes
+            UIView.animate(withDuration: 0.3) {
+                self.enforceBounds()
+            }
         }
         
         // Also enforce bounds when the view size changes - use updated method for iOS 17+
@@ -136,11 +145,17 @@ struct CameraPreviewView: UIViewRepresentable {
             if #available(iOS 17.0, *) {
                 // We handle this with registerForTraitChanges
             } else {
-                enforceBounds()
+                // Use animation to prevent abrupt changes
+                UIView.animate(withDuration: 0.3) {
+                    self.enforceBounds()
+                }
             }
         }
         
         private func enforceBounds() {
+            // Set flag to indicate animation in progress
+            isAnimating = true
+            
             // Always maintain full screen bounds regardless of rotation
             frame = UIScreen.main.bounds
             
@@ -149,12 +164,20 @@ struct CameraPreviewView: UIViewRepresentable {
                 preview.frame = bounds
                 preview.updateFrameSize()
             }
+            
+            // Reset animation flag after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.isAnimating = false
+            }
         }
         
         // Override these methods to prevent rotation from affecting our view
         override func layoutSubviews() {
             super.layoutSubviews()
-            enforceBounds()
+            // Only enforce bounds if not already animating to prevent conflicts
+            if !isAnimating {
+                enforceBounds()
+            }
         }
         
         override func didMoveToSuperview() {
@@ -213,12 +236,23 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         func updateFrameSize() {
+            // Use animation to prevent abrupt changes
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.3)
+            
             previewLayer.frame = bounds
             
             // Also update connection orientation
             if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
                 previewLayer.connection?.videoRotationAngle = 90
             }
+            
+            // Also update any LUT overlay layer
+            if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                overlay.frame = previewLayer.bounds
+            }
+            
+            CATransaction.commit()
         }
         
         func updateLUT(_ filter: CIFilter?) {
@@ -355,7 +389,7 @@ struct CameraPreviewView: UIViewRepresentable {
                 guard let self = self else { return }
                 
                 CATransaction.begin()
-                CATransaction.setDisableActions(true)
+                CATransaction.setAnimationDuration(0.3)
                 
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
