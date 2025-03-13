@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift":
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.d"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.swiftdeps"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.o"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.swiftconstvalues"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.dia"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift":
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.o"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.d"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.swiftdeps"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.dia"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift":
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.o"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.d"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.swiftdeps"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.dia"

@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift":
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/DocumentPicker.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/DocumentPicker.swiftdeps"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/DocumentPicker.o"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/DocumentPicker.dia"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/DocumentPicker.d"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewView.swift":
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewView.d"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewView.swiftdeps"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewView.dia"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewView.swiftconstvalues"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewView.o"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift":
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewImplementation.swiftdeps"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewImplementation.o"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewImplementation.swiftconstvalues"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewImplementation.d"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/x86_64/CameraPreviewImplementation.dia"

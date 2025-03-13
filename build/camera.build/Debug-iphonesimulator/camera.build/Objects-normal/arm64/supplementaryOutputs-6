@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift":
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.d"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.dia"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.swiftdeps"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.o"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift":
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.o"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.swiftdeps"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.d"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.dia"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift":
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.dia"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.o"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.d"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.swiftdeps"

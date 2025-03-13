@@ -1,0 +1,268 @@
+{
+  "" : {
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera-master.dia",
+    "emit-module-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera-master-emit-module.dia",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera-master.swiftdeps"
+  },
+  "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataClass~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Item+CoreDataProperties~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/camera+CoreDataModel~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/App/AppDelegate.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CIContext+Shared~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/UIDeviceOrientation+Extensions.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/CameraOrientation.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientation~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/CameraOrientationLock.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraOrientationLock~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/OrientationFixView.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/OrientationFixView~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraViewModel~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraError~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/ShutterAngle~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/VideoOutputDelegate~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/DocumentPicker~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewImplementation~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewView.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraPreviewView~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CameraView~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTProcessor~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsModel.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsModel~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsView.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/SettingsView~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/Persistence.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/Persistence~partial.swiftmodule"
+  },
+  "/Users/spencer/Documents/GitHub/camera/camera/cameraApp.swift" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.dia",
+    "index-unit-output-path" : "/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.bc",
+    "object" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.o",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp.swiftdeps",
+    "swiftmodule" : "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/cameraApp~partial.swiftmodule"
+  }
+}

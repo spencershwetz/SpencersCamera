@@ -586,11 +586,35 @@ class CameraViewModel: NSObject, ObservableObject {
         guard let device = device else { return }
         do {
             try device.lockForConfiguration()
-            device.setExposureModeCustom(duration: speed, iso: device.iso) { _ in }
+            
+            // Get the current device's supported ISO range
+            let minISO = device.activeFormat.minISO
+            let maxISO = device.activeFormat.maxISO
+            
+            // Get current ISO value, either from device or our stored value
+            let currentISO = device.iso
+            
+            // Ensure the ISO value is within the supported range
+            let clampedISO = min(max(minISO, currentISO), maxISO)
+            
+            // If ISO is 0 or outside valid range, use our stored value or minISO as fallback
+            let safeISO: Float
+            if clampedISO <= 0 {
+                safeISO = max(self.iso, minISO)
+                print("DEBUG: Corrected invalid ISO \(currentISO) to \(safeISO)")
+            } else {
+                safeISO = clampedISO
+            }
+            
+            device.setExposureModeCustom(duration: speed, iso: safeISO) { _ in }
             device.unlockForConfiguration()
             
             DispatchQueue.main.async {
                 self.shutterSpeed = speed
+                // Update our stored ISO if we had to correct it
+                if safeISO != currentISO {
+                    self.iso = safeISO
+                }
             }
         } catch {
             print("❌ Shutter speed error: \(error)")
@@ -883,8 +907,33 @@ class CameraViewModel: NSObject, ObservableObject {
                 device.focusMode = .continuousAutoFocus
             }
             
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
+            // Only set auto exposure if we're in auto mode
+            if isAutoExposureEnabled {
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
+            } else {
+                // If in manual mode, ensure we have a valid ISO value
+                if device.isExposureModeSupported(.custom) {
+                    // Get the current device's supported ISO range
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    
+                    // Ensure the ISO value is within the supported range
+                    let clampedISO = min(max(minISO, self.iso), maxISO)
+                    
+                    // Update our stored value if needed
+                    if clampedISO != self.iso {
+                        print("DEBUG: Optimizing video - Clamped ISO from \(self.iso) to \(clampedISO)")
+                        DispatchQueue.main.async {
+                            self.iso = clampedISO
+                        }
+                    }
+                    
+                    device.exposureMode = .custom
+                    device.setExposureModeCustom(duration: device.exposureDuration, 
+                                                iso: clampedISO) { _ in }
+                }
             }
             
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
@@ -1151,3 +1200,4 @@ extension CameraError {
         return .custom(message: message)
     }
 }
+

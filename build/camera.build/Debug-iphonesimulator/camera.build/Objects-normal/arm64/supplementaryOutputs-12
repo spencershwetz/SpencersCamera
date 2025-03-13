@@ -1,0 +1,18 @@
+"/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift":
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.d"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.swiftconstvalues"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.swiftdeps"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.o"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTVideoPreviewView.dia"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift":
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.dia"
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.swiftconstvalues"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.d"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.o"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/CubeLUTLoader.swiftdeps"
+"/Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift":
+  const-values: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.swiftconstvalues"
+  object: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.o"
+  dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.d"
+  diagnostics: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.dia"
+  swift-dependencies: "/Users/spencer/Documents/GitHub/camera/build/camera.build/Debug-iphonesimulator/camera.build/Objects-normal/arm64/LUTManager.swiftdeps"
