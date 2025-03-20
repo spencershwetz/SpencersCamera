@@ -162,6 +162,15 @@ class CameraViewModel: NSObject, ObservableObject {
     // Save the original rotation values to restore them after recording
     private var originalRotationValues: [AVCaptureConnection: CGFloat] = [:]
     
+    // MARK: - Viewfinder UI Properties
+    @Published var audioLevels: [Float] = [0.0, 0.0]
+    @Published var recordingTimeString: String = "00:00"
+    @Published var currentZoomLevel: Double = 1.0 {
+        didSet {
+            updateZoom(to: currentZoomLevel)
+        }
+    }
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -623,36 +632,42 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     func startRecording() {
-    guard !isRecording && !isProcessingRecording else { return }
+        guard !isRecording && !isProcessingRecording else { return }
  
-    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    let videoName = "recording-\(Date().timeIntervalSince1970).mov"
-    currentRecordingURL = documentsPath.appendingPathComponent(videoName)
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let videoName = "recording-\(Date().timeIntervalSince1970).mov"
+        currentRecordingURL = documentsPath.appendingPathComponent(videoName)
  
-    guard let videoConnection = movieOutput.connection(with: .video),
-          videoConnection.isVideoRotationAngleSupported(0) else {
-        error = .configurationFailed
-        return
+        guard let videoConnection = movieOutput.connection(with: .video),
+              videoConnection.isVideoRotationAngleSupported(0) else {
+            error = .configurationFailed
+            return
+        }
+ 
+        let orientation = UIDevice.current.orientation
+ 
+        switch orientation {
+        case .portrait:
+            videoConnection.videoRotationAngle = 90
+        case .portraitUpsideDown:
+            videoConnection.videoRotationAngle = 270
+        case .landscapeLeft:
+            videoConnection.videoRotationAngle = 0
+        case .landscapeRight:
+            videoConnection.videoRotationAngle = 180
+        default:
+            videoConnection.videoRotationAngle = 90
+        }
+ 
+        movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
+        isRecording = true
+        
+        // Start updating audio levels
+        startAudioLevelMonitoring()
+        
+        // Start recording timer
+        startRecordingTimer()
     }
- 
-    let orientation = UIDevice.current.orientation
- 
-    switch orientation {
-    case .portrait:
-        videoConnection.videoRotationAngle = 90
-    case .portraitUpsideDown:
-        videoConnection.videoRotationAngle = 270
-    case .landscapeLeft:
-        videoConnection.videoRotationAngle = 0
-    case .landscapeRight:
-        videoConnection.videoRotationAngle = 180
-    default:
-        videoConnection.videoRotationAngle = 90
-    }
- 
-    movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
-    isRecording = true
-}
     
     func stopRecording() {
         guard isRecording else {
@@ -686,6 +701,12 @@ class CameraViewModel: NSObject, ObservableObject {
             // Re-enforce orientation lock for UI
             self.updateInterfaceOrientation(lockCamera: true)
         }
+        
+        // Stop updating audio levels
+        stopAudioLevelMonitoring()
+        
+        // Stop recording timer
+        stopRecordingTimer()
     }
     
     private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
@@ -1099,6 +1120,97 @@ class CameraViewModel: NSObject, ObservableObject {
             if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
                 connection.videoRotationAngle = 90
             }
+        }
+    }
+    
+    // MARK: - Audio Level Monitoring
+    
+    private var audioLevelTimer: Timer?
+    
+    private func startAudioLevelMonitoring() {
+        // Stop any existing timer
+        stopAudioLevelMonitoring()
+        
+        // Create a new timer that updates audio levels
+        audioLevelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Simulate audio levels for now - in a real app we would get these from the audio input
+            let randomLevel1 = Float.random(in: 0.2...0.8)
+            let randomLevel2 = Float.random(in: 0.2...0.8)
+            
+            DispatchQueue.main.async {
+                self.audioLevels = [randomLevel1, randomLevel2]
+            }
+        }
+    }
+    
+    private func stopAudioLevelMonitoring() {
+        audioLevelTimer?.invalidate()
+        audioLevelTimer = nil
+        
+        DispatchQueue.main.async {
+            self.audioLevels = [0.0, 0.0]
+        }
+    }
+    
+    // MARK: - Recording Timer
+    
+    private var recordingStartTime: Date?
+    private var recordingTimer: Timer?
+    
+    private func startRecordingTimer() {
+        // Reset timer
+        stopRecordingTimer()
+        
+        // Set start time
+        recordingStartTime = Date()
+        
+        // Create timer to update elapsed time
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self, let startTime = self.recordingStartTime else { return }
+            
+            let elapsed = Date().timeIntervalSince(startTime)
+            let minutes = Int(elapsed) / 60
+            let seconds = Int(elapsed) % 60
+            
+            DispatchQueue.main.async {
+                self.recordingTimeString = String(format: "%02d:%02d", minutes, seconds)
+            }
+        }
+    }
+    
+    private func stopRecordingTimer() {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        recordingStartTime = nil
+        
+        DispatchQueue.main.async {
+            self.recordingTimeString = "00:00"
+        }
+    }
+    
+    // MARK: - Zoom Control
+    
+    func updateZoom(to level: Double) {
+        guard let device = device, level > 0 else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Check if the requested zoom level is within the device's zoom range
+            let minZoom = 1.0
+            let maxZoom = device.activeFormat.videoMaxZoomFactor
+            let clampedZoom = min(max(level, minZoom), maxZoom)
+            
+            if device.videoZoomFactor != clampedZoom {
+                device.videoZoomFactor = clampedZoom
+                print("DEBUG: Set zoom factor to \(clampedZoom)x")
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            print("ERROR: Failed to set zoom: \(error.localizedDescription)")
         }
     }
 }
