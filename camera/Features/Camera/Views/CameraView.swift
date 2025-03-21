@@ -4,6 +4,14 @@ import CoreMedia
 import UIKit
 import AVFoundation
 
+// Custom struct for padding values
+struct PaddingValues {
+    let top: CGFloat
+    let leading: CGFloat
+    let bottom: CGFloat
+    let trailing: CGFloat
+}
+
 struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     @State private var orientation = UIDevice.current.orientation
@@ -38,9 +46,6 @@ struct CameraView: View {
     var body: some View {
         // Container that doesn't rotate
         ZStack {
-            // Black background
-            Color.black.ignoresSafeArea()
-            
             // Create a frame with the correct aspect ratio regardless of orientation
             GeometryReader { outerGeometry in
                 if viewModel.isSessionRunning {
@@ -48,7 +53,8 @@ struct CameraView: View {
                     ZStack {
                         // Fixed camera preview layer
                         FixedOrientationCameraPreview(session: viewModel.session, viewModel: viewModel)
-                            .ignoresSafeArea()
+                            // Add explicit frame to ensure it stays within bounds
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
                         // UI overlay
                         CameraViewfinderOverlay(
@@ -58,11 +64,20 @@ struct CameraView: View {
                     }
                     // Apply rotation to the entire container
                     .rotationEffect(rotationAngle(for: uiOrientation))
-                    // Use a container size appropriate for the orientation
+                    // Use a container size appropriate for the orientation with padding
                     .frame(
                         width: isLandscapeOrientation(uiOrientation) ? outerGeometry.size.height : outerGeometry.size.width,
                         height: isLandscapeOrientation(uiOrientation) ? outerGeometry.size.width : outerGeometry.size.height
                     )
+                    // Add padding to create space around the camera view
+                    .padding(EdgeInsets(
+                        top: calculatePadding(in: outerGeometry, orientation: uiOrientation).top,
+                        leading: calculatePadding(in: outerGeometry, orientation: uiOrientation).leading,
+                        bottom: calculatePadding(in: outerGeometry, orientation: uiOrientation).bottom,
+                        trailing: calculatePadding(in: outerGeometry, orientation: uiOrientation).trailing
+                    ))
+                    // Apply scaling to make the preview appear smaller
+                    .scaleEffect(0.8)
                     .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
                     .opacity(isRotating ? 0.99 : 1.0)
                     // Center in the screen
@@ -231,5 +246,33 @@ struct CameraView: View {
         default:
             return .zero
         }
+    }
+    
+    /// Calculate padding values based on device orientation and screen size
+    private func calculatePadding(in geometry: GeometryProxy, orientation: UIDeviceOrientation) -> PaddingValues {
+        let isLandscape = orientation == .landscapeLeft || orientation == .landscapeRight
+        
+        // Control how small the preview should be (lower value = smaller preview)
+        let previewScaleFactor: CGFloat = 0.6
+        
+        // Calculate padding based on available space and desired scale
+        let availableWidth = geometry.size.width
+        let availableHeight = geometry.size.height
+        
+        // Calculate padding to achieve the desired scale factor
+        let horizontalPadding = (availableWidth * (1 - previewScaleFactor)) / 2
+        let verticalPadding = (availableHeight * (1 - previewScaleFactor)) / 2
+        
+        // Add extra bottom padding for controls area
+        let bottomExtraPadding = isLandscape ? verticalPadding * 0.8 : verticalPadding * 0.8
+        
+        print("Applying scaled padding - H: \(horizontalPadding), V: \(verticalPadding), Bottom extra: \(bottomExtraPadding)")
+        
+        return PaddingValues(
+            top: verticalPadding,
+            leading: horizontalPadding,
+            bottom: verticalPadding + bottomExtraPadding,
+            trailing: horizontalPadding
+        )
     }
 } 

@@ -68,7 +68,10 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> VideoPreviewView {
         let viewFinder = VideoPreviewView()
         viewFinder.backgroundColor = .black
-        viewFinder.videoPreviewLayer.cornerRadius = 0
+        viewFinder.videoPreviewLayer.cornerRadius = 20
+        viewFinder.videoPreviewLayer.masksToBounds = true
+        viewFinder.videoPreviewLayer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
+        viewFinder.videoPreviewLayer.borderWidth = 1
         viewFinder.videoPreviewLayer.session = session
         viewFinder.videoPreviewLayer.videoGravity = .resizeAspectFill
         
@@ -84,6 +87,8 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: VideoPreviewView, context: Context) {
-        // No updates needed here - orientation is fixed to portrait
+        // Update the frame to match the parent view's bounds
+        print("DEBUG: CameraPreview updateUIView called - ensuring proper bounds")
+        uiView.videoPreviewLayer.frame = uiView.bounds
     }
 } 
