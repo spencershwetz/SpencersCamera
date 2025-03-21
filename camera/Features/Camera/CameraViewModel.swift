@@ -730,7 +730,7 @@ class CameraViewModel: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            // Get device and interface orientation only for logging
+            // Get device and interface orientation (for logging only)
             let deviceOrientation = UIDevice.current.orientation
             let interfaceOrientation: UIInterfaceOrientation
             
@@ -741,18 +741,22 @@ class CameraViewModel: NSObject, ObservableObject {
                 interfaceOrientation = self.currentInterfaceOrientation
             }
             
-            print("🔒 LOCKING CAMERA - Always using portrait orientation (90°)")
-            print("🔍 DEVICE ORIENTATION - Physical Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)")
-            
-            // ALWAYS use portrait orientation (90°) regardless of device orientation
+            // ALWAYS use portrait orientation (90°) for camera regardless of device orientation
             let rotationAngle: CGFloat = 90
+            print("📱 Setting camera orientation to FIXED portrait (90°) regardless of device orientation")
             
+            print("🔍 DEVICE ORIENTATION - Physical Device: \(deviceOrientation.rawValue) (\(self.describeDeviceOrientation(deviceOrientation))), Interface: \(interfaceOrientation.rawValue) (\(self.describeInterfaceOrientation(interfaceOrientation)))")
+            
+            // Apply the fixed portrait rotation angle
             connection.videoRotationAngle = rotationAngle
-            print("🔒 Camera orientation locked to portrait (90°) regardless of device orientation")
+            print("🔄 Camera orientation FIXED to portrait: \(rotationAngle)°")
             
             if connection.isVideoMirroringSupported {
                 connection.isVideoMirrored = false
             }
+            
+            // Post notification that orientation has changed
+            NotificationCenter.default.post(name: .orientationLockEnforced, object: nil)
         }
     }
     

@@ -411,21 +411,17 @@ struct CameraContentView: View {
     
     // Camera preview component
     private func cameraPreviewView(geometry: GeometryProxy) -> some View {
-        // Calculate dimensions for portrait orientation regardless of device orientation
+        // Calculate dimensions based on device orientation
         let isLandscape = geometry.size.width > geometry.size.height
         
-        // Calculate the width and height to maintain a portrait 9:16 aspect ratio
+        // Calculate dimensions to match the device orientation (landscape or portrait)
         var previewWidth: CGFloat
         var previewHeight: CGFloat
         
         if isLandscape {
-            // In landscape, use height as reference and calculate width to maintain 9:16 ratio
-            previewHeight = geometry.size.height * 0.8 // Use 80% of the height
-            previewWidth = previewHeight * (9.0/16.0)  // 9:16 ratio in portrait means 9/16 ratio for width/height
-        } else {
-            // In portrait, use width as reference
-            previewWidth = geometry.size.width
-            previewHeight = previewWidth * (16.0/9.0)  // 9:16 aspect ratio
+            // In landscape mode, use landscape aspect ratio (16:9)
+            previewWidth = geometry.size.width * 0.9 // Use 90% of available width
+            previewHeight = previewWidth * (9.0/16.0) // 16:9 landscape aspect ratio
             
             // If this would be too tall, scale it down
             if previewHeight > geometry.size.height * 0.8 {
@@ -433,10 +429,21 @@ struct CameraContentView: View {
                 previewWidth *= scale
                 previewHeight = geometry.size.height * 0.8
             }
+        } else {
+            // In portrait mode, use portrait aspect ratio (9:16)
+            previewWidth = geometry.size.width * 0.95 // Use 95% of available width
+            previewHeight = previewWidth * (16.0/9.0) // 9:16 portrait aspect ratio
+            
+            // If this would be too tall, scale it down
+            if previewHeight > geometry.size.height * 0.7 {
+                let scale = (geometry.size.height * 0.7) / previewHeight
+                previewWidth *= scale
+                previewHeight = geometry.size.height * 0.7
+            }
         }
         
         // Log the dimensions to verify they're consistent
-        print("📸 CAMERA PREVIEW - Using portrait dimensions: \(previewWidth) x \(previewHeight)")
+        print("📸 CAMERA PREVIEW - Using \(isLandscape ? "landscape" : "portrait") dimensions: \(previewWidth) x \(previewHeight)")
         
         return ZStack {
             // Camera preview layer
@@ -454,9 +461,23 @@ struct CameraContentView: View {
                 orientation: orientation
             )
                 .frame(width: previewWidth, height: previewHeight)
+                
+            // Add debug overlay for testing
+            VStack {
+                Text("Debug: Orientation \(isLandscape ? "Landscape" : "Portrait")")
+                    .foregroundColor(.yellow)
+                Text("Size: \(Int(previewWidth))×\(Int(previewHeight))")
+                    .foregroundColor(.yellow)
+                Text("Safe: T:\(Int(geometry.safeAreaInsets.top)) L:\(Int(geometry.safeAreaInsets.leading)) B:\(Int(geometry.safeAreaInsets.bottom)) R:\(Int(geometry.safeAreaInsets.trailing))")
+                    .foregroundColor(.yellow)
+            }
+            .font(.system(size: 12))
+            .padding(6)
+            .background(Color.black.opacity(0.3))
+            .cornerRadius(8)
+            .position(x: previewWidth / 2, y: 30)
         }
-        // No need for scale effect as we're controlling the size directly
-        // Use calculated dimensions that maintain portrait aspect ratio
+        // Frame with dimensions appropriate for the orientation
         .frame(width: previewWidth, height: previewHeight)
         // Center the preview in the available space
         .position(
@@ -471,21 +492,35 @@ struct CameraContentView: View {
         let isLandscape = geometry.size.width > geometry.size.height
         
         // Calculate control dimensions based on available space
-        // For portrait orientation controls, we use a consistent width regardless of device orientation
         var controlWidth: CGFloat
         var controlHeight: CGFloat
+        var controlPosition: CGPoint
         
         if isLandscape {
-            // In landscape, match the width of our portrait-oriented preview
-            let previewHeight = geometry.size.height * 0.8
-            let previewWidth = previewHeight * (9.0/16.0)
+            // In landscape, create wider controls and position them better
+            
+            // Calculate width based on the same calculation used for the preview
+            let previewHeight = geometry.size.height * 0.9
+            let previewWidth = max(previewHeight * (9.0/16.0), geometry.size.width * 0.4)
             
             controlWidth = previewWidth
-            controlHeight = geometry.size.height * 0.15 // Smaller height in landscape
+            controlHeight = geometry.size.height * 0.2 // Larger height in landscape
+            
+            // Position controls centered below the preview
+            controlPosition = CGPoint(
+                x: geometry.size.width / 2,
+                y: geometry.size.height - (controlHeight / 2) - geometry.safeAreaInsets.bottom
+            )
         } else {
-            // In portrait, use the full width
-            controlWidth = geometry.size.width
+            // In portrait, use a percentage of the width
+            controlWidth = geometry.size.width * 0.95
             controlHeight = geometry.size.height * 0.25
+            
+            // Position controls at the bottom of the screen
+            controlPosition = CGPoint(
+                x: geometry.size.width / 2,
+                y: geometry.size.height * 0.85
+            )
         }
         
         // Log the dimensions to verify they're consistent
@@ -499,12 +534,7 @@ struct CameraContentView: View {
         }
         // Frame with calculated dimensions
         .frame(width: controlWidth, height: controlHeight)
-        // Position the controls at appropriate location based on orientation
-        .position(
-            x: geometry.size.width / 2,
-            // In portrait mode, position controls near the bottom
-            // In landscape mode, we position them below the centered camera preview
-            y: geometry.size.height * (isLandscape ? 0.65 : 0.85)
-        )
+        // Position the controls using the calculated position
+        .position(controlPosition)
     }
 } 

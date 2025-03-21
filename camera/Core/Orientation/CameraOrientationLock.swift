@@ -276,10 +276,13 @@ final class CameraOrientationLock {
     static func handleDeviceOrientationChange(_ newOrientation: UIDeviceOrientation) {
         print("🔄 Device orientation changed: \(newOrientation) (value: \(newOrientation.rawValue))")
         
-        // If we're locked to portrait but the device is in landscape, enforce the lock
-        if isLocked && orientationLock == .portrait && newOrientation.isLandscape {
-            // Refresh the lock to ensure it's maintained during landscape transition
-            lockToPortrait()
+        // If we're locked but want to stay locked, ensure the lock is maintained
+        if isLocked && orientationLock != .all {
+            forceOrientationUpdate()
+        } else {
+            // If we're not locked, allow the orientation to change naturally
+            // Post notification for any views that need to adapt to the new orientation
+            NotificationCenter.default.post(name: .orientationLockEnforced, object: nil)
         }
     }
 }
