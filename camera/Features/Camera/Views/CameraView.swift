@@ -12,6 +12,61 @@ struct PaddingValues {
     let trailing: CGFloat
 }
 
+/// A container view that enforces portrait layout dimensions regardless of device orientation
+struct PortraitFixedContainer<Content: View>: View {
+    var content: Content
+    
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+    
+    var body: some View {
+        GeometryReader { geometry in
+            // Create a fixed portrait container with the original width and proportional height
+            let portraitFrame = calculatePortraitFrame(from: geometry.size)
+            
+            ZStack {
+                // Black background to fill any gaps
+                Color.black
+                    .ignoresSafeArea()
+                
+                // Content is centered in a fixed portrait frame
+                content
+                    .frame(width: portraitFrame.width, height: portraitFrame.height)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            }
+            .onAppear {
+                print("🖼️ PORTRAIT CONTAINER - Created fixed portrait frame: \(portraitFrame.width)x\(portraitFrame.height)")
+            }
+            .onChange(of: geometry.size) { oldValue, newValue in
+                let newPortraitFrame = calculatePortraitFrame(from: newValue)
+                print("🖼️ PORTRAIT CONTAINER - Window size changed: \(oldValue) → \(newValue)")
+                print("🖼️ PORTRAIT CONTAINER - New portrait frame: \(newPortraitFrame.width)x\(newPortraitFrame.height)")
+            }
+        }
+    }
+    
+    /// Calculate a portrait frame (taller than wide) regardless of device orientation
+    private func calculatePortraitFrame(from size: CGSize) -> CGSize {
+        // Always use portrait dimensions (narrower width, taller height)
+        let maxDimension = max(size.width, size.height)
+        let minDimension = min(size.width, size.height)
+        
+        // Standard 9:16 aspect ratio (portrait)
+        let portraitWidth = minDimension
+        let portraitHeight = minDimension * (16/9)
+        
+        // Check if the height exceeds the available space
+        if portraitHeight > maxDimension {
+            // Scale down to fit within the available height
+            let scale = maxDimension / portraitHeight
+            return CGSize(width: portraitWidth * scale, height: maxDimension)
+        }
+        
+        return CGSize(width: portraitWidth, height: portraitHeight)
+    }
+}
+
 struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     @State private var orientation = UIDevice.current.orientation
@@ -44,111 +99,43 @@ struct CameraView: View {
     }
     
     var body: some View {
-        ZStack {
-            // Black background for the entire screen
-            Color.black.ignoresSafeArea()
-            
-            GeometryReader { outerGeometry in
-                if viewModel.isSessionRunning {
-                    // Main container for content
-                    ZStack {
-                        // CAMERA PREVIEW
-                        // Position this in the upper portion of the screen
-                        ZStack {
-                            // Camera preview layer
-                            FixedOrientationCameraPreview(session: viewModel.session, viewModel: viewModel)
-                                .cornerRadius(20)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                                )
-                                .frame(
-                                    width: isLandscapeOrientation(uiOrientation) ? 
-                                          outerGeometry.size.height * (16/9) : 
-                                          outerGeometry.size.width,
-                                    height: isLandscapeOrientation(uiOrientation) ? 
-                                           outerGeometry.size.height : 
-                                           outerGeometry.size.width * (16/9)
-                                )
+        // Wrap content in the PortraitFixedContainer to maintain portrait layout
+        PortraitFixedContainer {
+            ZStack {
+                // Black background for the entire screen
+                Color.black.ignoresSafeArea()
+                
+                GeometryReader { outerGeometry in
+                    if viewModel.isSessionRunning {
+                        // Main camera content view with all components
+                        CameraContentView(
+                            viewModel: viewModel,
+                            lutManager: lutManager,
+                            orientation: uiOrientation,
+                            isRotating: isRotating,
+                            animationDuration: rotationAnimationDuration
+                        )
+                    } else {
+                        // Show loading or error state
+                        VStack {
+                            Text("Starting camera...")
+                                .font(.headline)
+                                .foregroundColor(.white)
                             
-                            // Camera overlay with top status bar and grid lines
-                            CameraViewfinderOverlay(
-                                viewModel: viewModel,
-                                orientation: uiOrientation
-                            )
+                            if viewModel.status == .failed, let error = viewModel.error {
+                                Text("Error: \(error.description)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.red)
+                                    .padding()
+                            }
                         }
-                        // Apply scale effect to make the preview smaller
-                        .scaleEffect(0.8)
-                        // Apply rotation to camera preview
-                        .rotationEffect(rotationAngle(for: uiOrientation))
-                        // Use appropriate sizing for orientation with proper aspect ratio (16:9 or 9:16)
-                        .frame(
-                            width: isLandscapeOrientation(uiOrientation) ? 
-                                  // For landscape: maintain 16:9 aspect ratio
-                                  outerGeometry.size.height * (16/9) : 
-                                  // For portrait: use full width
-                                  outerGeometry.size.width,
-                            height: isLandscapeOrientation(uiOrientation) ? 
-                                  // For landscape: use full height
-                                  outerGeometry.size.height : 
-                                  // For portrait: maintain 9:16 aspect ratio
-                                  outerGeometry.size.width * (16/9)
-                        )
-                        // Position in the upper part of the screen
-                        .position(
-                            x: outerGeometry.size.width / 2,
-                            y: isLandscapeOrientation(uiOrientation) ? 
-                               outerGeometry.size.height / 2 : 
-                               outerGeometry.size.height * 0.4
-                        )
-                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
-                        
-                        // BOTTOM CONTROLS
-                        // These are positioned at the bottom, closer to the USB-C port
-                        ZStack {
-                            CameraBottomControlsView(
-                                viewModel: viewModel,
-                                orientation: uiOrientation
-                            )
-                        }
-                        .rotationEffect(rotationAngle(for: uiOrientation))
-                        .frame(
-                            width: isLandscapeOrientation(uiOrientation) ? 
-                                  outerGeometry.size.height * 0.9 : 
-                                  outerGeometry.size.width,
-                            height: isLandscapeOrientation(uiOrientation) ? 
-                                   outerGeometry.size.width * 0.3 : 
-                                   outerGeometry.size.height * 0.25
-                        )
-                        // Position at the bottom of the screen, near USB-C port
-                        .position(
-                            x: outerGeometry.size.width / 2,
-                            y: isLandscapeOrientation(uiOrientation) ? 
-                               outerGeometry.size.height / 2 : 
-                               outerGeometry.size.height * 0.85
-                        )
-                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black)
                     }
-                    .opacity(isRotating ? 0.99 : 1.0)
-                } else {
-                    // Show loading or error state
-                    VStack {
-                        Text("Starting camera...")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        if viewModel.status == .failed, let error = viewModel.error {
-                            Text("Error: \(error.description)")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .padding()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
                 }
             }
         }
+        .ignoresSafeArea()
         .onAppear {
             // Start the camera session when the view appears
             if !viewModel.session.isRunning {
@@ -184,6 +171,9 @@ struct CameraView: View {
             
             // Enable device orientation notifications
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            
+            // Print that we're enforcing portrait orientation for the UI
+            print("🔒 CAMERA VIEW - Enforcing portrait orientation for UI and camera preview")
         }
         .onDisappear {
             // Remove notification observer when the view disappears
@@ -204,23 +194,13 @@ struct CameraView: View {
         }
         .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
             if newValue.isValidInterfaceOrientation {
-                print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
+                print("🔒 CAMERA VIEW - Device orientation changed to \(newValue.rawValue), but keeping UI in portrait")
                 
-                // Set rotating flag to true before animation starts
-                isRotating = true
-                
-                // Use animation for smooth transition
-                withAnimation(.easeInOut(duration: rotationAnimationDuration)) {
-                    uiOrientation = newValue
-                }
-                
-                // Always lock camera preview orientation
+                // Still update camera and allow system UI to rotate
                 viewModel.updateInterfaceOrientation(lockCamera: true)
                 
-                // Reset rotating flag after animation completes
-                DispatchQueue.main.asyncAfter(deadline: .now() + rotationAnimationDuration) {
-                    isRotating = false
-                }
+                // But we're not changing uiOrientation - keeping it portrait
+                // This keeps all our UI elements in portrait orientation
             }
         }
         .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
@@ -281,7 +261,7 @@ struct CameraView: View {
     private func rotationAngle(for orientation: UIDeviceOrientation) -> Angle {
         switch orientation {
         case .portrait:
-            return .zero
+            return .degrees(0)
         case .portraitUpsideDown:
             return .degrees(180)
         case .landscapeLeft:
@@ -289,7 +269,161 @@ struct CameraView: View {
         case .landscapeRight:
             return .degrees(-90)
         default:
-            return .zero
+            return .degrees(0)
         }
+    }
+    
+    // Computed properties to simplify code
+    private var isLandscape: Bool {
+        // Always return false to keep UI in portrait orientation
+        return false
+    }
+    
+    // Rotation angle for UI components - always portrait (0°)
+    private var uiRotationAngle: Angle {
+        // Always return 0° (portrait) regardless of device orientation
+        return .degrees(0)
+    }
+}
+
+// Break out the camera content into a separate view to reduce complexity
+struct CameraContentView: View {
+    let viewModel: CameraViewModel
+    let lutManager: LUTManager
+    let orientation: UIDeviceOrientation
+    let isRotating: Bool
+    let animationDuration: Double
+    
+    // Computed properties to simplify code - always portrait mode
+    private var isLandscape: Bool {
+        // Always return false to keep UI in portrait orientation
+        return false
+    }
+    
+    // Rotation angle for UI components - always portrait (0°)
+    private var uiRotationAngle: Angle {
+        // Always return 0° (portrait) regardless of device orientation
+        return .degrees(0)
+    }
+    
+    var body: some View {
+        GeometryReader { outerGeometry in
+            ZStack {
+                // CAMERA PREVIEW
+                cameraPreviewView(geometry: outerGeometry)
+                
+                // BOTTOM CONTROLS
+                bottomControlsView(geometry: outerGeometry)
+            }
+            .opacity(isRotating ? 0.99 : 1.0)
+            .onAppear {
+                printOrientationInfo()
+                print("📏 FRAME SIZE - Initial: width=\(outerGeometry.size.width), height=\(outerGeometry.size.height)")
+            }
+            .onChange(of: orientation) { newOrientation in
+                printOrientationInfo()
+                print("📏 FRAME SIZE - After orientation change: width=\(outerGeometry.size.width), height=\(outerGeometry.size.height)")
+                print("📏 SAFE AREA - Top: \(outerGeometry.safeAreaInsets.top), Bottom: \(outerGeometry.safeAreaInsets.bottom), Leading: \(outerGeometry.safeAreaInsets.leading), Trailing: \(outerGeometry.safeAreaInsets.trailing)")
+            }
+            .onChange(of: outerGeometry.size) { oldSize, newSize in
+                print("📏 GEOMETRY CHANGED - Old: \(oldSize.width)x\(oldSize.height), New: \(newSize.width)x\(newSize.height)")
+                if oldSize.width != newSize.width || oldSize.height != newSize.height {
+                    print("⚠️ LAYOUT ISSUE - Size changed, likely due to device rotation")
+                }
+            }
+        }
+    }
+    
+    private func printOrientationInfo() {
+        print("🔒 CAMERA CONTENT VIEW - Device Orientation: \(orientation.rawValue) (\(describeDeviceOrientation(orientation)))")
+        print("🔒 UI ROTATION - Locked to portrait (0°), isLandscape: \(isLandscape)")
+        
+        // Get interface orientation
+        let interfaceOrientation: UIInterfaceOrientation
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            interfaceOrientation = windowScene.interfaceOrientation
+            print("🔍 INTERFACE ORIENTATION - \(interfaceOrientation.rawValue) (\(describeInterfaceOrientation(interfaceOrientation)))")
+        }
+    }
+    
+    private func describeDeviceOrientation(_ orientation: UIDeviceOrientation) -> String {
+        switch orientation {
+        case .portrait: return "Portrait"
+        case .portraitUpsideDown: return "Portrait Upside Down"
+        case .landscapeLeft: return "Landscape Left (home button right)"
+        case .landscapeRight: return "Landscape Right (home button left)" 
+        case .faceUp: return "Face Up"
+        case .faceDown: return "Face Down"
+        case .unknown: return "Unknown"
+        @unknown default: return "Unknown New Case"
+        }
+    }
+    
+    private func describeInterfaceOrientation(_ orientation: UIInterfaceOrientation) -> String {
+        switch orientation {
+        case .portrait: return "Portrait"
+        case .portraitUpsideDown: return "Portrait Upside Down"
+        case .landscapeLeft: return "Landscape Left (home button left)"
+        case .landscapeRight: return "Landscape Right (home button right)"
+        case .unknown: return "Unknown"
+        @unknown default: return "Unknown New Case"
+        }
+    }
+    
+    // Camera preview component
+    private func cameraPreviewView(geometry: GeometryProxy) -> some View {
+        // Always use portrait dimensions regardless of orientation
+        let width = geometry.size.width
+        let height = geometry.size.width * (16/9)
+        
+        return ZStack {
+            // Camera preview layer
+            FixedOrientationCameraPreview(viewModel: viewModel, session: viewModel.session)
+                .cornerRadius(20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+                .frame(width: width, height: height)
+            
+            // Camera overlay with top status bar and grid lines
+            CameraViewfinderOverlay(
+                viewModel: viewModel,
+                orientation: orientation
+            )
+        }
+        // Apply scale effect to make the preview smaller
+        .scaleEffect(0.8)
+        // Do NOT rotate the UI - keep it in portrait orientation
+        // No rotationEffect here
+        // Use portrait dimensions with proper aspect ratio
+        .frame(width: width, height: height)
+        // Position in the upper part of the screen
+        .position(
+            x: geometry.size.width / 2,
+            y: geometry.size.height * 0.4
+        )
+    }
+    
+    // Bottom controls component
+    private func bottomControlsView(geometry: GeometryProxy) -> some View {
+        // Always use portrait dimensions
+        let width = geometry.size.width
+        let height = geometry.size.height * 0.25
+        
+        return ZStack {
+            CameraBottomControlsView(
+                viewModel: viewModel,
+                orientation: orientation
+            )
+        }
+        // Do NOT rotate the UI - keep it in portrait orientation
+        // No rotationEffect here
+        .frame(width: width, height: height)
+        // Position at the bottom of the screen
+        .position(
+            x: geometry.size.width / 2,
+            y: geometry.size.height * 0.85
+        )
     }
 } 

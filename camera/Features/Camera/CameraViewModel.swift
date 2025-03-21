@@ -633,32 +633,42 @@ class CameraViewModel: NSObject, ObservableObject {
     
     func startRecording() {
         guard !isRecording && !isProcessingRecording else { return }
- 
+
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let videoName = "recording-\(Date().timeIntervalSince1970).mov"
         currentRecordingURL = documentsPath.appendingPathComponent(videoName)
- 
+
         guard let videoConnection = movieOutput.connection(with: .video),
               videoConnection.isVideoRotationAngleSupported(0) else {
             error = .configurationFailed
             return
         }
- 
-        let orientation = UIDevice.current.orientation
- 
-        switch orientation {
+
+        // Get the interface orientation for consistent handling
+        let interfaceOrientation: UIInterfaceOrientation
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            interfaceOrientation = windowScene.interfaceOrientation
+        } else {
+            interfaceOrientation = .portrait
+        }
+
+        // Set rotation angle based on interface orientation
+        switch interfaceOrientation {
         case .portrait:
             videoConnection.videoRotationAngle = 90
         case .portraitUpsideDown:
             videoConnection.videoRotationAngle = 270
-        case .landscapeLeft:
-            videoConnection.videoRotationAngle = 0
-        case .landscapeRight:
-            videoConnection.videoRotationAngle = 180
+        case .landscapeLeft: // Home button on left side
+            videoConnection.videoRotationAngle = 180  // For power port on right orientation
+        case .landscapeRight: // Home button on right side
+            videoConnection.videoRotationAngle = 0  // For power port on left orientation
         default:
             videoConnection.videoRotationAngle = 90
         }
- 
+        
+        print("DEBUG: Recording connection rotation angle: \(videoConnection.videoRotationAngle)°")
+        print("DEBUG: HOME BUTTON - LandscapeLeft: home button on left side (power port right), LandscapeRight: home button on right side (power port left)")
+
         movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
         isRecording = true
         
@@ -720,31 +730,88 @@ class CameraViewModel: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
+            // Get device and interface orientation only for logging
+            let deviceOrientation = UIDevice.current.orientation
+            let interfaceOrientation: UIInterfaceOrientation
+            
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                let interfaceOrientation = windowScene.interfaceOrientation
+                interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
-                
-                if !lockCamera {
-                    switch interfaceOrientation {
-                    case .portrait:
-                        connection.videoRotationAngle = 90
-                    case .portraitUpsideDown:
-                        connection.videoRotationAngle = 270
-                    case .landscapeLeft:
-                        connection.videoRotationAngle = 0
-                    case .landscapeRight:
-                        connection.videoRotationAngle = 180
-                    default:
-                        connection.videoRotationAngle = 90
-                    }
-                } else {
-                    connection.videoRotationAngle = 90
-                    print("DEBUG: Camera orientation locked to fixed angle: 90°")
-                }
+            } else {
+                interfaceOrientation = self.currentInterfaceOrientation
             }
+            
+            print("🔒 LOCKING CAMERA - Always using portrait orientation (90°)")
+            print("🔍 DEVICE ORIENTATION - Physical Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)")
+            
+            // ALWAYS use portrait orientation (90°) regardless of device orientation
+            let rotationAngle: CGFloat = 90
+            
+            connection.videoRotationAngle = rotationAngle
+            print("🔒 Camera orientation locked to portrait (90°) regardless of device orientation")
             
             if connection.isVideoMirroringSupported {
                 connection.isVideoMirrored = false
+            }
+        }
+    }
+    
+    private func describeDeviceOrientation(_ orientation: UIDeviceOrientation) -> String {
+        switch orientation {
+        case .portrait: return "Portrait"
+        case .portraitUpsideDown: return "Portrait Upside Down"
+        case .landscapeLeft: return "Landscape Left (home button right)"
+        case .landscapeRight: return "Landscape Right (home button left)"
+        case .faceUp: return "Face Up"
+        case .faceDown: return "Face Down"
+        case .unknown: return "Unknown"
+        @unknown default: return "Unknown New Case"
+        }
+    }
+    
+    private func describeInterfaceOrientation(_ orientation: UIInterfaceOrientation) -> String {
+        switch orientation {
+        case .portrait: return "Portrait"
+        case .portraitUpsideDown: return "Portrait Upside Down"
+        case .landscapeLeft: return "Landscape Left (home button left)"
+        case .landscapeRight: return "Landscape Right (home button right)"
+        case .unknown: return "Unknown"
+        @unknown default: return "Unknown New Case"
+        }
+    }
+    
+    func updateInterfaceOrientation(lockCamera: Bool = false) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Get device orientation for logging only
+            let deviceOrientation = UIDevice.current.orientation
+            print("🔒 LOCKING CAMERA UI - Device orientation changed to \(deviceOrientation.rawValue), but keeping portrait orientation")
+            
+            // Always use portrait orientation (90°) for camera preview
+            let rotationAngle: CGFloat = 90
+            
+            // Update all video connections to always use portrait orientation
+            if let connection = self.movieOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(rotationAngle) {
+                    connection.videoRotationAngle = rotationAngle
+                }
+            }
+            
+            // Update all session connections to portrait
+            self.session.connections.forEach { connection in
+                if connection.isVideoRotationAngleSupported(rotationAngle) {
+                    connection.videoRotationAngle = rotationAngle
+                }
+            }
+            
+            // Update all output connections to portrait
+            self.session.outputs.forEach { output in
+                output.connections.forEach { connection in
+                    if connection.isVideoRotationAngleSupported(rotationAngle) {
+                        connection.videoRotationAngle = rotationAngle
+                    }
+                }
             }
         }
     }
@@ -849,53 +916,6 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private var lastAdjustmentTime: TimeInterval = 0
-    
-    func updateInterfaceOrientation(lockCamera: Bool = false) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            print("DEBUG: Enforcing camera orientation lock...")
-            
-            // Update current orientation state
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                self.currentInterfaceOrientation = windowScene.interfaceOrientation
-                
-                // First: Lock movie output connection
-                if let connection = self.movieOutput.connection(with: .video) {
-                    // Always enforce fixed rotation for video
-                    if connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: CameraViewModel enforced fixed angle=90° for video connection")
-                    }
-                    
-                    // Check and set any other connections as well
-                    self.movieOutput.connections.forEach { conn in
-                        if conn !== connection && conn.isVideoRotationAngleSupported(90) && conn.videoRotationAngle != 90 {
-                            conn.videoRotationAngle = 90
-                            print("DEBUG: Set additional connection to 90°")
-                        }
-                    }
-                }
-                
-                // Second: Force all session connections to have fixed rotation
-                self.session.connections.forEach { connection in
-                    if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: Set session connection to 90°")
-                    }
-                }
-                
-                // Third: Check all session outputs and their connections
-                self.session.outputs.forEach { output in
-                    output.connections.forEach { connection in
-                        if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                            connection.videoRotationAngle = 90
-                            print("DEBUG: Set output connection to 90°")
-                        }
-                    }
-                }
-            }
-        }
-    }
     
     private func configureHDR() {
         guard let device = device,
@@ -1107,18 +1127,36 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func enforceFixedOrientation() {
-        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
+        guard isSessionRunning && !isOrientationLocked && !isRecording else { 
+            return 
+        }
         
+        // Get current orientations for logging only
+        let deviceOrientation = UIDevice.current.orientation
+        let interfaceOrientation: UIInterfaceOrientation
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            interfaceOrientation = windowScene.interfaceOrientation
+        } else {
+            interfaceOrientation = currentInterfaceOrientation
+        }
+        
+        print("🔒 ENFORCING PORTRAIT ORIENTATION - Physical Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)")
+        
+        // Always use portrait orientation (90°)
+        let rotationAngle: CGFloat = 90
+        
+        // Update all connections with portrait orientation
         movieOutput.connections.forEach { connection in
-            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                connection.videoRotationAngle = 90
-                print("DEBUG: Timer enforced fixed angle=90° on connection")
+            if connection.isVideoRotationAngleSupported(rotationAngle) && connection.videoRotationAngle != rotationAngle {
+                connection.videoRotationAngle = rotationAngle
+                print("🔒 LOCKED CONNECTION - Camera orientation locked to portrait (90°)")
             }
         }
         
         session.connections.forEach { connection in
-            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                connection.videoRotationAngle = 90
+            if connection.isVideoRotationAngleSupported(rotationAngle) && connection.videoRotationAngle != rotationAngle {
+                connection.videoRotationAngle = rotationAngle
+                print("🔒 LOCKED SESSION CONNECTION - Camera orientation locked to portrait (90°)")
             }
         }
     }

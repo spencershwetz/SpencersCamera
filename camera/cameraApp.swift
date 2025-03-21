@@ -14,11 +14,14 @@ struct cameraApp: App {
     
     var body: some Scene {
         WindowGroup {
-            // Content now supports device rotation
+            // OrientationFixView allows system UI (status bar, home indicator) to rotate
+            // The CameraView implementation will lock its content to portrait orientation
             OrientationFixView(content: CameraView())
                 .onAppear {
-                    // Ensure orientation is unlocked for rotation when app appears
+                    // We still want the system UI to rotate, but our content will be locked
+                    // This unlocks the system orientation only
                     CameraOrientationLock.unlockForRotation()
+                    print("🔄 System UI rotation enabled, but app content will be locked to portrait")
                 }
         }
     }

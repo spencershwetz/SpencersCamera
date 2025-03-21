@@ -25,28 +25,14 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
             
-            // Set appropriate orientation for video connection based on device orientation
+            // Set appropriate orientation for video connection - always portrait
             if let connection = videoOutput.connection(with: .video) {
-                // Use the current device orientation for initial setup
-                let currentOrientation = UIDevice.current.orientation
-                let rotationAngle: CGFloat
-                
-                switch currentOrientation {
-                case .portrait:
-                    rotationAngle = 90
-                case .portraitUpsideDown:
-                    rotationAngle = 270
-                case .landscapeLeft:
-                    rotationAngle = 180
-                case .landscapeRight:
-                    rotationAngle = 0
-                default:
-                    rotationAngle = 90 // Default to portrait
-                }
+                // Always use portrait orientation (90°) for camera preview
+                let rotationAngle: CGFloat = 90
                 
                 if connection.isVideoRotationAngleSupported(rotationAngle) {
                     connection.videoRotationAngle = rotationAngle
-                    print("📱 Video connection set to \(rotationAngle)° based on device orientation")
+                    print("🔒 LUT VIDEO PREVIEW - Locked to portrait orientation (90°)")
                 }
             }
         }
@@ -126,50 +112,45 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         }
         
         @objc func deviceOrientationDidChange() {
-            let currentOrientation = UIDevice.current.orientation
-            print("🔄 Device orientation changed to: \(currentOrientation.rawValue)")
+            // Get device orientation for logging only
+            let deviceOrientation = UIDevice.current.orientation
+            
+            print("🔒 LUT ORIENTATION CHANGE - Device orientation changed to: \(deviceOrientation.rawValue)")
             
             // Allow rotation and update the preview based on the new orientation
             DispatchQueue.main.async { [weak self] in
-                // Allow rotation instead of locking to portrait
+                guard let self = self else { return }
+                
+                // Allow system UI rotation
                 CameraOrientationLock.unlockForRotation()
                 
-                // Update connections with the correct rotation angle
-                if let connection = self?.session?.outputs.first as? AVCaptureVideoDataOutput,
+                // But keep video preview locked to portrait
+                if let connection = self.session?.outputs.first as? AVCaptureVideoDataOutput,
                    let videoConnection = connection.connection(with: .video) {
-                    let rotationAngle: CGFloat
-                    
-                    switch currentOrientation {
-                    case .portrait:
-                        rotationAngle = 90
-                    case .portraitUpsideDown:
-                        rotationAngle = 270
-                    case .landscapeLeft:
-                        rotationAngle = 180
-                    case .landscapeRight:
-                        rotationAngle = 0
-                    default:
-                        rotationAngle = 90 // Default to portrait
-                    }
+                    // Always use portrait orientation (90°)
+                    let rotationAngle: CGFloat = 90
                     
                     if videoConnection.isVideoRotationAngleSupported(rotationAngle) {
                         videoConnection.videoRotationAngle = rotationAngle
-                        print("📱 Updated video connection rotation to \(rotationAngle)°")
+                        print("🔒 LUT VIDEO CONNECTION - Locked to portrait orientation (90°)")
                     }
                 }
                 
                 // Update the preview layer orientation
-                self?.previewView?.updateOrientation()
+                self.previewView?.updateOrientation()
             }
         }
         
         func captureOutput(_ output: AVCaptureOutput,
                            didOutput sampleBuffer: CMSampleBuffer,
                            from connection: AVCaptureConnection) {
-            // Ensure connection orientation stays fixed to 90 degrees (portrait)
-            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                connection.videoRotationAngle = 90
-                print("📱 Reset video connection to portrait (90°) in captureOutput")
+            // Always use portrait orientation (90°) for all video processing
+            let rotationAngle: CGFloat = 90
+            
+            // Apply the portrait orientation to the connection
+            if connection.isVideoRotationAngleSupported(rotationAngle) && connection.videoRotationAngle != rotationAngle {
+                connection.videoRotationAngle = rotationAngle
+                print("🔒 LUT CAPTURE OUTPUT - Locked to portrait orientation (90°)")
             }
             
             // Only process if LUT is enabled
@@ -332,22 +313,59 @@ class LUTPreviewView: UIView {
         }
     }
     
-    func ensureFixedOrientation() {
-        // Ensure the preview layer's orientation is fixed to portrait (90 degrees)
+    func updateOrientation() {
+        // Get device orientation for logging only
+        let deviceOrientation = UIDevice.current.orientation
+        
+        // Log the current orientation and frame dimensions
+        print("🔒 LUT ORIENTATION UPDATE - Device orientation: \(deviceOrientation.rawValue)")
+        print("📏 LUT PREVIEW FRAME - Frame: \(frame), Bounds: \(bounds)")
+        
+        // Update the preview layer orientation - always use portrait
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         
         if let connection = previewLayer.connection {
-            if connection.isVideoRotationAngleSupported(90) {
+            // Always use portrait orientation (90°)
+            let rotationAngle: CGFloat = 90
+            
+            if connection.isVideoRotationAngleSupported(rotationAngle) {
+                connection.videoRotationAngle = rotationAngle
+                print("🔒 LUT PREVIEW LAYER - Locked to portrait orientation (90°)")
+            } else {
+                print("⚠️ Rotation angle 90° not supported on preview layer connection")
+            }
+        }
+        
+        // Update processed layer frame to match bounds
+        if let processedLayer = processedLayer {
+            processedLayer.frame = bounds
+        }
+        
+        CATransaction.commit()
+    }
+    
+    func ensureFixedOrientation() {
+        // Get device orientation for logging only
+        let deviceOrientation = UIDevice.current.orientation
+        
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        
+        if let connection = previewLayer.connection {
+            // Always use portrait orientation (90°)
+            let rotationAngle: CGFloat = 90
+            
+            if connection.isVideoRotationAngleSupported(rotationAngle) {
                 let currentAngle = connection.videoRotationAngle
-                if currentAngle != 90 {
-                    connection.videoRotationAngle = 90
-                    print("🔄 Preview layer orientation corrected from \(currentAngle)° to 90°")
+                if currentAngle != rotationAngle {
+                    connection.videoRotationAngle = rotationAngle
+                    print("🔒 LUT PREVIEW CORRECTED - From \(currentAngle)° to 90° (portrait)")
                 } else {
-                    print("✅ Preview layer already in portrait orientation (90°)")
+                    print("✅ LUT PREVIEW CORRECT - Already at portrait orientation (90°)")
                 }
             } else {
-                print("⚠️ Video rotation angle not supported on preview layer connection")
+                print("⚠️ Rotation angle 90° not supported on preview layer connection")
             }
         }
         
@@ -356,7 +374,7 @@ class LUTPreviewView: UIView {
         processedLayer?.transform = CATransform3DIdentity
         
         // Apply additional transforms to counteract any rotation effects
-        if UIDevice.current.orientation == .portraitUpsideDown {
+        if deviceOrientation == .portraitUpsideDown {
             // For upside-down orientation, we need to ensure the view doesn't flip
             print("📱 Applying additional fixes for upside-down orientation")
             
@@ -437,43 +455,5 @@ class LUTPreviewView: UIView {
                 updateOrientation()
             }
         }
-    }
-    
-    func updateOrientation() {
-        let currentOrientation = UIDevice.current.orientation
-        // Update the preview layer orientation based on device orientation
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        
-        if let connection = previewLayer.connection {
-            let rotationAngle: CGFloat
-            
-            switch currentOrientation {
-            case .portrait:
-                rotationAngle = 90
-            case .portraitUpsideDown:
-                rotationAngle = 270
-            case .landscapeLeft:
-                rotationAngle = 180
-            case .landscapeRight:
-                rotationAngle = 0
-            default:
-                rotationAngle = 90 // Default to portrait
-            }
-            
-            if connection.isVideoRotationAngleSupported(rotationAngle) {
-                connection.videoRotationAngle = rotationAngle
-                print("🔄 Preview layer orientation updated to \(rotationAngle)°")
-            } else {
-                print("⚠️ Video rotation angle \(rotationAngle)° not supported on preview layer connection")
-            }
-        }
-        
-        // Ensure processed layer stays in sync
-        if let processedLayer = processedLayer {
-            processedLayer.frame = bounds
-        }
-        
-        CATransaction.commit()
     }
 } 

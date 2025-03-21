@@ -1,7 +1,7 @@
 import UIKit
 import SwiftUI
 
-/// A UIViewController that restricts orientation and hosts the camera preview
+/// A UIViewController that allows system UI rotation while app content can be locked
 class OrientationFixViewController: UIViewController {
     private let contentView: UIView
     
@@ -27,14 +27,33 @@ class OrientationFixViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         
-        print("DEBUG: OrientationFixViewController loaded - allowing device rotation")
+        print("⚠️ OrientationFixViewController loaded - This allows SYSTEM UI to rotate")
+        print("⚠️ Current orientation mask: \(AppDelegate.orientationLock)")
+        print("⚠️ App content will still be locked to portrait via PortraitFixedContainer")
+        
+        // Register for rotation notifications to track when they happen
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(orientationWillChange),
+            name: UIApplication.willChangeStatusBarOrientationNotification,
+            object: nil
+        )
+    }
+    
+    @objc func orientationWillChange(_ notification: Notification) {
+        if let orientation = notification.userInfo?[UIApplication.statusBarOrientationUserInfoKey] as? Int {
+            print("⚠️ SYSTEM UI ROTATION - New orientation: \(orientation)")
+            print("📏 VIEW BOUNDS - Bounds: \(view.bounds), Frame: \(view.frame)")
+            print("📏 CONTENT BOUNDS - Bounds: \(contentView.bounds), Frame: \(contentView.frame)")
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        // Allow all orientations
+        // Allow all orientations for SYSTEM UI only
         AppDelegate.orientationLock = .all
+        print("⚠️ OrientationFixViewController set AppDelegate.orientationLock to ALL (for system UI)")
         
         // Modern approach to update orientation
         self.setNeedsUpdateOfSupportedInterfaceOrientations()
@@ -47,7 +66,7 @@ class OrientationFixViewController: UIViewController {
         AppDelegate.orientationLock = .all
     }
     
-    // Allow all orientations
+    // Allow all orientations for SYSTEM UI
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         return .all
     }
@@ -57,7 +76,11 @@ class OrientationFixViewController: UIViewController {
     }
     
     override var shouldAutorotate: Bool {
-        return true  // Allow autorotation
+        return true  // Allow system UI autorotation
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
 
@@ -84,6 +107,8 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
         // Extract the UIView from the hosting controller
         let contentView = hostingController.view!
         contentView.backgroundColor = .clear
+        
+        print("⚠️ OrientationFixView created - This will allow ALL orientations")
         
         // Create and return the orientation fix view controller
         return OrientationFixViewController(contentView: contentView)

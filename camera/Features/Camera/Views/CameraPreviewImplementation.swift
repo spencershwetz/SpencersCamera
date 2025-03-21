@@ -67,27 +67,35 @@ struct CameraPreview: UIViewRepresentable {
         
         private func updatePreviewOrientation() {
             if let connection = previewLayer.connection {
-                let currentDeviceOrientation = UIDevice.current.orientation
+                // Get current device orientation for logging purposes
+                let deviceOrientation = UIDevice.current.orientation
                 
-                switch currentDeviceOrientation {
+                // Get interface orientation for consistent handling
+                let interfaceOrientation: UIInterfaceOrientation
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    interfaceOrientation = windowScene.interfaceOrientation
+                } else {
+                    interfaceOrientation = .portrait
+                }
+                
+                // Use interface orientation for more consistent behavior
+                let rotationAngle: CGFloat
+                switch interfaceOrientation {
                 case .portrait:
-                    if connection.isVideoRotationAngleSupported(90) {
-                        connection.videoRotationAngle = 90
-                    }
+                    rotationAngle = 90
                 case .portraitUpsideDown:
-                    if connection.isVideoRotationAngleSupported(270) {
-                        connection.videoRotationAngle = 270
-                    }
-                case .landscapeLeft:
-                    if connection.isVideoRotationAngleSupported(180) {
-                        connection.videoRotationAngle = 180
-                    }
-                case .landscapeRight:
-                    if connection.isVideoRotationAngleSupported(0) {
-                        connection.videoRotationAngle = 0
-                    }
+                    rotationAngle = 270
+                case .landscapeLeft: // Home button on left
+                    rotationAngle = 0  // Fixed: Left = 0°
+                case .landscapeRight: // Home button on right
+                    rotationAngle = 180 // Fixed: Right = 180°
                 default:
-                    break
+                    rotationAngle = 90
+                }
+                
+                if connection.isVideoRotationAngleSupported(rotationAngle) {
+                    connection.videoRotationAngle = rotationAngle
+                    print("DEBUG: Preview orientation updated to \(rotationAngle)° for interface orientation \(interfaceOrientation.rawValue), device: \(deviceOrientation.rawValue)")
                 }
             }
         }
@@ -133,10 +141,35 @@ struct DefaultPreviewSource: PreviewSource {
         previewLayer.session = session
         previewLayer.videoGravity = .resizeAspectFill
         
-        // Force portrait orientation
-        if let connection = previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
-            print("DEBUG: DefaultPreviewSource set rotation to 90°")
+        // Set initial orientation based on interface orientation
+        if let connection = previewLayer.connection {
+            // Get interface orientation for consistent handling
+            let interfaceOrientation: UIInterfaceOrientation
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                interfaceOrientation = windowScene.interfaceOrientation
+            } else {
+                interfaceOrientation = .portrait
+            }
+            
+            // Use interface orientation for consistent behavior
+            let rotationAngle: CGFloat
+            switch interfaceOrientation {
+            case .portrait:
+                rotationAngle = 90
+            case .portraitUpsideDown:
+                rotationAngle = 270
+            case .landscapeLeft: // Home button on left
+                rotationAngle = 0  // Fixed: Left = 0°
+            case .landscapeRight: // Home button on right
+                rotationAngle = 180 // Fixed: Right = 180°
+            default:
+                rotationAngle = 90 // Default to portrait
+            }
+            
+            if connection.isVideoRotationAngleSupported(rotationAngle) {
+                connection.videoRotationAngle = rotationAngle
+                print("DEBUG: DefaultPreviewSource set rotation to \(rotationAngle)° for interface \(interfaceOrientation.rawValue)")
+            }
         }
         
         // Add preview layer to view
@@ -151,9 +184,34 @@ struct DefaultPreviewSource: PreviewSource {
             return
         }
         
-        // Force portrait orientation
-        if let connection = previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
+        // Update orientation based on interface orientation
+        if let connection = previewLayer.connection {
+            // Get interface orientation for consistent handling
+            let interfaceOrientation: UIInterfaceOrientation
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                interfaceOrientation = windowScene.interfaceOrientation
+            } else {
+                interfaceOrientation = .portrait
+            }
+            
+            // Use interface orientation for consistent behavior
+            let rotationAngle: CGFloat
+            switch interfaceOrientation {
+            case .portrait:
+                rotationAngle = 90
+            case .portraitUpsideDown:
+                rotationAngle = 270
+            case .landscapeLeft: // Home button on left
+                rotationAngle = 0  // Fixed: Left = 0°
+            case .landscapeRight: // Home button on right
+                rotationAngle = 180 // Fixed: Right = 180°
+            default:
+                rotationAngle = 90 // Default to portrait
+            }
+            
+            if connection.isVideoRotationAngleSupported(rotationAngle) {
+                connection.videoRotationAngle = rotationAngle
+            }
         }
         
         // Update frame to match view
