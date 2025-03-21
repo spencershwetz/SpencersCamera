@@ -27,20 +27,14 @@ class OrientationFixViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         
-        // Use the modern method to enforce orientation
-        enforcePortraitOrientation()
-        
-        print("DEBUG: OrientationFixViewController loaded - enforcing portrait orientation")
+        print("DEBUG: OrientationFixViewController loaded - allowing device rotation")
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        // Force portrait orientation
-        AppDelegate.orientationLock = .portrait
-        
-        // Use the modern method to enforce orientation
-        enforcePortraitOrientation()
+        // Allow all orientations
+        AppDelegate.orientationLock = .all
         
         // Modern approach to update orientation
         self.setNeedsUpdateOfSupportedInterfaceOrientations()
@@ -49,33 +43,21 @@ class OrientationFixViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
-        // Release orientation lock when view disappears
+        // Maintain orientation freedom when view disappears
         AppDelegate.orientationLock = .all
     }
     
-    // Helper method to enforce portrait orientation using modern API
-    private func enforcePortraitOrientation() {
-        // Find the active window scene
-        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                // The error parameter here is not optional, it's a concrete Error
-                print("DEBUG: Error enforcing portrait orientation: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    // Only allow portrait orientation
+    // Allow all orientations
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return .portrait
+        return .all
     }
     
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        return .portrait
+        return .portrait  // Default to portrait for initial presentation only
     }
     
     override var shouldAutorotate: Bool {
-        return false
+        return true  // Allow autorotation
     }
 }
 

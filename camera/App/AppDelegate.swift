@@ -1,11 +1,11 @@
 import UIKit
 import SwiftUI
 
-/// Main application delegate that handles orientation locking and other app-level functionality
+/// Main application delegate that handles orientation management and other app-level functionality
 class AppDelegate: NSObject, UIApplicationDelegate {
-    // MARK: - Orientation Lock Properties
+    // MARK: - Orientation Properties
     
-    /// Current orientation lock state for the app
+    /// Current orientation setting for the app
     static var orientationLock = UIInterfaceOrientationMask.all
     
     // MARK: - Application Lifecycle
@@ -14,7 +14,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
-        // Setup orientation lock observer
+        // Setup orientation support
         UIWindowScene.setupOrientationLockSupport()
         
         return true
@@ -27,7 +27,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // MARK: - Orientation Support
     
-    /// Handle orientation lock for all windows in the application
+    /// Handle orientation for all windows in the application
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         return AppDelegate.orientationLock
     }

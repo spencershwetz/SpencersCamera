@@ -8,8 +8,8 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     let viewModel: CameraViewModel
     
     func makeUIView(context: Context) -> LUTPreviewView {
-        // Lock the orientation to portrait
-        CameraOrientationLock.lockToPortrait()
+        // Allow rotation instead of locking to portrait
+        CameraOrientationLock.unlockForRotation()
         
         // Create the preview view
         let previewView = LUTPreviewView()
@@ -25,12 +25,28 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
             
-            // Set fixed orientation for video connection
+            // Set appropriate orientation for video connection based on device orientation
             if let connection = videoOutput.connection(with: .video) {
-                // Set rotation angle to 90 degrees (portrait)
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                    print("📱 Video connection fixed to portrait orientation (90°)")
+                // Use the current device orientation for initial setup
+                let currentOrientation = UIDevice.current.orientation
+                let rotationAngle: CGFloat
+                
+                switch currentOrientation {
+                case .portrait:
+                    rotationAngle = 90
+                case .portraitUpsideDown:
+                    rotationAngle = 270
+                case .landscapeLeft:
+                    rotationAngle = 180
+                case .landscapeRight:
+                    rotationAngle = 0
+                default:
+                    rotationAngle = 90 // Default to portrait
+                }
+                
+                if connection.isVideoRotationAngleSupported(rotationAngle) {
+                    connection.videoRotationAngle = rotationAngle
+                    print("📱 Video connection set to \(rotationAngle)° based on device orientation")
                 }
             }
         }
@@ -39,7 +55,7 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         context.coordinator.previewView = previewView
         context.coordinator.session = session
         
-        // Register for orientation change notifications to ensure preview stays fixed
+        // Register for orientation change notifications to adjust preview
         NotificationCenter.default.addObserver(
             context.coordinator,
             selector: #selector(context.coordinator.deviceOrientationDidChange),
@@ -59,17 +75,17 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: LUTPreviewView, context: Context) {
-        // Update LUT filter in processor if it changed
+        // Update LUT filter
         context.coordinator.lutProcessor.setLUTFilter(lutManager.currentLUTFilter)
         
-        // Update LOG mode in processor if it changed
+        // Update log mode
         context.coordinator.lutProcessor.setLogEnabled(viewModel.isAppleLogEnabled)
         
         // Update the preview view's LUT status
         uiView.isLUTEnabled = lutManager.currentLUTFilter != nil
         
-        // Ensure preview layer orientation is fixed
-        uiView.ensureFixedOrientation()
+        // Update orientation after any property changes
+        uiView.updateOrientation()
     }
     
     static func dismantleUIView(_ uiView: LUTPreviewView, coordinator: Coordinator) {
@@ -77,7 +93,7 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         NotificationCenter.default.removeObserver(uiView)
         
         // Unlock orientation when view is dismantled
-        CameraOrientationLock.unlock()
+        CameraOrientationLock.unlockForRotation()
     }
     
     func makeCoordinator() -> Coordinator {
@@ -100,6 +116,9 @@ struct LUTVideoPreviewView: UIViewRepresentable {
             // Initialize the LUT processor with the current LUT filter
             lutProcessor.setLUTFilter(parent.lutManager.currentLUTFilter)
             lutProcessor.setLogEnabled(parent.viewModel.isAppleLogEnabled)
+            
+            // Allow rotation instead of locking to portrait
+            CameraOrientationLock.unlockForRotation()
         }
         
         deinit {
@@ -110,20 +129,37 @@ struct LUTVideoPreviewView: UIViewRepresentable {
             let currentOrientation = UIDevice.current.orientation
             print("🔄 Device orientation changed to: \(currentOrientation.rawValue)")
             
-            // Ensure the preview stays fixed in portrait
+            // Allow rotation and update the preview based on the new orientation
             DispatchQueue.main.async { [weak self] in
-                // Re-lock to portrait orientation
-                CameraOrientationLock.lockToPortrait()
+                // Allow rotation instead of locking to portrait
+                CameraOrientationLock.unlockForRotation()
                 
-                // Ensure connections are using the correct rotation angle
+                // Update connections with the correct rotation angle
                 if let connection = self?.session?.outputs.first as? AVCaptureVideoDataOutput,
-                   let videoConnection = connection.connection(with: .video),
-                   videoConnection.isVideoRotationAngleSupported(90) {
-                    videoConnection.videoRotationAngle = 90  // 90° = portrait
+                   let videoConnection = connection.connection(with: .video) {
+                    let rotationAngle: CGFloat
+                    
+                    switch currentOrientation {
+                    case .portrait:
+                        rotationAngle = 90
+                    case .portraitUpsideDown:
+                        rotationAngle = 270
+                    case .landscapeLeft:
+                        rotationAngle = 180
+                    case .landscapeRight:
+                        rotationAngle = 0
+                    default:
+                        rotationAngle = 90 // Default to portrait
+                    }
+                    
+                    if videoConnection.isVideoRotationAngleSupported(rotationAngle) {
+                        videoConnection.videoRotationAngle = rotationAngle
+                        print("📱 Updated video connection rotation to \(rotationAngle)°")
+                    }
                 }
                 
-                // Ensure the preview layer orientation is fixed
-                self?.previewView?.ensureFixedOrientation()
+                // Update the preview layer orientation
+                self?.previewView?.updateOrientation()
             }
         }
         
@@ -246,22 +282,22 @@ class LUTPreviewView: UIView {
         
         CATransaction.commit()
         
-        // Ensure orientation is fixed
-        ensureFixedOrientation()
+        // Update orientation based on device orientation
+        updateOrientation()
     }
     
     func setSession(_ session: AVCaptureSession) {
         // Set the session on the preview layer
         previewLayer.session = session
         
-        // Ensure orientation is fixed
-        ensureFixedOrientation()
+        // Update orientation based on device orientation
+        updateOrientation()
     }
     
     // Called just before orientation changes
     @objc func orientationWillChange(_ notification: Notification) {
         isHandlingRotation = true
-        // Lock everything in place
+        // Lock everything in place during rotation
         lockViewDuringRotation()
     }
     
@@ -287,8 +323,8 @@ class LUTPreviewView: UIView {
         
         CATransaction.commit()
         
-        // Re-apply orientation fix
-        ensureFixedOrientation()
+        // Update orientation
+        updateOrientation()
         
         // Re-enable normal handling after a delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -353,8 +389,8 @@ class LUTPreviewView: UIView {
         
         CATransaction.commit()
         
-        // Ensure orientation is fixed when switching back to preview layer
-        ensureFixedOrientation()
+        // Update orientation when switching back to preview layer
+        updateOrientation()
     }
     
     override func layoutSubviews() {
@@ -374,22 +410,22 @@ class LUTPreviewView: UIView {
             
             CATransaction.commit()
             
-            // Ensure orientation stays fixed after layout changes
-            ensureFixedOrientation()
+            // Update orientation after layout changes
+            updateOrientation()
         }
     }
     
     // Override to prevent automatic transforms during rotation
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
-        ensureFixedOrientation()
+        updateOrientation()
     }
     
     // Override to prevent bounds changes from affecting layout
     override var bounds: CGRect {
         didSet {
             if !isHandlingRotation && bounds != oldValue {
-                ensureFixedOrientation()
+                updateOrientation()
             }
         }
     }
@@ -398,8 +434,46 @@ class LUTPreviewView: UIView {
     override var frame: CGRect {
         didSet {
             if !isHandlingRotation && frame != oldValue {
-                ensureFixedOrientation()
+                updateOrientation()
             }
         }
+    }
+    
+    func updateOrientation() {
+        let currentOrientation = UIDevice.current.orientation
+        // Update the preview layer orientation based on device orientation
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        
+        if let connection = previewLayer.connection {
+            let rotationAngle: CGFloat
+            
+            switch currentOrientation {
+            case .portrait:
+                rotationAngle = 90
+            case .portraitUpsideDown:
+                rotationAngle = 270
+            case .landscapeLeft:
+                rotationAngle = 180
+            case .landscapeRight:
+                rotationAngle = 0
+            default:
+                rotationAngle = 90 // Default to portrait
+            }
+            
+            if connection.isVideoRotationAngleSupported(rotationAngle) {
+                connection.videoRotationAngle = rotationAngle
+                print("🔄 Preview layer orientation updated to \(rotationAngle)°")
+            } else {
+                print("⚠️ Video rotation angle \(rotationAngle)° not supported on preview layer connection")
+            }
+        }
+        
+        // Ensure processed layer stays in sync
+        if let processedLayer = processedLayer {
+            processedLayer.frame = bounds
+        }
+        
+        CATransaction.commit()
     }
 } 

@@ -4,8 +4,7 @@ import SwiftUI
 import AVFoundation
 
 /// A SwiftUI view that presents a live camera preview using an AVCaptureVideoPreviewLayer.
-/// This implementation locks the preview to a fixed landscape orientation (landscape left)
-/// so that the preview does not rotate even if the device rotates.
+/// This implementation allows the preview to rotate with device orientation
 struct CameraPreview: UIViewRepresentable {
     private let source: PreviewSource
 
@@ -14,8 +13,8 @@ struct CameraPreview: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> PreviewView {
-        // Lock the orientation to landscape left.
-        CameraOrientationLock.lock(to: .landscapeLeft)
+        // Allow all orientations
+        CameraOrientationLock.unlockForRotation()
         let preview = PreviewView()
         source.connect(to: preview)
         return preview
@@ -26,12 +25,12 @@ struct CameraPreview: UIViewRepresentable {
     }
     
     static func dismantleUIView(_ uiView: PreviewView, coordinator: ()) {
-        // Unlock orientation when the preview view is dismantled.
-        CameraOrientationLock.unlock()
+        // Ensure orientation is unlocked when the preview view is dismantled.
+        CameraOrientationLock.unlockForRotation()
     }
 
     /// A UIView whose backing layer is AVCaptureVideoPreviewLayer.
-    /// It sets the session and forces a fixed rotation.
+    /// It sets the session and allows for dynamic rotation.
     class PreviewView: UIView, PreviewTarget {
         override class var layerClass: AnyClass {
             AVCaptureVideoPreviewLayer.self
@@ -44,29 +43,61 @@ struct CameraPreview: UIViewRepresentable {
         init() {
             super.init(frame: .zero)
             backgroundColor = .black
-            // Do not register for orientation notifications to keep a fixed preview.
+            
+            // Register for orientation change notifications
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(orientationChanged),
+                name: UIDevice.orientationDidChangeNotification,
+                object: nil
+            )
+        }
+        
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
         
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
         }
         
+        @objc private func orientationChanged() {
+            updatePreviewOrientation()
+        }
+        
+        private func updatePreviewOrientation() {
+            if let connection = previewLayer.connection {
+                let currentDeviceOrientation = UIDevice.current.orientation
+                
+                switch currentDeviceOrientation {
+                case .portrait:
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    }
+                case .portraitUpsideDown:
+                    if connection.isVideoRotationAngleSupported(270) {
+                        connection.videoRotationAngle = 270
+                    }
+                case .landscapeLeft:
+                    if connection.isVideoRotationAngleSupported(180) {
+                        connection.videoRotationAngle = 180
+                    }
+                case .landscapeRight:
+                    if connection.isVideoRotationAngleSupported(0) {
+                        connection.videoRotationAngle = 0
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        
         func setSession(_ session: AVCaptureSession) {
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
             
-            if let connection = previewLayer.connection {
-                // Force a fixed rotation. For landscape left, set to 0.
-                if connection.isVideoRotationAngleSupported(0) {
-                    connection.videoRotationAngle = 0
-                    print("DEBUG: Set videoRotationAngle to 0 (landscape left fixed)")
-                } else {
-                    print("DEBUG: videoRotationAngle 0 not supported")
-                }
-                print("DEBUG: Current videoRotationAngle: \(connection.videoRotationAngle)")
-            } else {
-                print("DEBUG: No connection available on previewLayer")
-            }
+            // Set initial orientation
+            updatePreviewOrientation()
         }
     }
 }

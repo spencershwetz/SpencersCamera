@@ -1,12 +1,68 @@
 import UIKit
 
-/// Utility class to lock the device orientation for camera operations
+/// Utility class to handle device orientation for camera operations
 final class CameraOrientationLock {
     
     private static var orientationLock = UIInterfaceOrientationMask.all
     private static var isLocked = false
     private static var lastLockTime: TimeInterval = 0
     private static var activeTransitionTimer: Timer?
+    
+    /// Get the current device orientation as an interface orientation mask
+    static func currentDeviceOrientationMask() -> UIInterfaceOrientationMask {
+        let orientation = UIDevice.current.orientation
+        
+        switch orientation {
+        case .portrait:
+            return .portrait
+        case .portraitUpsideDown:
+            return .portraitUpsideDown
+        case .landscapeLeft:
+            return .landscapeLeft
+        case .landscapeRight:
+            return .landscapeRight
+        default:
+            return .portrait // Default to portrait for face up, down, or unknown
+        }
+    }
+    
+    /// Unlock the device orientation to allow rotation
+    static func unlockForRotation() {
+        orientationLock = .all
+        isLocked = false
+        
+        // Cancel any active orientation timer
+        activeTransitionTimer?.invalidate()
+        
+        // Force orientation update
+        if #available(iOS 16.0, *) {
+            // Update all view controllers
+            for scene in UIApplication.shared.connectedScenes {
+                if let windowScene = scene as? UIWindowScene {
+                    windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .all))
+                    
+                    for window in windowScene.windows {
+                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    }
+                }
+            }
+        } else {
+            // Fallback for older iOS versions
+            UIViewController.attemptRotationToDeviceOrientation()
+        }
+        
+        print("📱 Device orientation unlocked for rotation")
+    }
+    
+    /// Get the current orientation lock
+    static func getCurrentOrientationLock() -> UIInterfaceOrientationMask {
+        return orientationLock
+    }
+    
+    /// Check if orientation is currently locked
+    static func isOrientationLocked() -> Bool {
+        return isLocked
+    }
     
     /// Lock the device orientation to portrait
     static func lockToPortrait() {
@@ -153,47 +209,6 @@ final class CameraOrientationLock {
         }
         
         print("📱 Device orientation locked to \(orientationMask)")
-    }
-    
-    /// Unlock the device orientation
-    static func unlock() {
-        orientationLock = .all
-        isLocked = false
-        
-        // Cancel any active orientation timer
-        activeTransitionTimer?.invalidate()
-        
-        // Force orientation update
-        if #available(iOS 16.0, *) {
-            // Request geometry update if possible
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .all))
-            }
-            
-            // Update all view controllers
-            for scene in UIApplication.shared.connectedScenes {
-                if let windowScene = scene as? UIWindowScene {
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
-            }
-        } else {
-            // Fallback for older iOS versions
-            UIViewController.attemptRotationToDeviceOrientation()
-        }
-        
-        print("📱 Device orientation unlocked")
-    }
-    
-    /// Get the current orientation lock
-    static func getCurrentOrientationLock() -> UIInterfaceOrientationMask {
-        return orientationLock
-    }
-    
-    /// Check if orientation is currently locked
-    static func isOrientationLocked() -> Bool {
-        return isLocked
     }
     
     /// Time since last orientation lock was applied (in seconds)
