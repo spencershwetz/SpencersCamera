@@ -47,7 +47,8 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
         
         @objc private func orientationChanged() {
             if let connection = videoPreviewLayer.connection {
-                updateOrientationForConnection(connection)
+                // Always lock to portrait orientation regardless of device orientation
+                lockToPortraitOrientation(connection)
                 print("📱 ORIENTATION CHANGE - Enforcing portrait orientation for camera preview")
                 print("📏 FRAME AFTER ORIENTATION CHANGE - Frame: \(frame), Bounds: \(bounds)")
             }
@@ -88,6 +89,33 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
                 print("✅ Applied portrait rotation angle (90°) to camera preview")
             } else {
                 print("⚠️ Rotation angle 90° not supported by connection")
+            }
+            
+            // Adjust the video gravity to ensure content stays within the fixed frame
+            videoPreviewLayer.videoGravity = .resizeAspectFill
+        }
+        
+        // Override layoutSubviews to ensure the aspect ratio is preserved during rotation
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            
+            // Ensure the video preview layer fills the view
+            videoPreviewLayer.frame = bounds
+            
+            // Ensure the focus view stays centered
+            focusView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+            
+            // Re-lock the orientation whenever the layout changes
+            if let connection = videoPreviewLayer.connection {
+                lockToPortraitOrientation(connection)
+            }
+        }
+        
+        // Support for aspect ratio locking during frame updates
+        func updateAspectRatio() {
+            // Always lock to portrait orientation regardless of device orientation
+            if let connection = videoPreviewLayer.connection {
+                lockToPortraitOrientation(connection)
             }
         }
         
@@ -163,6 +191,9 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
         
         // Ensure frame matches parent view bounds
         uiView.videoPreviewLayer.frame = uiView.bounds
+        
+        // Update aspect ratio enforcement
+        uiView.updateAspectRatio()
     }
     
     static func dismantleUIView(_ uiView: VideoPreviewView, coordinator: Coordinator) {
@@ -171,45 +202,13 @@ struct FixedOrientationCameraPreview: UIViewRepresentable {
     }
 }
 
+// Remove this function as it's no longer needed - we're always locking to portrait
 // Helper function to update preview orientation
 private func updatePreviewOrientation(_ viewFinder: FixedOrientationCameraPreview.VideoPreviewView) {
     guard let connection = viewFinder.videoPreviewLayer.connection else { return }
     
-    // Get both device and interface orientation
-    let deviceOrientation = UIDevice.current.orientation
-    let interfaceOrientation: UIInterfaceOrientation
-    
-    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-        interfaceOrientation = windowScene.interfaceOrientation
-    } else {
-        // Default to portrait if we can't get interface orientation
-        interfaceOrientation = .portrait
-    }
-    
-    // IMPORTANT: Camera sensor orientation mapping is different from device orientation
-    // The correct mapping is:
-    // Portrait → 90°
-    // PortraitUpsideDown → 270°
-    // LandscapeLeft (home button left, power port right) → 180°
-    // LandscapeRight (home button right, power port left) → 0°
-    
-    let rotationAngle: CGFloat
-    switch interfaceOrientation {
-    case .portrait:
-        rotationAngle = 90
-    case .portraitUpsideDown:
-        rotationAngle = 270
-    case .landscapeLeft: // Home button on left
-        rotationAngle = 180  // Fixed: Left = 180°
-    case .landscapeRight: // Home button on right
-        rotationAngle = 0  // Fixed: Right = 0°
-    default:
-        rotationAngle = 90 // Default to portrait
-    }
-    
-    print("DEBUG: ORIENTATION UPDATE - Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue), Applied angle: \(rotationAngle)°")
-    print("DEBUG: FRAME CHECK - Frame: \(viewFinder.frame), Bounds: \(viewFinder.bounds)")
-    print("DEBUG: HOME BUTTON - LandscapeLeft: home button on left side (power port right), LandscapeRight: home button on right side (power port left)")
+    // Always lock to portrait orientation (90°)
+    let rotationAngle: CGFloat = 90
     
     if connection.isVideoRotationAngleSupported(rotationAngle) {
         connection.videoRotationAngle = rotationAngle

@@ -24,6 +24,7 @@ struct PortraitFixedContainer<Content: View>: View {
         GeometryReader { geometry in
             // Create a fixed portrait container with the original width and proportional height
             let portraitFrame = calculatePortraitFrame(from: geometry.size)
+            let isLandscape = geometry.size.width > geometry.size.height
             
             ZStack {
                 // Black background to fill any gaps
@@ -34,33 +35,71 @@ struct PortraitFixedContainer<Content: View>: View {
                 content
                     .frame(width: portraitFrame.width, height: portraitFrame.height)
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .onAppear {
+                        print("🖼️ PORTRAIT CONTAINER - Initial frame: width=\(portraitFrame.width), height=\(portraitFrame.height)")
+                        print("🖼️ PORTRAIT CONTAINER - Window: width=\(geometry.size.width), height=\(geometry.size.height), isLandscape=\(isLandscape)")
+                    }
+                    .onChange(of: isLandscape) { oldValue, newValue in
+                        print("🔄 ORIENTATION CHANGE - isLandscape: \(oldValue) → \(newValue)")
+                        print("🖼️ PORTRAIT CONTAINER - New dimensions: width=\(portraitFrame.width), height=\(portraitFrame.height)")
+                    }
             }
             .onAppear {
                 print("🖼️ PORTRAIT CONTAINER - Created fixed portrait frame: \(portraitFrame.width)x\(portraitFrame.height)")
             }
             .onChange(of: geometry.size) { oldValue, newValue in
                 let newPortraitFrame = calculatePortraitFrame(from: newValue)
+                let oldIsLandscape = oldValue.width > oldValue.height
+                let newIsLandscape = newValue.width > newValue.height
+                
                 print("🖼️ PORTRAIT CONTAINER - Window size changed: \(oldValue) → \(newValue)")
                 print("🖼️ PORTRAIT CONTAINER - New portrait frame: \(newPortraitFrame.width)x\(newPortraitFrame.height)")
+                print("🖼️ PORTRAIT CONTAINER - Orientation: \(oldIsLandscape ? "landscape" : "portrait") → \(newIsLandscape ? "landscape" : "portrait")")
+                
+                // Additional logging to confirm orientation locking
+                let interfaceOrientation = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }).flatMap({ $0 as? UIWindowScene })?.interfaceOrientation
+                print("🖼️ PORTRAIT CONTAINER - Interface orientation: \(interfaceOrientation?.rawValue ?? 0), maintaining portrait layout")
             }
         }
     }
     
     /// Calculate a portrait frame (taller than wide) regardless of device orientation
     private func calculatePortraitFrame(from size: CGSize) -> CGSize {
-        // Always use portrait dimensions (narrower width, taller height)
-        let maxDimension = max(size.width, size.height)
-        let minDimension = min(size.width, size.height)
+        // Determine if we're in landscape mode
+        let isLandscape = size.width > size.height
         
-        // Standard 9:16 aspect ratio (portrait)
-        let portraitWidth = minDimension
-        let portraitHeight = minDimension * (16/9)
+        if isLandscape {
+            print("🔄 CONTAINER DIMENSIONS - Device in landscape, maintaining portrait layout")
+        }
         
-        // Check if the height exceeds the available space
-        if portraitHeight > maxDimension {
-            // Scale down to fit within the available height
-            let scale = maxDimension / portraitHeight
-            return CGSize(width: portraitWidth * scale, height: maxDimension)
+        // For a portrait layout, the width should always be the smaller dimension
+        // and the height should be larger (9:16 aspect ratio)
+        var portraitWidth: CGFloat
+        var portraitHeight: CGFloat
+        
+        if isLandscape {
+            // In landscape, we need to use the height as our width reference
+            // to maintain a portrait-oriented frame
+            portraitWidth = size.height  // Use the device height as our width
+            portraitHeight = portraitWidth * (16/9)  // Maintain 9:16 aspect ratio
+            
+            // If this would be too tall, scale it down
+            if portraitHeight > size.width {
+                let scale = size.width / portraitHeight
+                portraitWidth *= scale
+                portraitHeight = size.width
+            }
+        } else {
+            // In portrait, simply use device width and maintain aspect ratio
+            portraitWidth = size.width
+            portraitHeight = portraitWidth * (16/9)
+            
+            // If this would be too tall, scale it down
+            if portraitHeight > size.height {
+                let scale = size.height / portraitHeight
+                portraitWidth *= scale
+                portraitHeight = size.height
+            }
         }
         
         return CGSize(width: portraitWidth, height: portraitHeight)
@@ -320,7 +359,7 @@ struct CameraContentView: View {
                 printOrientationInfo()
                 print("📏 FRAME SIZE - Initial: width=\(outerGeometry.size.width), height=\(outerGeometry.size.height)")
             }
-            .onChange(of: orientation) { newOrientation in
+            .onChange(of: orientation) { oldValue, newValue in
                 printOrientationInfo()
                 print("📏 FRAME SIZE - After orientation change: width=\(outerGeometry.size.width), height=\(outerGeometry.size.height)")
                 print("📏 SAFE AREA - Top: \(outerGeometry.safeAreaInsets.top), Bottom: \(outerGeometry.safeAreaInsets.bottom), Leading: \(outerGeometry.safeAreaInsets.leading), Trailing: \(outerGeometry.safeAreaInsets.trailing)")
@@ -372,9 +411,32 @@ struct CameraContentView: View {
     
     // Camera preview component
     private func cameraPreviewView(geometry: GeometryProxy) -> some View {
-        // Always use portrait dimensions regardless of orientation
-        let width = geometry.size.width
-        let height = geometry.size.width * (16/9)
+        // Calculate dimensions for portrait orientation regardless of device orientation
+        let isLandscape = geometry.size.width > geometry.size.height
+        
+        // Calculate the width and height to maintain a portrait 9:16 aspect ratio
+        var previewWidth: CGFloat
+        var previewHeight: CGFloat
+        
+        if isLandscape {
+            // In landscape, use height as reference and calculate width to maintain 9:16 ratio
+            previewHeight = geometry.size.height * 0.8 // Use 80% of the height
+            previewWidth = previewHeight * (9.0/16.0)  // 9:16 ratio in portrait means 9/16 ratio for width/height
+        } else {
+            // In portrait, use width as reference
+            previewWidth = geometry.size.width
+            previewHeight = previewWidth * (16.0/9.0)  // 9:16 aspect ratio
+            
+            // If this would be too tall, scale it down
+            if previewHeight > geometry.size.height * 0.8 {
+                let scale = (geometry.size.height * 0.8) / previewHeight
+                previewWidth *= scale
+                previewHeight = geometry.size.height * 0.8
+            }
+        }
+        
+        // Log the dimensions to verify they're consistent
+        print("📸 CAMERA PREVIEW - Using portrait dimensions: \(previewWidth) x \(previewHeight)")
         
         return ZStack {
             // Camera preview layer
@@ -384,32 +446,50 @@ struct CameraContentView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(Color.white.opacity(0.3), lineWidth: 1)
                 )
-                .frame(width: width, height: height)
+                .frame(width: previewWidth, height: previewHeight)
             
             // Camera overlay with top status bar and grid lines
             CameraViewfinderOverlay(
                 viewModel: viewModel,
                 orientation: orientation
             )
+                .frame(width: previewWidth, height: previewHeight)
         }
-        // Apply scale effect to make the preview smaller
-        .scaleEffect(0.8)
-        // Do NOT rotate the UI - keep it in portrait orientation
-        // No rotationEffect here
-        // Use portrait dimensions with proper aspect ratio
-        .frame(width: width, height: height)
-        // Position in the upper part of the screen
+        // No need for scale effect as we're controlling the size directly
+        // Use calculated dimensions that maintain portrait aspect ratio
+        .frame(width: previewWidth, height: previewHeight)
+        // Center the preview in the available space
         .position(
             x: geometry.size.width / 2,
-            y: geometry.size.height * 0.4
+            y: geometry.size.height / 2
         )
     }
     
     // Bottom controls component
     private func bottomControlsView(geometry: GeometryProxy) -> some View {
-        // Always use portrait dimensions
-        let width = geometry.size.width
-        let height = geometry.size.height * 0.25
+        // Get interface orientation to help with positioning
+        let isLandscape = geometry.size.width > geometry.size.height
+        
+        // Calculate control dimensions based on available space
+        // For portrait orientation controls, we use a consistent width regardless of device orientation
+        var controlWidth: CGFloat
+        var controlHeight: CGFloat
+        
+        if isLandscape {
+            // In landscape, match the width of our portrait-oriented preview
+            let previewHeight = geometry.size.height * 0.8
+            let previewWidth = previewHeight * (9.0/16.0)
+            
+            controlWidth = previewWidth
+            controlHeight = geometry.size.height * 0.15 // Smaller height in landscape
+        } else {
+            // In portrait, use the full width
+            controlWidth = geometry.size.width
+            controlHeight = geometry.size.height * 0.25
+        }
+        
+        // Log the dimensions to verify they're consistent
+        print("🎛️ BOTTOM CONTROLS - Size: \(controlWidth) x \(controlHeight), isLandscape: \(isLandscape)")
         
         return ZStack {
             CameraBottomControlsView(
@@ -417,13 +497,14 @@ struct CameraContentView: View {
                 orientation: orientation
             )
         }
-        // Do NOT rotate the UI - keep it in portrait orientation
-        // No rotationEffect here
-        .frame(width: width, height: height)
-        // Position at the bottom of the screen
+        // Frame with calculated dimensions
+        .frame(width: controlWidth, height: controlHeight)
+        // Position the controls at appropriate location based on orientation
         .position(
             x: geometry.size.width / 2,
-            y: geometry.size.height * 0.85
+            // In portrait mode, position controls near the bottom
+            // In landscape mode, we position them below the centered camera preview
+            y: geometry.size.height * (isLandscape ? 0.65 : 0.85)
         )
     }
 } 

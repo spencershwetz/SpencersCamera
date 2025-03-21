@@ -786,10 +786,21 @@ class CameraViewModel: NSObject, ObservableObject {
             
             // Get device orientation for logging only
             let deviceOrientation = UIDevice.current.orientation
-            print("🔒 LOCKING CAMERA UI - Device orientation changed to \(deviceOrientation.rawValue), but keeping portrait orientation")
             
-            // Always use portrait orientation (90°) for camera preview
+            // Get interface orientation
+            let interfaceOrientation: UIInterfaceOrientation
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                interfaceOrientation = windowScene.interfaceOrientation
+            } else {
+                interfaceOrientation = .portrait
+            }
+            
+            print("🔒 LOCKING CAMERA - Always using portrait orientation (90°)")
+            print("🔍 DEVICE ORIENTATION - Physical Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)")
+            
+            // Always use portrait orientation (90°) for camera preview regardless of device orientation
             let rotationAngle: CGFloat = 90
+            print("🔒 Camera orientation locked to portrait (90°) regardless of device orientation")
             
             // Update all video connections to always use portrait orientation
             if let connection = self.movieOutput.connection(with: .video) {
@@ -811,6 +822,14 @@ class CameraViewModel: NSObject, ObservableObject {
                     if connection.isVideoRotationAngleSupported(rotationAngle) {
                         connection.videoRotationAngle = rotationAngle
                     }
+                }
+            }
+            
+            // Update the camera preview if we have access to it
+            if let previewView = self.owningView as? FixedOrientationCameraPreview.VideoPreviewView, 
+               let connection = previewView.videoPreviewLayer.connection {
+                if connection.isVideoRotationAngleSupported(rotationAngle) {
+                    connection.videoRotationAngle = rotationAngle
                 }
             }
         }
