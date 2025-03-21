@@ -44,47 +44,76 @@ struct CameraView: View {
     }
     
     var body: some View {
-        // Container that doesn't rotate
         ZStack {
-            // Create a frame with the correct aspect ratio regardless of orientation
+            // Black background for the entire screen
+            Color.black.ignoresSafeArea()
+            
             GeometryReader { outerGeometry in
                 if viewModel.isSessionRunning {
-                    // This ZStack contains all rotating content - it rotates as a single unit
+                    // Main container for content
                     ZStack {
-                        // Fixed camera preview layer
-                        FixedOrientationCameraPreview(session: viewModel.session, viewModel: viewModel)
-                            // Add explicit frame to ensure it stays within bounds
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        
-                        // UI overlay
-                        CameraViewfinderOverlay(
-                            viewModel: viewModel,
-                            orientation: uiOrientation
+                        // CAMERA PREVIEW
+                        // Position this in the upper portion of the screen
+                        ZStack {
+                            // Fixed camera preview layer
+                            FixedOrientationCameraPreview(session: viewModel.session, viewModel: viewModel)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            
+                            // Camera overlay with top status bar and grid lines
+                            CameraViewfinderOverlay(
+                                viewModel: viewModel,
+                                orientation: uiOrientation
+                            )
+                        }
+                        // Apply rotation to camera preview
+                        .rotationEffect(rotationAngle(for: uiOrientation))
+                        // Use appropriate sizing for orientation
+                        .frame(
+                            width: isLandscapeOrientation(uiOrientation) ? 
+                                  outerGeometry.size.height * 0.7 : 
+                                  outerGeometry.size.width,
+                            height: isLandscapeOrientation(uiOrientation) ? 
+                                   outerGeometry.size.width * 0.7 : 
+                                   outerGeometry.size.height * 0.7
                         )
+                        // Scale for additional size control
+                        .scaleEffect(0.8)
+                        // Position in the upper part of the screen
+                        .position(
+                            x: outerGeometry.size.width / 2,
+                            y: isLandscapeOrientation(uiOrientation) ? 
+                               outerGeometry.size.height / 2 : 
+                               outerGeometry.size.height * 0.4
+                        )
+                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
+                        
+                        // BOTTOM CONTROLS
+                        // These are positioned at the bottom, closer to the USB-C port
+                        ZStack {
+                            CameraBottomControlsView(
+                                viewModel: viewModel,
+                                orientation: uiOrientation
+                            )
+                        }
+                        .rotationEffect(rotationAngle(for: uiOrientation))
+                        .frame(
+                            width: isLandscapeOrientation(uiOrientation) ? 
+                                  outerGeometry.size.height * 0.9 : 
+                                  outerGeometry.size.width,
+                            height: isLandscapeOrientation(uiOrientation) ? 
+                                   outerGeometry.size.width * 0.3 : 
+                                   outerGeometry.size.height * 0.25
+                        )
+                        // Position at the bottom of the screen, near USB-C port
+                        .position(
+                            x: outerGeometry.size.width / 2,
+                            y: isLandscapeOrientation(uiOrientation) ? 
+                               outerGeometry.size.height / 2 : 
+                               outerGeometry.size.height * 0.85
+                        )
+                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
                     }
-                    // Apply rotation to the entire container
-                    .rotationEffect(rotationAngle(for: uiOrientation))
-                    // Use a container size appropriate for the orientation with padding
-                    .frame(
-                        width: isLandscapeOrientation(uiOrientation) ? outerGeometry.size.height : outerGeometry.size.width,
-                        height: isLandscapeOrientation(uiOrientation) ? outerGeometry.size.width : outerGeometry.size.height
-                    )
-                    // Add padding to create space around the camera view
-                    .padding(EdgeInsets(
-                        top: calculatePadding(in: outerGeometry, orientation: uiOrientation).top,
-                        leading: calculatePadding(in: outerGeometry, orientation: uiOrientation).leading,
-                        bottom: calculatePadding(in: outerGeometry, orientation: uiOrientation).bottom,
-                        trailing: calculatePadding(in: outerGeometry, orientation: uiOrientation).trailing
-                    ))
-                    // Apply scaling to make the preview appear smaller
-                    .scaleEffect(0.8)
-                    .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
                     .opacity(isRotating ? 0.99 : 1.0)
-                    // Center in the screen
-                    .position(
-                        x: outerGeometry.size.width / 2,
-                        y: outerGeometry.size.height / 2
-                    )
                 } else {
                     // Show loading or error state
                     VStack {
@@ -246,33 +275,5 @@ struct CameraView: View {
         default:
             return .zero
         }
-    }
-    
-    /// Calculate padding values based on device orientation and screen size
-    private func calculatePadding(in geometry: GeometryProxy, orientation: UIDeviceOrientation) -> PaddingValues {
-        let isLandscape = orientation == .landscapeLeft || orientation == .landscapeRight
-        
-        // Control how small the preview should be (lower value = smaller preview)
-        let previewScaleFactor: CGFloat = 0.6
-        
-        // Calculate padding based on available space and desired scale
-        let availableWidth = geometry.size.width
-        let availableHeight = geometry.size.height
-        
-        // Calculate padding to achieve the desired scale factor
-        let horizontalPadding = (availableWidth * (1 - previewScaleFactor)) / 2
-        let verticalPadding = (availableHeight * (1 - previewScaleFactor)) / 2
-        
-        // Add extra bottom padding for controls area
-        let bottomExtraPadding = isLandscape ? verticalPadding * 0.8 : verticalPadding * 0.8
-        
-        print("Applying scaled padding - H: \(horizontalPadding), V: \(verticalPadding), Bottom extra: \(bottomExtraPadding)")
-        
-        return PaddingValues(
-            top: verticalPadding,
-            leading: horizontalPadding,
-            bottom: verticalPadding + bottomExtraPadding,
-            trailing: horizontalPadding
-        )
     }
 } 

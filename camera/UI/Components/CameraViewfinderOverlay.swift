@@ -25,8 +25,8 @@ struct CameraViewfinderOverlay: View {
                         .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                 }
                 
-                // Flexible layout that adapts to any orientation
-                overlayContent(in: geometry)
+                // Top content only - excluding bottom controls
+                topOverlayContent(in: geometry)
                 
                 // LUT indicator overlay when active
                 if viewModel.lutManager.currentLUTFilter != nil {
@@ -81,8 +81,8 @@ struct CameraViewfinderOverlay: View {
         }
     }
     
-    // The main overlay content that adapts to different orientations
-    private func overlayContent(in geometry: GeometryProxy) -> some View {
+    // The top overlay content that excludes bottom controls
+    private func topOverlayContent(in geometry: GeometryProxy) -> some View {
         VStack(spacing: 0) {
             // Top status bar
             topStatusBar
@@ -112,78 +112,6 @@ struct CameraViewfinderOverlay: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             
             Spacer()
-            
-            // Bottom controls
-            VStack(spacing: 24) {
-                // Zoom controls
-                HStack(spacing: 20) {
-                    // AF indicator
-                    Button(action: {
-                        showFocusBox.toggle()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(showFocusBox ? Color.yellow : Color.black.opacity(0.7))
-                                .frame(width: 60, height: 60)
-                            
-                            Text("AF")
-                                .foregroundColor(showFocusBox ? .black : .yellow)
-                                .font(.system(size: 20, weight: .bold))
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Zoom buttons
-                    ForEach([0.5, 1.0, 2.0, 5.0], id: \.self) { level in
-                        CameraZoomButton(
-                            level: formatZoomLevel(level),
-                            isSelected: isZoomLevelSelected(level, currentLevel: viewModel.currentZoomLevel),
-                            action: {
-                                viewModel.currentZoomLevel = level
-                            }
-                        )
-                    }
-                    
-                    Spacer()
-                    
-                    // Back button
-                    Button(action: {
-                        // Back action
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.black.opacity(0.7))
-                                .frame(width: 60, height: 60)
-                            
-                            Image(systemName: "chevron.backward")
-                                .foregroundColor(.white)
-                                .font(.system(size: 24, weight: .bold))
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                
-                // Record button
-                Button(action: {
-                    if viewModel.isRecording {
-                        viewModel.stopRecording()
-                    } else {
-                        viewModel.startRecording()
-                    }
-                }) {
-                    Circle()
-                        .fill(viewModel.isRecording ? Color.white : Color.red)
-                        .frame(width: 70, height: 70)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white, lineWidth: 3)
-                                .frame(width: 76, height: 76)
-                        )
-                }
-                .padding(.bottom, geometry.safeAreaInsets.bottom + 20)
-            }
-            .padding(.bottom, 16)
         }
     }
     
@@ -283,6 +211,90 @@ struct CameraViewfinderOverlay: View {
         case .faceUp: return "FaceUp"
         case .faceDown: return "FaceDown"
         default: return "Unknown"
+        }
+    }
+}
+
+// MARK: - Bottom Controls View
+struct CameraBottomControlsView: View {
+    @ObservedObject var viewModel: CameraViewModel
+    let orientation: UIDeviceOrientation
+    @State private var showFocusBox = false
+    
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 24) {
+                // Zoom controls
+                HStack(spacing: 20) {
+                    // AF indicator
+                    Button(action: {
+                        showFocusBox.toggle()
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(showFocusBox ? Color.yellow : Color.black.opacity(0.7))
+                                .frame(width: 60, height: 60)
+                            
+                            Text("AF")
+                                .foregroundColor(showFocusBox ? .black : .yellow)
+                                .font(.system(size: 20, weight: .bold))
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Zoom buttons
+                    ForEach([0.5, 1.0, 2.0, 5.0], id: \.self) { level in
+                        CameraZoomButton(
+                            level: formatZoomLevel(level),
+                            isSelected: isZoomLevelSelected(level, currentLevel: viewModel.currentZoomLevel),
+                            action: {
+                                viewModel.currentZoomLevel = level
+                            }
+                        )
+                    }
+                    
+                    Spacer()
+                    
+                    // Back button
+                    Button(action: {
+                        // Back action
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.black.opacity(0.7))
+                                .frame(width: 60, height: 60)
+                            
+                            Image(systemName: "chevron.backward")
+                                .foregroundColor(.white)
+                                .font(.system(size: 24, weight: .bold))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                
+                // Record button
+                Button(action: {
+                    if viewModel.isRecording {
+                        viewModel.stopRecording()
+                    } else {
+                        viewModel.startRecording()
+                    }
+                }) {
+                    Circle()
+                        .fill(viewModel.isRecording ? Color.white : Color.red)
+                        .frame(width: 70, height: 70)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white, lineWidth: 3)
+                                .frame(width: 76, height: 76)
+                        )
+                }
+                .padding(.bottom, geometry.safeAreaInsets.bottom + 20)
+            }
+            .padding(.bottom, 16)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .background(Color.black.opacity(0.4))
         }
     }
     
