@@ -55,9 +55,21 @@ struct CameraView: View {
                         // CAMERA PREVIEW
                         // Position this in the upper portion of the screen
                         ZStack {
-                            // Fixed camera preview layer
+                            // Camera preview layer
                             FixedOrientationCameraPreview(session: viewModel.session, viewModel: viewModel)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .cornerRadius(20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                )
+                                .frame(
+                                    width: isLandscapeOrientation(uiOrientation) ? 
+                                          outerGeometry.size.height * (16/9) : 
+                                          outerGeometry.size.width,
+                                    height: isLandscapeOrientation(uiOrientation) ? 
+                                           outerGeometry.size.height : 
+                                           outerGeometry.size.width * (16/9)
+                                )
                             
                             // Camera overlay with top status bar and grid lines
                             CameraViewfinderOverlay(
@@ -65,19 +77,23 @@ struct CameraView: View {
                                 orientation: uiOrientation
                             )
                         }
+                        // Apply scale effect to make the preview smaller
+                        .scaleEffect(0.8)
                         // Apply rotation to camera preview
                         .rotationEffect(rotationAngle(for: uiOrientation))
-                        // Use appropriate sizing for orientation
+                        // Use appropriate sizing for orientation with proper aspect ratio (16:9 or 9:16)
                         .frame(
                             width: isLandscapeOrientation(uiOrientation) ? 
-                                  outerGeometry.size.height * 0.7 : 
+                                  // For landscape: maintain 16:9 aspect ratio
+                                  outerGeometry.size.height * (16/9) : 
+                                  // For portrait: use full width
                                   outerGeometry.size.width,
                             height: isLandscapeOrientation(uiOrientation) ? 
-                                   outerGeometry.size.width * 0.7 : 
-                                   outerGeometry.size.height * 0.7
+                                  // For landscape: use full height
+                                  outerGeometry.size.height : 
+                                  // For portrait: maintain 9:16 aspect ratio
+                                  outerGeometry.size.width * (16/9)
                         )
-                        // Scale for additional size control
-                        .scaleEffect(0.8)
                         // Position in the upper part of the screen
                         .position(
                             x: outerGeometry.size.width / 2,
