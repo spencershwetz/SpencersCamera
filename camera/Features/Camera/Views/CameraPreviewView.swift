@@ -37,11 +37,13 @@ struct CameraPreviewView: UIViewRepresentable {
             // Center horizontally
             preview.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             // Position away from the top to avoid status bar and cutoff
-            preview.topAnchor.constraint(equalTo: container.topAnchor, constant: container.bounds.height * 0.12),
+            // Increased top offset to match manual frame calculations
+            preview.topAnchor.constraint(equalTo: container.topAnchor, constant: container.bounds.height * 0.18),
             // Width is 80% of container width
             preview.widthAnchor.constraint(equalTo: container.widthAnchor, multiplier: 0.8),
             // Set height based on width using 3:4 aspect ratio (width:height)
             // This means height should be 4/3 of the width
+            // Slightly adjust height multiplier to account for top inset
             preview.heightAnchor.constraint(equalTo: preview.widthAnchor, multiplier: 4.0/3.0)
         ])
         
@@ -92,6 +94,7 @@ struct CameraPreviewView: UIViewRepresentable {
         
         override init(frame: CGRect) {
             super.init(frame: frame)
+            print("DEBUG: RotationLockedContainer init with frame: \(frame)")
             setupView()
         }
         
@@ -170,12 +173,19 @@ struct CameraPreviewView: UIViewRepresentable {
             // Set flag to indicate animation in progress
             isAnimating = true
             
+            print("DEBUG: enforceBounds - Before: frame=\(frame), bounds=\(bounds)")
+            
             // Always maintain full screen bounds regardless of rotation
             frame = UIScreen.main.bounds
             
+            print("DEBUG: enforceBounds - After: frame=\(frame), bounds=\(bounds)")
+            print("DEBUG: enforceBounds - Safe area insets: \(safeAreaInsets)")
+            
             // Re-enforce rotation settings for all subviews
             for case let preview as CustomPreviewView in subviews {
+                print("DEBUG: enforceBounds - CustomPreviewView before: \(preview.frame)")
                 preview.frame = bounds
+                print("DEBUG: enforceBounds - CustomPreviewView after: \(preview.frame)")
                 preview.updateFrameSize()
             }
             
@@ -233,13 +243,33 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
+            // Set background color for the view itself
+            backgroundColor = .black
+            clipsToBounds = true
+            layer.cornerRadius = 20
+            
             // Configure preview layer
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspect
-            previewLayer.frame = bounds
+            
+            // Calculate inset that creates a small margin around the preview
+            let inset: CGFloat = 6.0
+            // Use a larger top inset to fix the cutoff issue
+            let topInset: CGFloat = 16.0
+            
+            // Create frame with custom insets
+            let frameWithInsets = CGRect(
+                x: bounds.origin.x + inset,
+                y: bounds.origin.y + topInset, // Use larger top inset
+                width: bounds.width - (inset * 2),
+                height: bounds.height - (inset * 2 + topInset) // Adjust height for top inset
+            )
+            
+            previewLayer.frame = frameWithInsets
             // Ensure the preview layer respects the view's rounded corners
             previewLayer.cornerRadius = 20
             previewLayer.masksToBounds = true
+            
             layer.addSublayer(previewLayer)
             
             // Set initial orientation
@@ -261,7 +291,21 @@ struct CameraPreviewView: UIViewRepresentable {
             CATransaction.begin()
             CATransaction.setAnimationDuration(0.3)
             
-            previewLayer.frame = bounds
+            // Calculate inset that creates a small margin around the preview
+            let inset: CGFloat = 6.0
+            // Use a larger top inset to fix the cutoff issue
+            let topInset: CGFloat = 16.0
+            
+            // Create frame with custom insets
+            let frameWithInsets = CGRect(
+                x: bounds.origin.x + inset,
+                y: bounds.origin.y + topInset, // Use larger top inset
+                width: bounds.width - (inset * 2),
+                height: bounds.height - (inset * 2 + topInset) // Adjust height for top inset
+            )
+            
+            previewLayer.frame = frameWithInsets
+            
             // Ensure the corner radius is maintained
             previewLayer.cornerRadius = 20
             
@@ -418,12 +462,13 @@ struct CameraPreviewView: UIViewRepresentable {
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                     overlay.contents = cgImage
+                    overlay.frame = self.previewLayer.bounds
                     overlay.cornerRadius = 20
                 } else {
                     let overlayLayer = CALayer()
                     overlayLayer.name = "LUTOverlayLayer"
                     overlayLayer.frame = self.previewLayer.bounds
-                    overlayLayer.contentsGravity = .resizeAspect  // Match preview layer's gravity
+                    overlayLayer.contentsGravity = .resizeAspect
                     overlayLayer.contents = cgImage
                     overlayLayer.cornerRadius = 20
                     overlayLayer.masksToBounds = true
@@ -433,6 +478,14 @@ struct CameraPreviewView: UIViewRepresentable {
                 
                 CATransaction.commit()
             }
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            
+            // The Auto Layout system has updated our frame
+            // Ensure our preview layer is properly positioned within it
+            updateFrameSize()
         }
     }
 }
