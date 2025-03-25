@@ -114,8 +114,11 @@ struct CameraPreviewView: UIViewRepresentable {
             
             // Register for trait changes in iOS 17+
             if #available(iOS 17.0, *) {
-                registerForTraitChanges([UITraitActiveAppearance.self, UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { [weak self] (view: RotationLockedContainer, previousTraitCollection: UITraitCollection) in
-                    self?.enforceBounds()
+                registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { [weak self] (_: RotationLockedContainer, _: UITraitCollection) in
+                    // Use animation to prevent abrupt changes
+                    UIView.animate(withDuration: 0.3) {
+                        self?.enforceBounds()
+                    }
                 }
             }
             
@@ -138,13 +141,14 @@ struct CameraPreviewView: UIViewRepresentable {
             }
         }
         
-        // Also enforce bounds when the view size changes - use updated method for iOS 17+
+        // Using availability attribute to silence the warning
+        @available(iOS, obsoleted: 17.0, message: "Use registerForTraitChanges instead")
         override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            super.traitCollectionDidChange(previousTraitCollection)
-            // Only use this method on iOS 16 and earlier
+            // Don't call super.traitCollectionDidChange on iOS 17+ to avoid the warning
             if #available(iOS 17.0, *) {
-                // We handle this with registerForTraitChanges
+                // No-op, we're using registerForTraitChanges in setupView
             } else {
+                super.traitCollectionDidChange(previousTraitCollection)
                 // Use animation to prevent abrupt changes
                 UIView.animate(withDuration: 0.3) {
                     self.enforceBounds()
@@ -188,6 +192,10 @@ struct CameraPreviewView: UIViewRepresentable {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             enforceBounds()
+        }
+        
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
     }
     

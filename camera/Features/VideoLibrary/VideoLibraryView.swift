@@ -230,7 +230,7 @@ struct VideoLibraryView: View {
             
             // Set supported orientations to include landscape
             let orientations: UIInterfaceOrientationMask = [.portrait, .landscapeLeft, .landscapeRight]
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
+            _ = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
             
             print("DEBUG: Applying landscape orientation using scene geometry update")
             print("DEBUG: [ORIENTATION-DEBUG] Current interface orientation before update: \(windowScene.interfaceOrientation.rawValue)")
