@@ -23,16 +23,26 @@ struct CameraPreviewView: UIViewRepresentable {
         preview.backgroundColor = .black
         preview.tag = 100 // Tag for identification
         
+        // Apply rounded corners to the preview
+        preview.layer.cornerRadius = 20
+        preview.layer.masksToBounds = true
+        
         // Add the preview to our container
         container.addSubview(preview)
         
-        // Pin the preview to the container with auto layout
+        // Pin the preview to the container with auto layout - using 80% of the screen size
+        // and positioning it more towards the top
         preview.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            preview.topAnchor.constraint(equalTo: container.topAnchor),
-            preview.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            preview.leftAnchor.constraint(equalTo: container.leftAnchor),
-            preview.rightAnchor.constraint(equalTo: container.rightAnchor)
+            // Center horizontally
+            preview.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            // Position away from the top to avoid status bar and cutoff
+            preview.topAnchor.constraint(equalTo: container.topAnchor, constant: container.bounds.height * 0.12),
+            // Width is 80% of container width
+            preview.widthAnchor.constraint(equalTo: container.widthAnchor, multiplier: 0.8),
+            // Set height based on width using 3:4 aspect ratio (width:height)
+            // This means height should be 4/3 of the width
+            preview.heightAnchor.constraint(equalTo: preview.widthAnchor, multiplier: 4.0/3.0)
         ])
         
         return container
@@ -225,8 +235,11 @@ struct CameraPreviewView: UIViewRepresentable {
         private func setupView() {
             // Configure preview layer
             previewLayer.session = session
-            previewLayer.videoGravity = .resizeAspectFill
+            previewLayer.videoGravity = .resizeAspect
             previewLayer.frame = bounds
+            // Ensure the preview layer respects the view's rounded corners
+            previewLayer.cornerRadius = 20
+            previewLayer.masksToBounds = true
             layer.addSublayer(previewLayer)
             
             // Set initial orientation
@@ -249,6 +262,8 @@ struct CameraPreviewView: UIViewRepresentable {
             CATransaction.setAnimationDuration(0.3)
             
             previewLayer.frame = bounds
+            // Ensure the corner radius is maintained
+            previewLayer.cornerRadius = 20
             
             // Also update connection orientation
             if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
@@ -258,6 +273,7 @@ struct CameraPreviewView: UIViewRepresentable {
             // Also update any LUT overlay layer
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                 overlay.frame = previewLayer.bounds
+                overlay.cornerRadius = 20
             }
             
             CATransaction.commit()
@@ -402,12 +418,15 @@ struct CameraPreviewView: UIViewRepresentable {
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                     overlay.contents = cgImage
+                    overlay.cornerRadius = 20
                 } else {
                     let overlayLayer = CALayer()
                     overlayLayer.name = "LUTOverlayLayer"
                     overlayLayer.frame = self.previewLayer.bounds
-                    overlayLayer.contentsGravity = .resizeAspectFill
+                    overlayLayer.contentsGravity = .resizeAspect  // Match preview layer's gravity
                     overlayLayer.contents = cgImage
+                    overlayLayer.cornerRadius = 20
+                    overlayLayer.masksToBounds = true
                     self.previewLayer.addSublayer(overlayLayer)
                     print("DEBUG: Added LUT overlay layer")
                 }

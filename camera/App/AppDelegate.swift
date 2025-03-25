@@ -11,6 +11,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     // Track if the video library is currently being presented
     static var isVideoLibraryPresented: Bool = false
     
+    // Track whether status bar should be hidden
+    static var shouldHideStatusBar: Bool = true
+    
     // MARK: - Application Lifecycle
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {

@@ -253,6 +253,11 @@ class OrientationFixViewController: UIViewController {
     override var shouldAutorotate: Bool {
         return allowsLandscape || AppDelegate.isVideoLibraryPresented
     }
+    
+    // Hide status bar
+    override var prefersStatusBarHidden: Bool {
+        return AppDelegate.shouldHideStatusBar
+    }
 }
 
 // Extension to make this available in SwiftUI

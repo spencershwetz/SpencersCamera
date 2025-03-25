@@ -67,6 +67,14 @@ struct CameraView: View {
             }
         }
         .onAppear {
+            // Hide status bar for camera view
+            AppDelegate.shouldHideStatusBar = true
+            // Use the newer API to force status bar update
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.setNeedsStatusBarAppearanceUpdate()
+            }
+            
             // Start the camera session when the view appears
             if !viewModel.session.isRunning {
                 DispatchQueue.global(qos: .userInitiated).async {
@@ -206,6 +214,9 @@ struct CameraView: View {
             print("DEBUG: [ORIENTATION-DEBUG] Setting AppDelegate.isVideoLibraryPresented = true")
             AppDelegate.isVideoLibraryPresented = true
             
+            // Allow status bar for video library
+            AppDelegate.shouldHideStatusBar = false
+            
             // Show the video library
             isShowingVideoLibrary = true
         }) {
@@ -223,6 +234,15 @@ struct CameraView: View {
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
             // Reset any necessary state on dismiss
             print("DEBUG: Video library was dismissed")
+            
+            // Hide status bar again when returning to camera
+            AppDelegate.shouldHideStatusBar = true
+            
+            // Force status bar update using newer API
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.setNeedsStatusBarAppearanceUpdate()
+            }
         }) {
             VideoLibraryView()
                 .preferredColorScheme(.dark)
