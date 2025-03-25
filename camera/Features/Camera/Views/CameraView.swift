@@ -9,6 +9,7 @@ struct CameraView: View {
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
+    @State private var isShowingVideoLibrary = false
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -177,6 +178,7 @@ struct CameraView: View {
     private var portraitControlsLayout: some View {
         VStack(spacing: 15) {
             controlsHeader
+            videoLibraryButton
             framerateControl
             whiteBalanceControl
             tintControl
@@ -196,6 +198,26 @@ struct CameraView: View {
     private var controlsHeader: some View {
         Text("Camera Controls")
             .font(.headline)
+    }
+    
+    private var videoLibraryButton: some View {
+        Button(action: {
+            isShowingVideoLibrary = true
+        }) {
+            HStack {
+                Image(systemName: "film")
+                    .font(.system(size: 20))
+                Text("Video Library")
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(Color.blue.opacity(0.6))
+            .cornerRadius(8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $isShowingVideoLibrary) {
+            VideoLibraryView()
+        }
     }
     
     private var framerateControl: some View {
