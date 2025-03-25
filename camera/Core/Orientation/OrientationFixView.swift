@@ -5,6 +5,7 @@ import SwiftUI
 class OrientationFixViewController: UIViewController {
     private let contentView: UIView
     fileprivate(set) var allowsLandscape: Bool
+    private var hasAppliedInitialOrientation = false
     
     init(contentView: UIView, allowsLandscape: Bool = false) {
         self.contentView = contentView
@@ -56,10 +57,13 @@ class OrientationFixViewController: UIViewController {
             enforcePortraitOrientation()
         } else {
             // When allowing landscape, make sure to update to current device orientation
-            updateToCurrentDeviceOrientation()
-            
-            // Also set the AppDelegate flag
-            AppDelegate.isVideoLibraryPresented = true
+            if !hasAppliedInitialOrientation {
+                hasAppliedInitialOrientation = true
+                updateToCurrentDeviceOrientation()
+                
+                // Also set the AppDelegate flag
+                AppDelegate.isVideoLibraryPresented = true
+            }
         }
         
         // Modern approach to update orientation
@@ -75,9 +79,18 @@ class OrientationFixViewController: UIViewController {
             
             // Use a slight delay to ensure the view has fully appeared
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                UIViewController.attemptRotationToDeviceOrientation()
+                // Ensure we're still in landscape mode by using setNeedsUpdateOfSupportedInterfaceOrientations
+                // which is the modern replacement for attemptRotationToDeviceOrientation
+                self.setNeedsUpdateOfSupportedInterfaceOrientations()
                 
-                // Also try using the notification center to force rotation
+                // Also notify others that might need to update
+                if let windowScene = self.findActiveWindowScene() {
+                    for window in windowScene.windows {
+                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    }
+                }
+                
+                // Post notification for orientation change
                 NotificationCenter.default.post(
                     name: UIDevice.orientationDidChangeNotification,
                     object: nil
@@ -94,13 +107,7 @@ class OrientationFixViewController: UIViewController {
         if allowsLandscape && !AppDelegate.isVideoLibraryPresented {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 if !AppDelegate.isVideoLibraryPresented {
-                    // Reset to portrait orientation
-                    if let windowScene = self.view.window?.windowScene {
-                        let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-                        windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                            print("DEBUG: Error resetting to portrait: \(error.localizedDescription)")
-                        }
-                    }
+                    self.enforcePortraitOrientation()
                 }
             }
         }
@@ -112,8 +119,12 @@ class OrientationFixViewController: UIViewController {
         if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
             let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
             windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                // The error parameter here is not optional, it's a concrete Error
-                print("DEBUG: Error enforcing portrait orientation: \(error.localizedDescription)")
+                print("DEBUG: Portrait orientation applied: \(error.localizedDescription)")
+            }
+            
+            // Also update all view controllers
+            for window in windowScene.windows {
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
     }
@@ -124,7 +135,12 @@ class OrientationFixViewController: UIViewController {
             let orientations: UIInterfaceOrientationMask = [.portrait, .landscapeLeft, .landscapeRight]
             let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
             windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                print("DEBUG: Error enabling all orientations: \(error.localizedDescription)")
+                print("DEBUG: All orientations enabled: \(error.localizedDescription)")
+            }
+            
+            // Also update all view controllers
+            for window in windowScene.windows {
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
     }
@@ -132,15 +148,81 @@ class OrientationFixViewController: UIViewController {
     // Update to match current device orientation
     private func updateToCurrentDeviceOrientation() {
         let currentOrientation = UIDevice.current.orientation
-        if currentOrientation.isLandscape {
-            print("DEBUG: Adapting to landscape orientation: \(currentOrientation.rawValue)")
+        
+        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
+            var preferredOrientations: UIInterfaceOrientationMask
+            var targetOrientation: UIInterfaceOrientation?
             
-            if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
-                let orientations: UIInterfaceOrientationMask = [.portrait, .landscapeLeft, .landscapeRight]
-                let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-                windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                    print("DEBUG: Error adapting to landscape: \(error.localizedDescription)")
+            if currentOrientation.isLandscape {
+                print("DEBUG: OrientationFixVC adapting to landscape orientation: \(currentOrientation.rawValue)")
+                preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
+                
+                // Map device orientation to interface orientation
+                if currentOrientation == .landscapeLeft {
+                    targetOrientation = .landscapeRight
+                } else if currentOrientation == .landscapeRight {
+                    targetOrientation = .landscapeLeft
                 }
+            } else if currentOrientation == .faceUp || currentOrientation == .faceDown {
+                print("DEBUG: OrientationFixVC handling face up/down orientation: \(currentOrientation.rawValue)")
+                
+                // If we allow landscape and video library is presented, maintain landscape
+                if allowsLandscape && AppDelegate.isVideoLibraryPresented {
+                    preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
+                    
+                    // Check current interface orientation
+                    let currentInterfaceOrientation = windowScene.interfaceOrientation
+                    if currentInterfaceOrientation.isLandscape {
+                        // Maintain current landscape orientation
+                        targetOrientation = currentInterfaceOrientation
+                        print("DEBUG: OrientationFixVC maintaining landscape interface orientation: \(currentInterfaceOrientation.rawValue)")
+                    } else {
+                        // Default to landscape right
+                        targetOrientation = .landscapeRight
+                        print("DEBUG: OrientationFixVC defaulting to landscape right for face orientation")
+                    }
+                } else {
+                    // Default to portrait in other cases
+                    preferredOrientations = .portrait
+                    targetOrientation = .portrait
+                }
+            } else {
+                // Default to all orientations allowed if we allow landscape
+                if allowsLandscape {
+                    preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
+                } else {
+                    preferredOrientations = .portrait
+                    targetOrientation = .portrait
+                }
+            }
+            
+            // Apply orientation mask
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: preferredOrientations)
+            windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                print("DEBUG: OrientationFixVC orientation adaptation complete: \(error.localizedDescription)")
+            }
+            
+            // If we have a specific target orientation, set it explicitly
+            if let targetOrientation = targetOrientation {
+                // Create proper mask from single orientation
+                let orientationMask: UIInterfaceOrientationMask
+                switch targetOrientation {
+                case .portrait: orientationMask = .portrait
+                case .portraitUpsideDown: orientationMask = .portraitUpsideDown
+                case .landscapeLeft: orientationMask = .landscapeLeft
+                case .landscapeRight: orientationMask = .landscapeRight
+                default: orientationMask = .portrait
+                }
+                
+                let specificGeometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
+                windowScene.requestGeometryUpdate(specificGeometryPreferences) { error in
+                    print("DEBUG: OrientationFixVC specific orientation update: \(error.localizedDescription)")
+                }
+            }
+            
+            // Also update all view controllers
+            for window in windowScene.windows {
+                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
         }
     }
@@ -179,7 +261,8 @@ extension UIViewController {
     func findActiveWindowScene() -> UIWindowScene? {
         return UIApplication.shared.connectedScenes
             .filter { $0.activationState == .foregroundActive }
-            .first as? UIWindowScene
+            .compactMap { $0 as? UIWindowScene }
+            .first
     }
 }
 
@@ -213,10 +296,10 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiViewController: OrientationFixViewController, context: Context) {
-        // If we allow landscape, attempt rotation when updating
+        // If we allow landscape, ensure orientation is updated
         if allowsLandscape {
             AppDelegate.isVideoLibraryPresented = true
-            UIViewController.attemptRotationToDeviceOrientation()
+            uiViewController.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
     }
 } 

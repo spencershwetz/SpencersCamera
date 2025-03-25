@@ -102,16 +102,10 @@ class LUTManager: ObservableObject {
             print("❌ LUTManager Error: Failed to copy or load LUT: \(error.localizedDescription)")
             
             // Try to load directly from the original location as a fallback
-            do {
-                print("🔄 LUTManager: Attempting to load directly from original location")
-                loadLUT(from: url)
-                DispatchQueue.main.async {
-                    self.selectedLUTURL = url
-                    completion(true)
-                }
-            } catch {
-                print("❌ LUTManager Error: Fallback load also failed: \(error.localizedDescription)")
-                completion(false)
+            loadLUT(from: url)
+            DispatchQueue.main.async {
+                self.selectedLUTURL = url
+                completion(true)
             }
         }
     }

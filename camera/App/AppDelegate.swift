@@ -35,9 +35,58 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             print("🔄 AppDelegate detected orientation change: \(orientation.rawValue)")
             
             // Force attempt rotation when orientation changes
-            if AppDelegate.isVideoLibraryPresented && orientation.isLandscape {
+            if AppDelegate.isVideoLibraryPresented {
                 DispatchQueue.main.async {
-                    UIViewController.attemptRotationToDeviceOrientation()
+                    // Update to modern API for iOS 16+
+                    if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+                        let currentInterfaceOrientation = windowScene.interfaceOrientation
+                        var targetOrientation: UIInterfaceOrientation = currentInterfaceOrientation
+                        
+                        // If device orientation is landscape, map it to the corresponding interface orientation
+                        if orientation.isLandscape {
+                            // Device landscapeLeft is interface landscapeRight and vice versa
+                            targetOrientation = orientation == .landscapeLeft ? .landscapeRight : .landscapeLeft
+                            print("DEBUG: AppDelegate mapping device orientation \(orientation.rawValue) to interface orientation \(targetOrientation.rawValue)")
+                        } 
+                        // For face up/down orientations, maintain current interface orientation if it's landscape
+                        else if (orientation == .faceUp || orientation == .faceDown) && currentInterfaceOrientation.isLandscape {
+                            targetOrientation = currentInterfaceOrientation
+                            print("DEBUG: AppDelegate maintaining landscape orientation \(targetOrientation.rawValue) for face up/down")
+                        }
+                        // If returning to portrait from face up/down, but video library is active, force landscape
+                        else if (orientation == .portrait || orientation == .portraitUpsideDown || 
+                               orientation == .faceUp || orientation == .faceDown) && AppDelegate.isVideoLibraryPresented {
+                            // Default to landscape right if we need to force landscape
+                            targetOrientation = .landscapeRight
+                            print("DEBUG: AppDelegate forcing landscape for video library despite portrait/face orientation")
+                        }
+                        
+                        // Apply specific orientation
+                        // Create proper mask from single orientation
+                        let orientationMask: UIInterfaceOrientationMask
+                        switch targetOrientation {
+                        case .portrait: orientationMask = .portrait
+                        case .portraitUpsideDown: orientationMask = .portraitUpsideDown
+                        case .landscapeLeft: orientationMask = .landscapeLeft
+                        case .landscapeRight: orientationMask = .landscapeRight
+                        default: orientationMask = .portrait
+                        }
+                        
+                        let specificGeometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
+                        windowScene.requestGeometryUpdate(specificGeometryPreferences) { error in
+                            print("DEBUG: AppDelegate specific orientation update: \(error.localizedDescription)")
+                        }
+                        
+                        // Update all view controllers
+                        for window in windowScene.windows {
+                            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                            
+                            // Also update any presented controllers
+                            if let presented = window.rootViewController?.presentedViewController {
+                                presented.setNeedsUpdateOfSupportedInterfaceOrientations()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -70,6 +119,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 if let childController = topViewController.children.first {
                     let childName = String(describing: type(of: childController))
                     print("DEBUG: PresentationHostingController contains: \(childName)")
+                    
+                    // Check if any child view controller supports landscape orientation
+                    for controller in topViewController.children {
+                        let controllerName = String(describing: type(of: controller))
+                        if AppDelegate.landscapeEnabledViewControllers.contains(where: { controllerName.contains($0) }) {
+                            print("DEBUG: AppDelegate allowing landscape for child: \(controllerName)")
+                            return [.portrait, .landscapeLeft, .landscapeRight]
+                        }
+                    }
                     
                     // If the child name contains any of our landscape enabled controllers, allow landscape
                     if AppDelegate.landscapeEnabledViewControllers.contains(where: { childName.contains($0) }) {

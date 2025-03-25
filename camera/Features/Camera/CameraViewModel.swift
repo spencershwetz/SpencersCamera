@@ -699,6 +699,11 @@ class CameraViewModel: NSObject, ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
+            // Skip orientation enforcement if video library is presented
+            if AppDelegate.isVideoLibraryPresented {
+                return
+            }
+            
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 let interfaceOrientation = windowScene.interfaceOrientation
                 self.currentInterfaceOrientation = interfaceOrientation
@@ -1071,6 +1076,35 @@ class CameraViewModel: NSObject, ObservableObject {
         return ciImage
     }
     
+    private func enforceFixedOrientation() {
+        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
+        
+        // Add debug log to track when this is called
+        print("DEBUG: [ORIENTATION-DEBUG] CameraViewModel.enforceFixedOrientation called - AppDelegate.isVideoLibraryPresented = \(AppDelegate.isVideoLibraryPresented)")
+        
+        // If video library is presented, we should not enforce orientation
+        guard !AppDelegate.isVideoLibraryPresented else {
+            print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
+            return
+        }
+        
+        // If video library is not presented, enforce camera orientation
+        DispatchQueue.main.async {
+            self.movieOutput.connections.forEach { connection in
+                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                    connection.videoRotationAngle = 90
+                    print("DEBUG: Timer enforced fixed angle=90° on connection")
+                }
+            }
+            
+            self.session.connections.forEach { connection in
+                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                    connection.videoRotationAngle = 90
+                }
+            }
+        }
+    }
+    
     private func startOrientationMonitoring() {
         // Only start if not already locked
         guard !isOrientationLocked else { return }
@@ -1078,28 +1112,22 @@ class CameraViewModel: NSObject, ObservableObject {
         orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self, !self.isOrientationLocked else { return }
-                self.enforceFixedOrientation()
+                
+                // Add debug log
+                if AppDelegate.isVideoLibraryPresented {
+                    print("DEBUG: [ORIENTATION-DEBUG] Orientation timer fired while video library is active")
+                }
+                
+                // Skip enforcing orientation if video library is presented
+                if !AppDelegate.isVideoLibraryPresented {
+                    self.enforceFixedOrientation()
+                } else {
+                    print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
+                }
             }
         }
         
         print("DEBUG: Started orientation monitoring timer")
-    }
-    
-    private func enforceFixedOrientation() {
-        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
-        
-        movieOutput.connections.forEach { connection in
-            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                connection.videoRotationAngle = 90
-                print("DEBUG: Timer enforced fixed angle=90° on connection")
-            }
-        }
-        
-        session.connections.forEach { connection in
-            if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                connection.videoRotationAngle = 90
-            }
-        }
     }
 }
 
