@@ -202,6 +202,17 @@ struct CameraView: View {
     
     private var videoLibraryButton: some View {
         Button(action: {
+            // Set the flag in AppDelegate before showing the view
+            AppDelegate.isVideoLibraryPresented = true
+            
+            // Rotate to desired orientation before presenting
+            let currentOrientation = UIDevice.current.orientation
+            if !currentOrientation.isLandscape {
+                // Force a rotation update to consider device orientation
+                UIViewController.attemptRotationToDeviceOrientation()
+            }
+            
+            // Show the video library
             isShowingVideoLibrary = true
         }) {
             HStack {
@@ -215,7 +226,14 @@ struct CameraView: View {
             .cornerRadius(8)
         }
         .buttonStyle(PlainButtonStyle())
-        .sheet(isPresented: $isShowingVideoLibrary) {
+        .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
+            // Reset the flag when the view is dismissed
+            AppDelegate.isVideoLibraryPresented = false
+            
+            // Force back to portrait orientation
+            UIDevice.current.setValue(UIDeviceOrientation.portrait.rawValue, forKey: "orientation")
+            UIViewController.attemptRotationToDeviceOrientation()
+        }) {
             VideoLibraryView()
         }
     }

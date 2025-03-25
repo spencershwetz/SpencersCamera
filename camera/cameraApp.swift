@@ -15,7 +15,9 @@ struct cameraApp: App {
     var body: some Scene {
         WindowGroup {
             // Wrap CameraView in OrientationFixView for strict orientation control
-            OrientationFixView(content: CameraView())
+            OrientationFixView {
+                CameraView()
+            }
         }
     }
 }
