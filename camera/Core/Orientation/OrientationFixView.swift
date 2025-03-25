@@ -36,21 +36,11 @@ class OrientationFixViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        // Force portrait orientation
-        AppDelegate.orientationLock = .portrait
-        
-        // Use the modern method to enforce orientation
+        // Always force portrait orientation
         enforcePortraitOrientation()
         
         // Modern approach to update orientation
         self.setNeedsUpdateOfSupportedInterfaceOrientations()
-    }
-    
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        
-        // Release orientation lock when view disappears
-        AppDelegate.orientationLock = .all
     }
     
     // Helper method to enforce portrait orientation using modern API

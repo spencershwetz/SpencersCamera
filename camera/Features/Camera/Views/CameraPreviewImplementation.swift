@@ -4,7 +4,7 @@ import SwiftUI
 import AVFoundation
 
 /// A SwiftUI view that presents a live camera preview using an AVCaptureVideoPreviewLayer.
-/// This implementation locks the preview to a fixed landscape orientation (landscape left)
+/// This implementation locks the preview to a fixed portrait orientation
 /// so that the preview does not rotate even if the device rotates.
 struct CameraPreview: UIViewRepresentable {
     private let source: PreviewSource
@@ -14,8 +14,8 @@ struct CameraPreview: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> PreviewView {
-        // Lock the orientation to landscape left.
-        CameraOrientationLock.lock(to: .landscapeLeft)
+        // Lock the orientation to portrait
+        CameraOrientationLock.lockToPortrait()
         let preview = PreviewView()
         source.connect(to: preview)
         return preview
@@ -26,8 +26,8 @@ struct CameraPreview: UIViewRepresentable {
     }
     
     static func dismantleUIView(_ uiView: PreviewView, coordinator: ()) {
-        // Unlock orientation when the preview view is dismantled.
-        CameraOrientationLock.unlock()
+        // Maintain portrait orientation when view is dismantled
+        CameraOrientationLock.lockToPortrait()
     }
 
     /// A UIView whose backing layer is AVCaptureVideoPreviewLayer.
@@ -56,12 +56,12 @@ struct CameraPreview: UIViewRepresentable {
             previewLayer.videoGravity = .resizeAspectFill
             
             if let connection = previewLayer.connection {
-                // Force a fixed rotation. For landscape left, set to 0.
-                if connection.isVideoRotationAngleSupported(0) {
-                    connection.videoRotationAngle = 0
-                    print("DEBUG: Set videoRotationAngle to 0 (landscape left fixed)")
+                // Force a fixed rotation to portrait (90 degrees)
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    print("DEBUG: Set videoRotationAngle to 90 (portrait fixed)")
                 } else {
-                    print("DEBUG: videoRotationAngle 0 not supported")
+                    print("DEBUG: videoRotationAngle 90 not supported")
                 }
                 print("DEBUG: Current videoRotationAngle: \(connection.videoRotationAngle)")
             } else {

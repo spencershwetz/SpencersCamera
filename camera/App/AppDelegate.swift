@@ -5,8 +5,8 @@ import SwiftUI
 class AppDelegate: NSObject, UIApplicationDelegate {
     // MARK: - Orientation Lock Properties
     
-    /// Current orientation lock state for the app
-    static var orientationLock = UIInterfaceOrientationMask.all
+    /// Current orientation lock state for the app - now hardcoded to portrait only
+    static var orientationLock = UIInterfaceOrientationMask.portrait
     
     // MARK: - Application Lifecycle
     
@@ -27,8 +27,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // MARK: - Orientation Support
     
-    /// Handle orientation lock for all windows in the application
+    /// Handle orientation lock for all windows in the application - always return portrait
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        return AppDelegate.orientationLock
+        return .portrait
     }
 } 

@@ -3,14 +3,12 @@ import UIKit
 /// Utility class to lock the device orientation for camera operations
 final class CameraOrientationLock {
     
-    private static var orientationLock = UIInterfaceOrientationMask.all
     private static var isLocked = false
     private static var lastLockTime: TimeInterval = 0
     private static var activeTransitionTimer: Timer?
     
-    /// Lock the device orientation to portrait
+    /// Lock the device orientation to portrait - this is the only orientation we support
     static func lockToPortrait() {
-        orientationLock = .portrait
         isLocked = true
         lastLockTime = CACurrentMediaTime()
         
@@ -59,12 +57,6 @@ final class CameraOrientationLock {
         
         // Create a repeating timer that will check and reapply orientation lock as needed
         activeTransitionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            // Only continue if we're still supposed to be locked
-            if !isLocked || orientationLock != .portrait {
-                timer.invalidate()
-                return
-            }
-            
             // Get the current device orientation
             let currentOrientation = UIDevice.current.orientation
             
@@ -118,151 +110,49 @@ final class CameraOrientationLock {
         }
     }
     
-    /// Lock the device orientation to a specific orientation mask
-    static func lock(to orientationMask: UIInterfaceOrientationMask) {
-        orientationLock = orientationMask
-        isLocked = true
-        lastLockTime = CACurrentMediaTime()
-        
-        // Cancel any existing transition timer
-        activeTransitionTimer?.invalidate()
-        
-        // Force orientation update
-        if #available(iOS 16.0, *) {
-            // Request geometry update if possible
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: orientationMask))
-            }
-            
-            // Update all view controllers
-            for scene in UIApplication.shared.connectedScenes {
-                if let windowScene = scene as? UIWindowScene {
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
-            }
-        } else {
-            // Fallback for older iOS versions
-            UIViewController.attemptRotationToDeviceOrientation()
-        }
-        
-        // For portrait lock, schedule the reorientation sequence
-        if orientationMask == .portrait {
-            scheduleReorientationSequence()
-        }
-        
-        print("📱 Device orientation locked to \(orientationMask)")
-    }
-    
-    /// Unlock the device orientation
-    static func unlock() {
-        orientationLock = .all
-        isLocked = false
-        
-        // Cancel any active orientation timer
-        activeTransitionTimer?.invalidate()
-        
-        // Force orientation update
-        if #available(iOS 16.0, *) {
-            // Request geometry update if possible
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .all))
-            }
-            
-            // Update all view controllers
-            for scene in UIApplication.shared.connectedScenes {
-                if let windowScene = scene as? UIWindowScene {
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
-            }
-        } else {
-            // Fallback for older iOS versions
-            UIViewController.attemptRotationToDeviceOrientation()
-        }
-        
-        print("📱 Device orientation unlocked")
-    }
-    
-    /// Get the current orientation lock
-    static func getCurrentOrientationLock() -> UIInterfaceOrientationMask {
-        return orientationLock
-    }
-    
-    /// Check if orientation is currently locked
-    static func isOrientationLocked() -> Bool {
-        return isLocked
-    }
-    
-    /// Time since last orientation lock was applied (in seconds)
-    static func timeSinceLastLock() -> TimeInterval {
-        return CACurrentMediaTime() - lastLockTime
-    }
-    
-    /// Force immediate application of the orientation lock
+    /// Force immediate application of the portrait orientation lock
     static func forceOrientationUpdate() {
-        if isLocked {
-            if #available(iOS 16.0, *) {
-                // Use the proper iOS 16+ approach
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    // Request geometry update with the current orientation lock
-                    windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: orientationLock))
+        if #available(iOS 16.0, *) {
+            // Use the proper iOS 16+ approach
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                // Request geometry update with portrait orientation
+                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+                
+                // Update all windows in the scene
+                for window in windowScene.windows {
+                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
                     
-                    // Update all windows in the scene
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                        
-                        // Notify child view controllers
-                        notifyChildViewControllersOfOrientationChange(window.rootViewController)
-                    }
+                    // Notify child view controllers
+                    notifyChildViewControllersOfOrientationChange(window.rootViewController)
                 }
-                
-                // Update all scenes and windows
-                for scene in UIApplication.shared.connectedScenes {
-                    if let windowScene = scene as? UIWindowScene {
-                        for window in windowScene.windows {
-                            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                        }
-                    }
-                }
-                
-                // Post notification for custom views
-                if orientationLock == .portrait {
-                    NotificationCenter.default.post(name: .orientationLockEnforced, object: nil)
-                }
-            } else {
-                // Fallback for older iOS versions
-                let targetOrientation: UIDeviceOrientation
-                
-                switch orientationLock {
-                case .portrait:
-                    targetOrientation = .portrait
-                case .landscapeLeft:
-                    targetOrientation = .landscapeLeft
-                case .landscapeRight:
-                    targetOrientation = .landscapeRight
-                case .portraitUpsideDown:
-                    targetOrientation = .portraitUpsideDown
-                default:
-                    targetOrientation = .portrait
-                }
-                
-                UIDevice.current.setValue(targetOrientation.rawValue, forKey: "orientation")
-                UIViewController.attemptRotationToDeviceOrientation()
             }
             
-            print("🔄 Forced orientation update to: \(orientationLock)")
+            // Update all scenes and windows
+            for scene in UIApplication.shared.connectedScenes {
+                if let windowScene = scene as? UIWindowScene {
+                    for window in windowScene.windows {
+                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    }
+                }
+            }
+            
+            // Post notification for custom views
+            NotificationCenter.default.post(name: .orientationLockEnforced, object: nil)
+        } else {
+            // Fallback for older iOS versions
+            UIDevice.current.setValue(UIDeviceOrientation.portrait.rawValue, forKey: "orientation")
+            UIViewController.attemptRotationToDeviceOrientation()
         }
+        
+        print("🔄 Forced orientation update to portrait")
     }
     
     /// Handle device orientation change - call this from orientation change handlers
     static func handleDeviceOrientationChange(_ newOrientation: UIDeviceOrientation) {
         print("🔄 Device orientation changed: \(newOrientation) (value: \(newOrientation.rawValue))")
         
-        // If we're locked to portrait but the device is in landscape, enforce the lock
-        if isLocked && orientationLock == .portrait && newOrientation.isLandscape {
+        // If the device is in landscape, enforce portrait lock
+        if newOrientation.isLandscape {
             // Refresh the lock to ensure it's maintained during landscape transition
             lockToPortrait()
         }

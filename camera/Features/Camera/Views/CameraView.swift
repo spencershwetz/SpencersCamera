@@ -5,14 +5,10 @@ import UIKit
 
 struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
-    @State private var orientation = UIDevice.current.orientation
     @StateObject private var lutManager = LUTManager()
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
-    @State private var uiOrientation = UIDeviceOrientation.portrait
     @State private var showLUTPreview = true
-    @State private var rotationAnimationDuration: Double = 0.3
-    @State private var isRotating = false
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -47,14 +43,9 @@ struct CameraView: View {
                     .ignoresSafeArea()
                     // Fixed frame that won't change with rotation
                     .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                    // Prevent animations that might be triggered by rotation
-                    .transaction { transaction in 
-                        transaction.animation = nil
-                    }
                     
-                    // Overlay for all UI elements that need to rotate
-                    overlayUIContainer(in: geometry)
-                        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
+                    // Fixed position UI overlay (no rotation)
+                    fixedUIOverlay()
                 } else {
                     // Show loading or error state
                     VStack {
@@ -131,25 +122,12 @@ struct CameraView: View {
             if newValue.isValidInterfaceOrientation {
                 print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
                 
-                // Set rotating flag to true before animation starts
-                isRotating = true
-                
-                // Use animation for smooth transition
-                withAnimation(.easeInOut(duration: rotationAnimationDuration)) {
-                    uiOrientation = newValue
-                }
-                
-                // Always lock camera preview orientation
+                // Always lock camera preview orientation to portrait
                 viewModel.updateInterfaceOrientation(lockCamera: true)
                 
                 // Re-enforce after a short delay to catch any late layout updates
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     viewModel.updateInterfaceOrientation(lockCamera: true)
-                }
-                
-                // Reset rotating flag after animation completes
-                DispatchQueue.main.asyncAfter(deadline: .now() + rotationAnimationDuration) {
-                    isRotating = false
                 }
             }
         }
@@ -183,92 +161,17 @@ struct CameraView: View {
         }
     }
     
-    // Container for all UI elements that need to rotate
-    private func overlayUIContainer(in geometry: GeometryProxy) -> some View {
-        ZStack {
-            // LUT preview indicator with smooth rotation
-            if lutManager.currentLUTFilter != nil && showLUTPreview {
-                VStack {
-                    HStack {
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("LUT ACTIVE")
-                                .font(.caption.bold())
-                                .foregroundColor(.white)
-                            
-                            Text(lutManager.currentLUTName)
-                                .font(.caption)
-                                .foregroundColor(.white)
-                        }
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.black.opacity(0.7))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .strokeBorder(Color.green, lineWidth: 2)
-                                )
-                        )
-                        .padding(.top, 50)
-                        .padding(.trailing, 16)
-                    }
-                    Spacer()
-                }
-            }
-            
-            // Adaptive camera controls that reposition for orientation
-            adaptiveControlsView(in: geometry)
-        }
-        .rotationEffect(rotationAngle(for: uiOrientation))
-        .animation(.easeInOut(duration: rotationAnimationDuration), value: uiOrientation)
-        // Use opacity transition to prevent abrupt disappearance
-        .opacity(isRotating ? 0.99 : 1.0) // Slight opacity change to trigger redraw without visible change
-    }
-    
-    // New adaptive controls placement based on orientation
-    private func adaptiveControlsView(in geometry: GeometryProxy) -> some View {
-        Group {
-            if uiOrientation.isPortrait {
-                // Portrait controls at the bottom
-                VStack {
-                    Spacer()
-                    controlsView
-                        .frame(maxWidth: geometry.size.width * 0.95)
-                        .padding(.bottom, 30)
-                }
-            } else if uiOrientation == .landscapeRight {
-                // Landscape Right - controls on the left side
-                HStack {
-                    controlsView
-                        .frame(maxWidth: geometry.size.width * 0.7, maxHeight: geometry.size.height * 0.9)
-                        .padding(.leading, 20)
-                    Spacer()
-                }
-            } else if uiOrientation == .landscapeLeft {
-                // Landscape Left - controls on the right side
-                HStack {
-                    Spacer()
-                    controlsView
-                        .frame(maxWidth: geometry.size.width * 0.7, maxHeight: geometry.size.height * 0.9)
-                        .padding(.trailing, 20)
-                }
-            }
-        }
-        // No additional rotation effect needed here since the parent container handles rotation
-    }
-    
-    private var controlsView: some View {
-        Group {
-            if uiOrientation.isPortrait {
+    // Fixed UI overlay that doesn't rotate
+    private func fixedUIOverlay() -> some View {
+        GeometryReader { geometry in
+            VStack {
+                Spacer()
                 portraitControlsLayout
-            } else {
-                landscapeControlsLayout
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 80) // Increased bottom padding for better visibility
+                    .position(x: geometry.size.width / 2, y: geometry.size.height - 300) // Moved higher up on screen
             }
         }
-        .padding()
-        .background(Color.black.opacity(0.5))
-        .cornerRadius(15)
-        .foregroundColor(.white)
     }
     
     private var portraitControlsLayout: some View {
@@ -284,38 +187,10 @@ struct CameraView: View {
             appleLogToggle
             recordButton
         }
-    }
-    
-    private var landscapeControlsLayout: some View {
-        HStack(alignment: .center, spacing: 20) {
-            // Left column - basic adjustments
-            VStack(spacing: 15) {
-                controlsHeader
-                framerateControl
-                whiteBalanceControl
-                tintControl
-            }
-            .frame(maxWidth: .infinity)
-            
-            // Middle column - advanced controls
-            VStack(spacing: 15) {
-                isoControl
-                shutterAngleDisplay
-                lutControls
-                exposureControls
-                appleLogToggle
-            }
-            .frame(maxWidth: .infinity)
-            
-            // Right column - record button (always visible)
-            VStack {
-                Spacer()
-                recordButton
-                    .scaleEffect(1.2)
-                Spacer()
-            }
-            .frame(maxWidth: 100, maxHeight: .infinity)
-        }
+        .padding()
+        .background(Color.black.opacity(0.5))
+        .cornerRadius(15)
+        .foregroundColor(.white)
     }
     
     private var controlsHeader: some View {
@@ -519,9 +394,15 @@ struct CameraView: View {
             }
         }) {
             Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle.fill")
-                .font(.system(size: uiOrientation.isPortrait ? 60 : 50))
+                .font(.system(size: 70)) // Increased size
                 .foregroundColor(viewModel.isRecording ? .white : .red)
                 .background(Circle().fill(viewModel.isRecording ? Color.red : Color.clear))
+                .padding(10) // Add padding
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(0.4))
+                        .shadow(color: .black.opacity(0.5), radius: 5)
+                )
                 .opacity(viewModel.isProcessingRecording ? 0.5 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())
@@ -546,21 +427,6 @@ struct CameraView: View {
             } else {
                 print("DEBUG: LUT import failed")
             }
-        }
-    }
-    
-    private func rotationAngle(for orientation: UIDeviceOrientation) -> Angle {
-        switch orientation {
-        case .portrait:
-            return .zero
-        case .portraitUpsideDown:
-            return .degrees(180)
-        case .landscapeLeft:
-            return .degrees(90)
-        case .landscapeRight:
-            return .degrees(-90)
-        default:
-            return .zero
         }
     }
 } 

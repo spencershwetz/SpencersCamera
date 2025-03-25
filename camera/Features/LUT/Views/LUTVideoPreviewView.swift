@@ -76,8 +76,8 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         NotificationCenter.default.removeObserver(coordinator)
         NotificationCenter.default.removeObserver(uiView)
         
-        // Unlock orientation when view is dismantled
-        CameraOrientationLock.unlock()
+        // Maintain portrait orientation when view is dismantled
+        CameraOrientationLock.lockToPortrait()
     }
     
     func makeCoordinator() -> Coordinator {
