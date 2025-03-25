@@ -221,35 +221,11 @@ struct CameraView: View {
         }
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-            // Reset the flag when the view is dismissed
-            print("DEBUG: [ORIENTATION-DEBUG] fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
-            AppDelegate.isVideoLibraryPresented = false
-            
-            // Force back to portrait orientation using modern API
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                print("DEBUG: [ORIENTATION-DEBUG] Current orientation before reset: \(UIDevice.current.orientation.rawValue)")
-                let orientations: UIInterfaceOrientationMask = [.portrait]
-                let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-                
-                print("DEBUG: Returning to portrait after video library")
-                windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                    print("DEBUG: Portrait return result: \(error.localizedDescription)")
-                    print("DEBUG: [ORIENTATION-DEBUG] Device orientation after portrait reset: \(UIDevice.current.orientation.rawValue)")
-                }
-                
-                // Update all view controllers
-                for window in windowScene.windows {
-                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    print("DEBUG: [ORIENTATION-DEBUG] Updated orientation on root controller")
-                }
-                
-                // Add a delay to let the device update its orientation
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    print("DEBUG: [ORIENTATION-DEBUG] Device orientation 0.5s after reset: \(UIDevice.current.orientation.rawValue)")
-                }
-            }
+            // Reset any necessary state on dismiss
+            print("DEBUG: Video library was dismissed")
         }) {
             VideoLibraryView()
+                .preferredColorScheme(.dark)
         }
     }
     

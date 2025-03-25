@@ -6,12 +6,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     // MARK: - Orientation Lock Properties
     
     /// Static variable to track view controllers that need landscape support
-    static var landscapeEnabledViewControllers: [String] = [
-        "VideoLibraryView", 
-        "VideoPlayerView",
-        "OrientationFixViewController",
-        "PresentationHostingController"
-    ]
+    static var landscapeEnabledViewControllers: [String] = []
     
     // Track if the video library is currently being presented
     static var isVideoLibraryPresented: Bool = false

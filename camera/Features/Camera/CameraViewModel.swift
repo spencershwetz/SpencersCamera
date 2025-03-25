@@ -198,7 +198,7 @@ class CameraViewModel: NSObject, ObservableObject {
             queue: .main) { [weak self] _ in
                 guard let self = self,
                       let connection = self.movieOutput.connection(with: .video) else { return }
-                self.updateVideoOrientation(connection)
+                self.updateVideoRotationAngle(connection)
         }
         
         DispatchQueue.main.async { [weak self] in
@@ -266,7 +266,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.commitConfiguration()
                 
                 if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoRotationAngle(videoConnection, lockCamera: true)
                 }
                 
                 session.startRunning()
@@ -340,7 +340,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.commitConfiguration()
                 
                 if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoRotationAngle(videoConnection, lockCamera: true)
                 }
                 
                 session.startRunning()
@@ -421,7 +421,7 @@ class CameraViewModel: NSObject, ObservableObject {
                     if connection.isVideoStabilizationSupported {
                         connection.preferredVideoStabilizationMode = .auto
                     }
-                    updateVideoOrientation(connection, lockCamera: true)
+                    updateVideoRotationAngle(connection, lockCamera: true)
                 }
             } else {
                 print("DEBUG: ❌ Failed to add movie output to session")
@@ -688,7 +688,7 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
+    private func updateVideoRotationAngle(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
         let requiredAngles: [CGFloat] = [0, 90, 180, 270]
         let supportsRotation = requiredAngles.allSatisfy { angle in
             connection.isVideoRotationAngleSupported(angle)
