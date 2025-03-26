@@ -79,6 +79,7 @@ struct CameraPreviewView: UIViewRepresentable {
     class RotationLockedContainer: UIView {
         // Add a property to track animation state
         private var isAnimating = false
+        private let cornerRadius: CGFloat = 20.0  // Define corner radius value
         
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -95,6 +96,10 @@ struct CameraPreviewView: UIViewRepresentable {
             autoresizingMask = [.flexibleWidth, .flexibleHeight]
             backgroundColor = .black
             clipsToBounds = true
+            
+            // Apply rounded corners
+            layer.cornerRadius = cornerRadius
+            layer.masksToBounds = true
             
             // Register for orientation changes
             NotificationCenter.default.addObserver(
@@ -209,6 +214,7 @@ struct CameraPreviewView: UIViewRepresentable {
         private var ciContext = CIContext(options: [.useSoftwareRenderer: false])
         private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
         private var currentLUTFilter: CIFilter?
+        private let cornerRadius: CGFloat = 20.0  // Define corner radius value
         
         init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
             self.session = session
@@ -223,10 +229,19 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
+            // Apply rounded corners to the view itself
+            layer.cornerRadius = cornerRadius
+            layer.masksToBounds = true
+            
             // Configure preview layer
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
             previewLayer.frame = bounds
+            
+            // Apply rounded corners to the preview layer
+            previewLayer.cornerRadius = cornerRadius
+            previewLayer.masksToBounds = true
+            
             layer.addSublayer(previewLayer)
             
             // Set initial orientation
@@ -249,6 +264,9 @@ struct CameraPreviewView: UIViewRepresentable {
             CATransaction.setAnimationDuration(0.3)
             
             previewLayer.frame = bounds
+            
+            // Ensure corners stay rounded after frame updates
+            previewLayer.cornerRadius = cornerRadius
             
             // Also update connection orientation
             if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
@@ -402,12 +420,15 @@ struct CameraPreviewView: UIViewRepresentable {
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                     overlay.contents = cgImage
+                    overlay.cornerRadius = self.cornerRadius  // Apply corner radius to LUT overlay
                 } else {
                     let overlayLayer = CALayer()
                     overlayLayer.name = "LUTOverlayLayer"
                     overlayLayer.frame = self.previewLayer.bounds
                     overlayLayer.contentsGravity = .resizeAspectFill
                     overlayLayer.contents = cgImage
+                    overlayLayer.cornerRadius = self.cornerRadius  // Apply corner radius to new LUT overlay
+                    overlayLayer.masksToBounds = true
                     self.previewLayer.addSublayer(overlayLayer)
                     print("DEBUG: Added LUT overlay layer")
                 }
