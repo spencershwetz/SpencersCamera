@@ -129,6 +129,53 @@ class CameraViewModel: NSObject, ObservableObject {
         device?.activeFormat.videoSupportedFrameRateRanges.first
     }
     
+    // Resolution settings
+    enum Resolution: String, CaseIterable {
+        case uhd = "4K (3840x2160)"
+        case hd = "HD (1920x1080)"
+        case sd = "720p (1280x720)"
+        
+        var dimensions: CMVideoDimensions {
+            switch self {
+            case .uhd: return CMVideoDimensions(width: 3840, height: 2160)
+            case .hd: return CMVideoDimensions(width: 1920, height: 1080)
+            case .sd: return CMVideoDimensions(width: 1280, height: 720)
+            }
+        }
+    }
+    
+    @Published var selectedResolution: Resolution = .uhd {
+        didSet {
+            Task {
+                do {
+                    try await updateCameraFormat(for: selectedResolution)
+                } catch {
+                    print("Error updating camera format: \(error)")
+                    self.error = .configurationFailed
+                }
+            }
+        }
+    }
+    
+    // Codec settings
+    enum VideoCodec: String, CaseIterable {
+        case hevc = "HEVC (H.265)"
+        case proRes = "Apple ProRes"
+        
+        var avCodecKey: AVVideoCodecType {
+            switch self {
+            case .hevc: return .hevc
+            case .proRes: return .proRes422
+            }
+        }
+    }
+    
+    @Published var selectedCodec: VideoCodec = .hevc {
+        didSet {
+            updateVideoConfiguration()
+        }
+    }
+    
     private var videoConfiguration: [String: Any] = [
         AVVideoCodecKey: AVVideoCodecType.proRes422,
         AVVideoCompressionPropertiesKey: [
@@ -1157,6 +1204,103 @@ class CameraViewModel: NSObject, ObservableObject {
     func updateOrientation(_ orientation: UIInterfaceOrientation) {
         self.currentInterfaceOrientation = orientation
         updateInterfaceOrientation()
+    }
+    
+    private func updateVideoConfiguration() {
+        videoConfiguration = [
+            AVVideoCodecKey: selectedCodec.avCodecKey,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: selectedCodec == .proRes ? 50_000_000 : 25_000_000,
+                AVVideoMaxKeyFrameIntervalKey: 1,
+                AVVideoAllowFrameReorderingKey: false,
+                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
+            ]
+        ]
+    }
+    
+    private func updateCameraFormat(for resolution: Resolution) async throws {
+        guard let device = device else { return }
+        
+        // Stop the session before making changes
+        session.stopRunning()
+        
+        do {
+            try await device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            
+            // Find all formats that match our resolution
+            let matchingFormats = device.formats.filter { format in
+                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return dimensions.width == resolution.dimensions.width &&
+                       dimensions.height == resolution.dimensions.height
+            }
+            
+            // Find the best format that supports our current frame rate
+            if let bestFormat = matchingFormats.first(where: { format in
+                format.videoSupportedFrameRateRanges.contains { range in
+                    range.minFrameRate...range.maxFrameRate ~= selectedFrameRate
+                }
+            }) {
+                // Set the format
+                device.activeFormat = bestFormat
+                
+                // Get the supported frame rate range for this format
+                if let frameRateRange = bestFormat.videoSupportedFrameRateRanges.first {
+                    // Ensure our frame rate is within the supported range
+                    let adjustedFrameRate = min(max(selectedFrameRate, frameRateRange.minFrameRate), frameRateRange.maxFrameRate)
+                    
+                    // Set the frame duration
+                    let duration = CMTime(value: 1, timescale: CMTimeScale(adjustedFrameRate))
+                    device.activeVideoMinFrameDuration = duration
+                    device.activeVideoMaxFrameDuration = duration
+                    
+                    // Update the frame rate if it was adjusted
+                    if adjustedFrameRate != selectedFrameRate {
+                        await MainActor.run {
+                            selectedFrameRate = adjustedFrameRate
+                        }
+                    }
+                }
+                
+                // Update video configuration
+                updateVideoConfiguration()
+                
+                // Restart the session
+                session.startRunning()
+            } else {
+                // If no format supports the current frame rate, find the closest supported frame rate
+                if let format = matchingFormats.first,
+                   let frameRateRange = format.videoSupportedFrameRateRanges.first {
+                    // Set the format
+                    device.activeFormat = format
+                    
+                    // Choose the closest supported frame rate
+                    let newFrameRate = min(max(selectedFrameRate, frameRateRange.minFrameRate), frameRateRange.maxFrameRate)
+                    
+                    // Set the frame duration
+                    let duration = CMTime(value: 1, timescale: CMTimeScale(newFrameRate))
+                    device.activeVideoMinFrameDuration = duration
+                    device.activeVideoMaxFrameDuration = duration
+                    
+                    // Update the frame rate
+                    await MainActor.run {
+                        selectedFrameRate = newFrameRate
+                    }
+                    
+                    // Update video configuration
+                    updateVideoConfiguration()
+                    
+                    // Restart the session
+                    session.startRunning()
+                } else {
+                    throw CameraError.configurationFailed
+                }
+            }
+        } catch {
+            // Restart the session even if configuration fails
+            session.startRunning()
+            throw error
+        }
     }
 }
 
