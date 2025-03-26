@@ -36,6 +36,9 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false
     
+    // Add thumbnail property
+    @Published var lastRecordedVideoThumbnail: UIImage?
+    
     // Storage for temporarily disabling LUT preview without losing the filter
     var tempLUTFilter: CIFilter? {
         didSet {
@@ -660,9 +663,14 @@ class CameraViewModel: NSObject, ObservableObject {
             return
         }
         
-        print("Stopping recording...")
+        print("\n=== Stop Recording ===")
         isProcessingRecording = true
         movieOutput.stopRecording()
+        
+        // Generate thumbnail from the recorded video
+        if let currentURL = currentRecordingURL {
+            generateThumbnail(from: currentURL)
+        }
         
         // Restore orientation enforcement timer and original settings
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -685,6 +693,26 @@ class CameraViewModel: NSObject, ObservableObject {
             
             // Re-enforce orientation lock for UI
             self.updateInterfaceOrientation(lockCamera: true)
+        }
+        
+        print("=== End Stop Recording ===\n")
+    }
+    
+    private func generateThumbnail(from videoURL: URL) {
+        let asset = AVAsset(url: videoURL)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        
+        // Get thumbnail from first frame
+        let time = CMTime(seconds: 0, preferredTimescale: 600)
+        
+        do {
+            let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+            DispatchQueue.main.async { [weak self] in
+                self?.lastRecordedVideoThumbnail = UIImage(cgImage: cgImage)
+            }
+        } catch {
+            print("Error generating thumbnail: \(error)")
         }
     }
     

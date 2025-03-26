@@ -49,24 +49,26 @@ struct CameraView: View {
                     .allowsHitTesting(true) // Make sure buttons are tappable
                     .ignoresSafeArea()
                 
-                // Record button positioned at bottom with precise spacing
+                // Bottom controls container
                 VStack {
                     Spacer()
-                    recordButton
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, 30) // Approximately 1cm from USB-C port
+                    ZStack {
+                        // Center record button
+                        recordButton
+                            .frame(width: 75, height: 75)
+                        
+                        // Position library button on the left
+                        HStack {
+                            videoLibraryButton
+                                .frame(width: 60, height: 60)
+                            Spacer()
+                        }
+                        .padding(.leading, 67.5) // Half the record button width (75/2) + button width (60)
+                    }
+                    .padding(.bottom, 30) // Approximately 1cm from USB-C port
                 }
                 .ignoresSafeArea()
-                .zIndex(101) // Ensure it's above everything
-                .background(
-                    GeometryReader { buttonGeometry in
-                        Color.clear.onAppear {
-                            print("DEBUG: Root record button frame - \(buttonGeometry.frame(in: .global))")
-                            print("DEBUG: Root screen size - width: \(geometry.size.width), height: \(geometry.size.height)")
-                            print("DEBUG: Root safe area insets - \(geometry.safeAreaInsets)")
-                        }
-                    }
-                )
+                .zIndex(101)
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
@@ -199,7 +201,6 @@ struct CameraView: View {
     private var portraitControlsLayout: some View {
         VStack(spacing: 15) {
             controlsHeader
-            videoLibraryButton
             framerateControl
             whiteBalanceControl
             tintControl
@@ -208,7 +209,6 @@ struct CameraView: View {
             lutControls
             exposureControls
             appleLogToggle
-            // Record button removed from here
         }
         .padding()
         .background(Color.black.opacity(0.5))
@@ -223,30 +223,35 @@ struct CameraView: View {
     
     private var videoLibraryButton: some View {
         Button(action: {
-            // Set the flag in AppDelegate before showing the view
             print("DEBUG: [ORIENTATION-DEBUG] Setting AppDelegate.isVideoLibraryPresented = true")
             AppDelegate.isVideoLibraryPresented = true
-            
-            // Show the video library
             isShowingVideoLibrary = true
         }) {
-            HStack {
-                Image(systemName: "film")
-                    .font(.system(size: 20))
-                Text("Video Library")
+            ZStack {
+                // Thumbnail background
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: 60, height: 60)
+                
+                // Placeholder or actual thumbnail
+                if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
+                    Image(uiImage: thumbnailImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 54, height: 54)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                } else {
+                    Image(systemName: "film")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white)
+                }
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(Color.blue.opacity(0.6))
-            .cornerRadius(8)
         }
         .buttonStyle(PlainButtonStyle())
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-            // Reset the flag when the view is dismissed
             print("DEBUG: [ORIENTATION-DEBUG] fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
             AppDelegate.isVideoLibraryPresented = false
             
-            // Force back to portrait orientation using modern API
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 print("DEBUG: [ORIENTATION-DEBUG] Current orientation before reset: \(UIDevice.current.orientation.rawValue)")
                 let orientations: UIInterfaceOrientationMask = [.portrait]
@@ -258,13 +263,11 @@ struct CameraView: View {
                     print("DEBUG: [ORIENTATION-DEBUG] Device orientation after portrait reset: \(UIDevice.current.orientation.rawValue)")
                 }
                 
-                // Update all view controllers
                 for window in windowScene.windows {
                     window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
                     print("DEBUG: [ORIENTATION-DEBUG] Updated orientation on root controller")
                 }
                 
-                // Add a delay to let the device update its orientation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     print("DEBUG: [ORIENTATION-DEBUG] Device orientation 0.5s after reset: \(UIDevice.current.orientation.rawValue)")
                 }
