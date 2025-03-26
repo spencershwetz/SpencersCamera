@@ -10,6 +10,10 @@ class CameraViewModel: NSObject, ObservableObject {
     // Add property to track the view containing the camera preview
     weak var owningView: UIView?
     
+    // Flashlight manager
+    private let flashlightManager = FlashlightManager()
+    private var settingsObserver: NSObjectProtocol?
+    
     enum Status {
         case unknown
         case running
@@ -34,6 +38,17 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var isRecording = false {
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+            
+            // Handle flashlight state based on recording state
+            if let settings = try? SettingsModel() {
+                if isRecording && settings.isFlashlightEnabled {
+                    Task {
+                        await flashlightManager.performStartupSequence()
+                    }
+                } else {
+                    flashlightManager.cleanup()
+                }
+            }
         }
     }
     @Published var recordingFinished = false
@@ -220,6 +235,23 @@ class CameraViewModel: NSObject, ObservableObject {
         super.init()
         print("\n=== Camera Initialization ===")
         
+        // Add observer for flashlight settings changes
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .flashlightSettingChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            if let settings = try? SettingsModel() {
+                if self.isRecording && settings.isFlashlightEnabled {
+                    self.flashlightManager.isEnabled = true
+                    self.flashlightManager.intensity = settings.flashlightIntensity
+                } else {
+                    self.flashlightManager.isEnabled = false
+                }
+            }
+        }
+        
         do {
             try setupSession()
             if let device = device {
@@ -272,6 +304,12 @@ class CameraViewModel: NSObject, ObservableObject {
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        
+        flashlightManager.cleanup()
     }
     
     private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {

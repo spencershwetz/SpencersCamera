@@ -10,6 +10,20 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var isFlashlightEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isFlashlightEnabled, forKey: "isFlashlightEnabled")
+            NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
+        }
+    }
+    
+    @Published var flashlightIntensity: Float {
+        didSet {
+            UserDefaults.standard.set(flashlightIntensity, forKey: "flashlightIntensity")
+            NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
+        }
+    }
+    
     var isAppleLogSupported: Bool {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
             return false
@@ -24,9 +38,18 @@ class SettingsModel: ObservableObject {
     
     init() {
         self.isAppleLogEnabled = UserDefaults.standard.bool(forKey: "isAppleLogEnabled")
+        self.isFlashlightEnabled = UserDefaults.standard.bool(forKey: "isFlashlightEnabled")
+        self.flashlightIntensity = UserDefaults.standard.float(forKey: "flashlightIntensity")
+        
+        // Set default intensity if not set
+        if self.flashlightIntensity == 0 {
+            self.flashlightIntensity = 1.0
+            UserDefaults.standard.set(self.flashlightIntensity, forKey: "flashlightIntensity")
+        }
     }
 }
 
 extension Notification.Name {
     static let appleLogSettingChanged = Notification.Name("appleLogSettingChanged")
+    static let flashlightSettingChanged = Notification.Name("flashlightSettingChanged")
 } 

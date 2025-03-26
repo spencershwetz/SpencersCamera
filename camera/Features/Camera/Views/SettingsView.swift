@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var lutManager: LUTManager
     @ObservedObject var viewModel: CameraViewModel
+    @StateObject private var settingsModel = SettingsModel()
     @Binding var isDebugEnabled: Bool
     
     var body: some View {
@@ -40,6 +41,9 @@ struct SettingsView: View {
                         }
                     }
                 }
+                
+                // Flashlight Settings
+                FlashlightSettingsView(settingsModel: settingsModel)
                 
                 Section("Display") {
                     Toggle(isOn: $isDebugEnabled) {
