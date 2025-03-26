@@ -162,9 +162,15 @@ struct CameraPreviewView: UIViewRepresentable {
             // Configure preview layer
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
+            previewLayer.cornerRadius = 20 // Add rounded corners
+            previewLayer.masksToBounds = true
             
             // Add preview layer
             layer.addSublayer(previewLayer)
+            
+            // Add rounded corners to the view itself
+            layer.cornerRadius = 20
+            layer.masksToBounds = true
             
             print("DEBUG: CustomPreviewView setupView - Initial frame: \(frame)")
         }
@@ -176,6 +182,11 @@ struct CameraPreviewView: UIViewRepresentable {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             previewLayer.frame = bounds
+            
+            // Ensure corners stay rounded
+            previewLayer.cornerRadius = 20
+            layer.cornerRadius = 20
+            
             print("DEBUG: PreviewLayer frame set to: \(previewLayer.frame)")
             CATransaction.commit()
         }

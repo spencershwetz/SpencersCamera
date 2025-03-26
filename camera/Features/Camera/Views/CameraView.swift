@@ -121,36 +121,44 @@ struct CameraView: View {
     }
     
     private var cameraPreview: some View {
-        Group {
-            if viewModel.isSessionRunning {
-                // Camera is running - show camera preview
-                CameraPreviewView(
-                    session: viewModel.session,
-                    lutManager: lutManager,
-                    viewModel: viewModel
-                )
-                .ignoresSafeArea()
-                // Fixed frame that won't change with rotation
-                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                
-                // Fixed position UI overlay (no rotation)
-                .overlay(fixedUIOverlay())
-            } else {
-                // Show loading or error state
-                VStack {
-                    Text("Starting camera...")
-                        .font(.headline)
-                        .foregroundColor(.white)
+        GeometryReader { geometry in
+            Group {
+                if viewModel.isSessionRunning {
+                    // Camera is running - show camera preview
+                    CameraPreviewView(
+                        session: viewModel.session,
+                        lutManager: lutManager,
+                        viewModel: viewModel
+                    )
+                    .ignoresSafeArea()
+                    // Frame that starts below safe area and takes up 80% of the original size
+                    .frame(
+                        width: geometry.size.width * 0.8,
+                        height: geometry.size.height * 0.75 * 0.8
+                    )
+                    .padding(.top, geometry.safeAreaInsets.top + 60) // Added more padding to move it down
+                    .clipped() // Ensure the preview stays within bounds
+                    .frame(maxWidth: .infinity) // Center the preview horizontally
                     
-                    if viewModel.status == .failed, let error = viewModel.error {
-                        Text("Error: \(error.description)")
-                            .font(.subheadline)
-                            .foregroundColor(.red)
-                            .padding()
+                    // Fixed position UI overlay (no rotation)
+                    .overlay(fixedUIOverlay())
+                } else {
+                    // Show loading or error state
+                    VStack {
+                        Text("Starting camera...")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        if viewModel.status == .failed, let error = viewModel.error {
+                            Text("Error: \(error.description)")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                                .padding()
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black)
             }
         }
     }
@@ -163,7 +171,7 @@ struct CameraView: View {
                 portraitControlsLayout
                     .padding(.horizontal, 20)
                     .padding(.bottom, 80) // Increased bottom padding for better visibility
-                    .position(x: geometry.size.width / 2, y: geometry.size.height - 300) // Moved higher up on screen
+                    .position(x: geometry.size.width / 2, y: geometry.size.height - 100) // Keep controls at original position
             }
         }
     }
