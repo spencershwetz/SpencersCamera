@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -7,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: CameraViewModel
     @StateObject private var settingsModel = SettingsModel()
     @Binding var isDebugEnabled: Bool
+    @State private var isShowingLUTDocumentPicker = false
     
     var body: some View {
         NavigationView {
@@ -42,6 +44,54 @@ struct SettingsView: View {
                     }
                 }
                 
+                // LUT Settings Section
+                Section("Color LUTs 🎨") {
+                    Button(action: {
+                        isShowingLUTDocumentPicker = true
+                    }) {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                            Text("Import LUT")
+                        }
+                    }
+                    
+                    if let currentLUT = lutManager.currentLUTFilter {
+                        HStack {
+                            Text("Current LUT")
+                            Spacer()
+                            Text(lutManager.currentLUTName)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Button(action: {
+                            lutManager.clearLUT()
+                        }) {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                Text("Remove Current LUT")
+                            }
+                        }
+                    }
+                    
+                    if let recentLUTs = lutManager.recentLUTs, !recentLUTs.isEmpty {
+                        ForEach(Array(recentLUTs.keys), id: \.self) { name in
+                            if let url = recentLUTs[name] {
+                                Button(action: {
+                                    lutManager.loadLUT(from: url)
+                                }) {
+                                    HStack {
+                                        Image(systemName: "photo.fill")
+                                            .foregroundColor(.blue)
+                                        Text(name)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
                 // Flashlight Settings
                 FlashlightSettingsView(settingsModel: settingsModel)
                 
@@ -67,6 +117,15 @@ struct SettingsView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
+                    }
+                }
+            }
+            .sheet(isPresented: $isShowingLUTDocumentPicker) {
+                DocumentPicker(types: LUTManager.supportedTypes) { url in
+                    lutManager.importLUT(from: url) { success in
+                        if success {
+                            print("LUT imported successfully")
+                        }
                     }
                 }
             }
