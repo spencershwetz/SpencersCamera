@@ -231,6 +231,9 @@ class CameraViewModel: NSObject, ObservableObject {
     // Save the original rotation values to restore them after recording
     private var originalRotationValues: [AVCaptureConnection: CGFloat] = [:]
     
+    @Published var currentLens: CameraLens = .wide
+    @Published var availableLenses: [CameraLens] = []
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -468,6 +471,11 @@ class CameraViewModel: NSObject, ObservableObject {
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         session.beginConfiguration()
         
+        // Get available lenses
+        availableLenses = CameraLens.availableLenses()
+        print("DEBUG: 📸 Available lenses: \(availableLenses.map { $0.rawValue }.joined(separator: ", "))")
+        
+        // Start with wide angle camera
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                     for: .video,
                                                     position: .back) else {
@@ -748,7 +756,7 @@ class CameraViewModel: NSObject, ObservableObject {
         
         movieOutput.stopRecording()
         isRecording = false
-        print("�� Stopping recording...")
+        print("🔄 Stopping recording...")
     }
     
     private func generateThumbnail(from videoURL: URL) {
@@ -1378,6 +1386,79 @@ class CameraViewModel: NSObject, ObservableObject {
             
             throw error
         }
+    }
+    
+    func switchToLens(_ lens: CameraLens) {
+        print("DEBUG: 🔄 Switching to \(lens.rawValue)× lens")
+        
+        // For 2x zoom, we use digital zoom on the wide angle camera
+        if lens == .x2 {
+            guard let currentDevice = device,
+                  currentDevice.deviceType == .builtInWideAngleCamera else {
+                // Switch to wide angle first if we're not already on it
+                switchToLens(.wide)
+                return
+            }
+            
+            do {
+                try currentDevice.lockForConfiguration()
+                currentDevice.videoZoomFactor = lens.zoomFactor
+                currentDevice.unlockForConfiguration()
+                currentLens = lens
+                print("DEBUG: ✅ Set digital zoom to 2x")
+            } catch {
+                print("DEBUG: ❌ Failed to set digital zoom: \(error)")
+                self.error = .configurationFailed
+            }
+            return
+        }
+        
+        guard let newDevice = AVCaptureDevice.default(lens.deviceType, for: .video, position: .back) else {
+            print("DEBUG: ❌ Failed to get device for \(lens.rawValue)× lens")
+            return
+        }
+        
+        session.beginConfiguration()
+        
+        // Remove existing input
+        if let currentInput = videoDeviceInput {
+            session.removeInput(currentInput)
+        }
+        
+        do {
+            let newInput = try AVCaptureDeviceInput(device: newDevice)
+            if session.canAddInput(newInput) {
+                session.addInput(newInput)
+                videoDeviceInput = newInput
+                device = newDevice
+                currentLens = lens
+                
+                // Reset zoom factor when switching physical lenses
+                try newDevice.lockForConfiguration()
+                newDevice.videoZoomFactor = 1.0
+                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+                newDevice.activeVideoMinFrameDuration = duration
+                newDevice.activeVideoMaxFrameDuration = duration
+                newDevice.unlockForConfiguration()
+                
+                print("DEBUG: ✅ Successfully switched to \(lens.rawValue)× lens")
+                
+                // Update video orientation for the new connection
+                if let connection = movieOutput.connection(with: .video) {
+                    if connection.isVideoStabilizationSupported {
+                        connection.preferredVideoStabilizationMode = .auto
+                    }
+                    updateVideoOrientation(connection, lockCamera: true)
+                }
+            } else {
+                print("DEBUG: ❌ Cannot add input for \(lens.rawValue)× lens")
+            }
+        } catch {
+            print("DEBUG: ❌ Error switching to \(lens.rawValue)× lens: \(error)")
+            self.error = .configurationFailed
+        }
+        
+        session.commitConfiguration()
     }
 }
 

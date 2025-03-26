@@ -47,9 +47,23 @@ struct CameraView: View {
                 
                 // Function buttons overlay
                 FunctionButtonsView()
-                    .zIndex(100) // Ensure it's above everything else
-                    .allowsHitTesting(true) // Make sure buttons are tappable
+                    .zIndex(100)
+                    .allowsHitTesting(true)
                     .ignoresSafeArea()
+                
+                // Lens selection buttons
+                VStack {
+                    Spacer()
+                        .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
+                    
+                    if !viewModel.availableLenses.isEmpty {
+                        LensSelectionView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                            .padding(.bottom, 20)
+                    }
+                    
+                    Spacer()
+                }
+                .zIndex(99)
                 
                 // Bottom controls container
                 VStack {
