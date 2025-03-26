@@ -12,6 +12,7 @@ struct CameraView: View {
     @State private var showLUTPreview = true
     @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
+    @State private var isDebugEnabled = false
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -130,7 +131,11 @@ struct CameraView: View {
                 )
             }
             .sheet(isPresented: $isShowingSettings) {
-                SettingsView(lutManager: lutManager, viewModel: viewModel)
+                SettingsView(
+                    lutManager: lutManager,
+                    viewModel: viewModel,
+                    isDebugEnabled: $isDebugEnabled
+                )
             }
             .sheet(isPresented: $isShowingDocumentPicker) {
                 DocumentPicker(types: LUTManager.supportedTypes) { url in
@@ -155,14 +160,20 @@ struct CameraView: View {
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()
-                    // Frame that starts below safe area and takes up 90% of the original size
                     .frame(
                         width: geometry.size.width * 0.9,
                         height: geometry.size.height * 0.75 * 0.9
                     )
-                    .padding(.top, geometry.safeAreaInsets.top + 60) // Keep the same vertical position
-                    .clipped() // Ensure the preview stays within bounds
-                    .frame(maxWidth: .infinity) // Center the preview horizontally
+                    .padding(.top, geometry.safeAreaInsets.top + 60)
+                    .clipped()
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .topLeading) {
+                        if isDebugEnabled {
+                            debugOverlay
+                                .padding(.top, geometry.safeAreaInsets.top + 70)
+                                .padding(.leading, 20)
+                        }
+                    }
                 } else {
                     // Show loading or error state
                     VStack {
@@ -182,6 +193,20 @@ struct CameraView: View {
                 }
             }
         }
+    }
+    
+    private var debugOverlay: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Resolution: \(viewModel.selectedResolution.rawValue)")
+            Text("FPS: \(String(format: "%.2f", viewModel.selectedFrameRate))")
+            Text("Codec: \(viewModel.selectedCodec.rawValue)")
+            Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
+        }
+        .font(.system(size: 10, weight: .medium, design: .monospaced))
+        .foregroundColor(.white)
+        .padding(6)
+        .background(Color.black.opacity(0.5))
+        .cornerRadius(6)
     }
     
     private var videoLibraryButton: some View {
@@ -253,17 +278,23 @@ struct CameraView: View {
                 isShowingSettings = true
             }) {
                 ZStack {
-                    // Button background
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.black.opacity(0.6))
                         .frame(width: 60, height: 60)
                     
-                    // Settings icon
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 24))
                         .foregroundColor(.white)
                 }
             }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 3.0)
+                    .onEnded { _ in
+                        withAnimation {
+                            isDebugEnabled.toggle()
+                        }
+                    }
+            )
         }
     }
     

@@ -299,6 +299,7 @@ class CameraViewModel: NSObject, ObservableObject {
         print("📊 Current format: \(device.activeFormat.formatDescription)")
         print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
         print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
+        print("🎬 Selected codec: \(selectedCodec.rawValue)")
         
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         
@@ -326,37 +327,43 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.startRunning()
             }
             
-            if let format = device.formats.first(where: {
-                let desc = $0.formatDescription
+            // Find a format that supports both Apple Log and our selected resolution
+            let formats = device.formats.filter { format in
+                let desc = format.formatDescription
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-                let codecType = CMFormatDescriptionGetMediaSubType(desc)
-                
-                let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 ||
-                              codecType == kCMVideoCodecType_AppleProRes422HQ ||
-                              codecType == 2016686642)
-                let hasAppleLog = $0.supportedColorSpaces.contains(.appleLog)
-                
-                return (is4K || dimensions.width >= 1920) && isProRes && hasAppleLog
-            }) {
-                print("✅ Found suitable Apple Log format")
-                
-                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
-                device.activeVideoMinFrameDuration = duration
-                device.activeVideoMaxFrameDuration = duration
-                
-                device.activeFormat = format
-                device.activeColorSpace = .appleLog
-                print("🎨 Set color space to Apple Log")
-                
-                print("✅ Successfully configured Apple Log format")
-            } else {
+                let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
+                let matchesResolution = dimensions.width >= selectedResolution.dimensions.width &&
+                                      dimensions.height >= selectedResolution.dimensions.height
+                return hasAppleLog && matchesResolution
+            }
+            
+            guard let selectedFormat = formats.first else {
                 print("❌ No suitable Apple Log format found")
                 throw CameraError.configurationFailed
             }
             
-            print("💾 Configuration committed")
-            print("▶️ Session restarted")
+            print("✅ Found suitable Apple Log format")
+            
+            let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            
+            device.activeFormat = selectedFormat
+            device.activeColorSpace = .appleLog
+            print("🎨 Set color space to Apple Log")
+            
+            // Configure HDR if supported
+            if selectedFormat.isVideoHDRSupported {
+                device.automaticallyAdjustsVideoHDREnabled = false
+                device.isVideoHDREnabled = true
+                print("✅ Enabled HDR support")
+            }
+            
+            // Update video configuration with selected codec
+            updateVideoConfiguration()
+            print("🎬 Updated video configuration for codec: \(selectedCodec.rawValue)")
+            
+            print("✅ Successfully configured Apple Log format")
             
         } catch {
             print("❌ Error configuring Apple Log: \(error.localizedDescription)")
@@ -1207,98 +1214,173 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func updateVideoConfiguration() {
-        videoConfiguration = [
-            AVVideoCodecKey: selectedCodec.avCodecKey,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: selectedCodec == .proRes ? 50_000_000 : 25_000_000,
-                AVVideoMaxKeyFrameIntervalKey: 1,
-                AVVideoAllowFrameReorderingKey: false,
-                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
-            ]
+        print("\n=== Updating Video Configuration ===")
+        print("🎬 Selected Codec: \(selectedCodec.rawValue)")
+        print("🎨 Apple Log Enabled: \(isAppleLogEnabled)")
+        
+        guard let connection = movieOutput.connection(with: .video) else {
+            print("❌ No video connection available")
+            return
+        }
+        
+        // Check available codecs
+        let availableCodecs = movieOutput.availableVideoCodecTypes
+        print("📝 Available codecs: \(availableCodecs)")
+        
+        // Verify selected codec is supported
+        guard availableCodecs.contains(selectedCodec.avCodecKey) else {
+            print("❌ Selected codec \(selectedCodec.avCodecKey) not supported")
+            print("⚠️ Available codecs: \(availableCodecs)")
+            
+            // If ProRes isn't supported but HEVC is, fall back to HEVC
+            if selectedCodec == .proRes && availableCodecs.contains(.hevc) {
+                print("↪️ Falling back to HEVC")
+                DispatchQueue.main.async {
+                    self.selectedCodec = .hevc
+                }
+            }
+            return
+        }
+        
+        var bitRate: Int
+        switch selectedCodec {
+        case .hevc:
+            bitRate = isAppleLogEnabled ? 35_000_000 : 25_000_000
+        case .proRes:
+            bitRate = 50_000_000
+        }
+        
+        // Configure video settings with only supported keys
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: bitRate,
+            AVVideoMaxKeyFrameIntervalKey: 1,
+            AVVideoAllowFrameReorderingKey: false,
+            AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
         ]
+        
+        // Add codec-specific settings
+        if selectedCodec == .hevc {
+            compressionProperties[AVVideoProfileLevelKey] = isAppleLogEnabled ? "HEVC_Main10_AutoLevel" : "HEVC_Main_AutoLevel"
+        }
+        
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: selectedCodec.avCodecKey,
+            AVVideoCompressionPropertiesKey: compressionProperties
+        ]
+        
+        print("📊 Configured with:")
+        print("- Codec: \(selectedCodec.avCodecKey)")
+        print("- Bitrate: \(bitRate / 1_000_000) Mbps")
+        print("- Frame Rate: \(selectedFrameRate) fps")
+        print("- Color Space: \(isAppleLogEnabled ? "Apple Log (HLG)" : "Rec.709")")
+        if isAppleLogEnabled {
+            print("- HDR: Enabled")
+        }
+        
+        do {
+            // Try to set the output settings
+            movieOutput.setOutputSettings(videoSettings, for: connection)
+            print("✅ Successfully applied video configuration")
+        } catch {
+            print("❌ Failed to set output settings: \(error)")
+        }
+        
+        print("=== End Video Configuration ===\n")
     }
     
     private func updateCameraFormat(for resolution: Resolution) async throws {
         guard let device = device else { return }
         
-        // Stop the session before making changes
-        session.stopRunning()
+        print("\n=== Updating Camera Format ===")
+        print("🎯 Target Resolution: \(resolution.rawValue)")
+        print("🎥 Current Frame Rate: \(selectedFrameRate)")
+        
+        let wasRunning = session.isRunning
+        if wasRunning {
+            session.stopRunning()
+        }
+        
+        // Find all formats that match our resolution
+        let matchingFormats = device.formats.filter { format in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return dimensions.width == resolution.dimensions.width &&
+                   dimensions.height == resolution.dimensions.height
+        }
+        
+        print("📊 Found \(matchingFormats.count) matching formats")
+        
+        // Find the best format that supports our current frame rate
+        let bestFormat = matchingFormats.first { format in
+            format.videoSupportedFrameRateRanges.contains { range in
+                range.minFrameRate...range.maxFrameRate ~= selectedFrameRate
+            }
+        } ?? matchingFormats.first
+        
+        guard let selectedFormat = bestFormat else {
+            print("❌ No compatible format found for resolution \(resolution.rawValue)")
+            if wasRunning {
+                session.startRunning()
+            }
+            throw CameraError.configurationFailed
+        }
+        
+        // Get the supported frame rate range for this format
+        let frameRateRange = selectedFormat.videoSupportedFrameRateRanges.first
+        let adjustedFrameRate = frameRateRange.map { range in
+            min(max(selectedFrameRate, range.minFrameRate), range.maxFrameRate)
+        } ?? 30.0
+        
+        print("⚙️ Selected Format: \(CMFormatDescriptionGetMediaSubType(selectedFormat.formatDescription))")
+        print("⏱️ Adjusted Frame Rate: \(adjustedFrameRate)")
+        
+        // Begin configuration
+        session.beginConfiguration()
         
         do {
             try await device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
             
-            // Find all formats that match our resolution
-            let matchingFormats = device.formats.filter { format in
-                let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                return dimensions.width == resolution.dimensions.width &&
-                       dimensions.height == resolution.dimensions.height
+            // Set the format
+            device.activeFormat = selectedFormat
+            
+            // Set the frame duration
+            let duration = CMTime(value: 1, timescale: CMTimeScale(adjustedFrameRate))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            
+            // Update the frame rate if it was adjusted
+            if adjustedFrameRate != selectedFrameRate {
+                await MainActor.run {
+                    selectedFrameRate = adjustedFrameRate
+                }
             }
             
-            // Find the best format that supports our current frame rate
-            if let bestFormat = matchingFormats.first(where: { format in
-                format.videoSupportedFrameRateRanges.contains { range in
-                    range.minFrameRate...range.maxFrameRate ~= selectedFrameRate
-                }
-            }) {
-                // Set the format
-                device.activeFormat = bestFormat
-                
-                // Get the supported frame rate range for this format
-                if let frameRateRange = bestFormat.videoSupportedFrameRateRanges.first {
-                    // Ensure our frame rate is within the supported range
-                    let adjustedFrameRate = min(max(selectedFrameRate, frameRateRange.minFrameRate), frameRateRange.maxFrameRate)
-                    
-                    // Set the frame duration
-                    let duration = CMTime(value: 1, timescale: CMTimeScale(adjustedFrameRate))
-                    device.activeVideoMinFrameDuration = duration
-                    device.activeVideoMaxFrameDuration = duration
-                    
-                    // Update the frame rate if it was adjusted
-                    if adjustedFrameRate != selectedFrameRate {
-                        await MainActor.run {
-                            selectedFrameRate = adjustedFrameRate
-                        }
-                    }
-                }
-                
-                // Update video configuration
-                updateVideoConfiguration()
-                
-                // Restart the session
+            // Update video configuration
+            updateVideoConfiguration()
+            
+            device.unlockForConfiguration()
+            
+            // Commit the configuration
+            session.commitConfiguration()
+            
+            // Restore session state if it was running
+            if wasRunning {
                 session.startRunning()
-            } else {
-                // If no format supports the current frame rate, find the closest supported frame rate
-                if let format = matchingFormats.first,
-                   let frameRateRange = format.videoSupportedFrameRateRanges.first {
-                    // Set the format
-                    device.activeFormat = format
-                    
-                    // Choose the closest supported frame rate
-                    let newFrameRate = min(max(selectedFrameRate, frameRateRange.minFrameRate), frameRateRange.maxFrameRate)
-                    
-                    // Set the frame duration
-                    let duration = CMTime(value: 1, timescale: CMTimeScale(newFrameRate))
-                    device.activeVideoMinFrameDuration = duration
-                    device.activeVideoMaxFrameDuration = duration
-                    
-                    // Update the frame rate
-                    await MainActor.run {
-                        selectedFrameRate = newFrameRate
-                    }
-                    
-                    // Update video configuration
-                    updateVideoConfiguration()
-                    
-                    // Restart the session
-                    session.startRunning()
-                } else {
-                    throw CameraError.configurationFailed
-                }
             }
+            
+            print("✅ Camera format updated successfully")
+            print("=== End Update ===\n")
+            
         } catch {
-            // Restart the session even if configuration fails
-            session.startRunning()
+            print("❌ Error updating camera format: \(error.localizedDescription)")
+            // Ensure we clean up in case of error
+            device.unlockForConfiguration()
+            session.commitConfiguration()
+            
+            // Restore session state if it was running
+            if wasRunning {
+                session.startRunning()
+            }
+            
             throw error
         }
     }

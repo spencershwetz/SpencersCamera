@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var lutManager: LUTManager
     @ObservedObject var viewModel: CameraViewModel
+    @Binding var isDebugEnabled: Bool
     
     var body: some View {
         NavigationView {
@@ -41,7 +42,15 @@ struct SettingsView: View {
                 }
                 
                 Section("Display") {
-                    Text("Display settings will go here")
+                    Toggle(isOn: $isDebugEnabled) {
+                        HStack {
+                            Text("Show Debug Info")
+                            if isDebugEnabled {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
                 }
                 
                 Section("Storage") {
@@ -80,6 +89,7 @@ struct SettingsView: View {
 #Preview {
     SettingsView(
         lutManager: LUTManager(),
-        viewModel: CameraViewModel()
+        viewModel: CameraViewModel(),
+        isDebugEnabled: .constant(false)
     )
 } 
