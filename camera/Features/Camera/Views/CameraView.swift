@@ -131,12 +131,12 @@ struct CameraView: View {
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()
-                    // Frame that starts below safe area and takes up 80% of the original size
+                    // Frame that starts below safe area and takes up 90% of the original size
                     .frame(
-                        width: geometry.size.width * 0.8,
-                        height: geometry.size.height * 0.75 * 0.8
+                        width: geometry.size.width * 0.9,
+                        height: geometry.size.height * 0.75 * 0.9
                     )
-                    .padding(.top, geometry.safeAreaInsets.top + 60) // Added more padding to move it down
+                    .padding(.top, geometry.safeAreaInsets.top + 60) // Keep the same vertical position
                     .clipped() // Ensure the preview stays within bounds
                     .frame(maxWidth: .infinity) // Center the preview horizontally
                     
