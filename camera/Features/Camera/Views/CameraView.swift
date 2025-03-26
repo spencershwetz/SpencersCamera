@@ -51,13 +51,13 @@ struct CameraView: View {
                     .allowsHitTesting(true)
                     .ignoresSafeArea()
                 
-                // Lens selection buttons
+                // Lens selection with zoom slider
                 VStack {
                     Spacer()
                         .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
                     
                     if !viewModel.availableLenses.isEmpty {
-                        LensSelectionView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                        ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
                             .padding(.bottom, 20)
                     }
                     

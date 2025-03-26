@@ -234,6 +234,9 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var currentLens: CameraLens = .wide
     @Published var availableLenses: [CameraLens] = []
     
+    @Published var currentZoomFactor: CGFloat = 1.0
+    private var lastZoomFactor: CGFloat = 1.0
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -1402,9 +1405,10 @@ class CameraViewModel: NSObject, ObservableObject {
             
             do {
                 try currentDevice.lockForConfiguration()
-                currentDevice.videoZoomFactor = lens.zoomFactor
+                currentDevice.ramp(toVideoZoomFactor: lens.zoomFactor, withRate: 20.0)
                 currentDevice.unlockForConfiguration()
                 currentLens = lens
+                currentZoomFactor = lens.zoomFactor
                 print("DEBUG: ✅ Set digital zoom to 2x")
             } catch {
                 print("DEBUG: ❌ Failed to set digital zoom: \(error)")
@@ -1432,6 +1436,7 @@ class CameraViewModel: NSObject, ObservableObject {
                 videoDeviceInput = newInput
                 device = newDevice
                 currentLens = lens
+                currentZoomFactor = lens.zoomFactor
                 
                 // Reset zoom factor when switching physical lenses
                 try newDevice.lockForConfiguration()
@@ -1459,6 +1464,43 @@ class CameraViewModel: NSObject, ObservableObject {
         }
         
         session.commitConfiguration()
+    }
+    
+    func setZoomFactor(_ factor: CGFloat) {
+        guard let currentDevice = device else { return }
+        
+        // Find the appropriate lens based on the zoom factor
+        let targetLens = availableLenses
+            .sorted { abs($0.zoomFactor - factor) < abs($1.zoomFactor - factor) }
+            .first ?? .wide
+        
+        // If we need to switch lenses
+        if targetLens != currentLens && abs(targetLens.zoomFactor - factor) < 0.5 {
+            switchToLens(targetLens)
+            return
+        }
+        
+        do {
+            try currentDevice.lockForConfiguration()
+            
+            // Calculate zoom factor relative to the current lens
+            let baseZoom = currentLens.zoomFactor
+            let relativeZoom = factor / baseZoom
+            let zoomFactor = min(max(relativeZoom, currentDevice.minAvailableVideoZoomFactor),
+                               currentDevice.maxAvailableVideoZoomFactor)
+            
+            // Apply zoom smoothly
+            currentDevice.ramp(toVideoZoomFactor: zoomFactor,
+                             withRate: 20.0)
+            
+            currentZoomFactor = factor
+            lastZoomFactor = zoomFactor
+            
+            currentDevice.unlockForConfiguration()
+        } catch {
+            print("DEBUG: ❌ Failed to set zoom: \(error)")
+            self.error = .configurationFailed
+        }
     }
 }
 
