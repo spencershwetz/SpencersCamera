@@ -216,7 +216,7 @@ struct CameraPreviewView: UIViewRepresentable {
         private var dataOutput: AVCaptureVideoDataOutput?
         private let session: AVCaptureSession
         private var lutManager: LUTManager
-        var viewModel: CameraViewModel  // Changed to internal access
+        var viewModel: CameraViewModel
         private var ciContext = CIContext(options: [.useSoftwareRenderer: false])
         private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
         private var currentLUTFilter: CIFilter?
@@ -236,52 +236,79 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Disable autoresizing mask
-            autoresizingMask = []
-            translatesAutoresizingMaskIntoConstraints = false
-            
-            // Configure preview layer
+            // Set up preview layer
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.cornerRadius = 20 // Add rounded corners
+            previewLayer.cornerRadius = cornerRadius
             previewLayer.masksToBounds = true
-            
-            // Add preview layer
             layer.addSublayer(previewLayer)
             
-            // Add rounded corners to the view itself
-            layer.cornerRadius = 20
-            layer.masksToBounds = true
+            // Tag this view for easy lookup
+            tag = 100
             
-            print("DEBUG: CustomPreviewView setupView - Initial frame: \(frame)")
+            // Ensure preview layer fills the entire view
+            previewLayer.frame = bounds
+            
+            // Disable autoresizing mask to use constraints
+            translatesAutoresizingMaskIntoConstraints = false
+            
+            // Set background color
+            backgroundColor = .black
+            
+            // Force portrait orientation for the preview layer
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+            }
+            
+            // Initial frame update
+            updateFrameSize()
         }
         
         override func layoutSubviews() {
             super.layoutSubviews()
-            print("DEBUG: CustomPreviewView layoutSubviews - Frame: \(frame), Bounds: \(bounds)")
             
+            // Ensure preview layer and LUT overlay fill the entire view
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            
+            // Update preview layer frame
             previewLayer.frame = bounds
             
-            // Ensure corners stay rounded
-            previewLayer.cornerRadius = cornerRadius
-            layer.cornerRadius = cornerRadius
+            // Update LUT overlay if it exists
+            if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                overlay.frame = bounds
+            }
             
-            print("DEBUG: PreviewLayer frame set to: \(previewLayer.frame)")
             CATransaction.commit()
+            
+            // Force portrait orientation
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+            }
         }
+        
+        // MARK: - Frame Management
         
         func updateFrameSize() {
             // Use animation to prevent abrupt changes
             CATransaction.begin()
-            CATransaction.setDisableActions(true)  // Disable animations for stability
+            CATransaction.setDisableActions(true)
             
-            // Keep the same frame dimensions - don't update based on container
-            let currentBounds = bounds
-            previewLayer.frame = currentBounds
+            // Calculate the frame that covers the entire screen
+            let screenBounds = UIScreen.main.bounds
+            let frame = CGRect(x: 0, y: 0, width: screenBounds.width, height: screenBounds.height)
             
-            // Ensure corners stay rounded after frame updates
+            // Update view frame
+            self.frame = frame
+            
+            // Update preview layer frame
+            previewLayer.frame = bounds
+            
+            // Ensure corners stay rounded
             previewLayer.cornerRadius = cornerRadius
             
             // Force portrait orientation
@@ -291,9 +318,9 @@ struct CameraPreviewView: UIViewRepresentable {
                 }
             }
             
-            // Also update any LUT overlay layer
+            // Update LUT overlay layer if it exists
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                overlay.frame = previewLayer.bounds
+                overlay.frame = bounds
                 overlay.cornerRadius = cornerRadius
             }
             
@@ -430,27 +457,31 @@ struct CameraPreviewView: UIViewRepresentable {
                 return
             }
             
-            // Create an overlay image
+            // Create or update overlay on main thread
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 
                 CATransaction.begin()
-                CATransaction.setAnimationDuration(0.3)
+                CATransaction.setDisableActions(true)
+                
+                // Get the screen bounds
+                let screenBounds = UIScreen.main.bounds
                 
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                     overlay.contents = cgImage
-                    overlay.cornerRadius = self.cornerRadius  // Apply corner radius to LUT overlay
+                    overlay.frame = screenBounds
+                    overlay.cornerRadius = self.cornerRadius
                 } else {
                     let overlayLayer = CALayer()
                     overlayLayer.name = "LUTOverlayLayer"
-                    overlayLayer.frame = self.previewLayer.bounds
+                    overlayLayer.frame = screenBounds
                     overlayLayer.contentsGravity = .resizeAspectFill
                     overlayLayer.contents = cgImage
-                    overlayLayer.cornerRadius = self.cornerRadius  // Apply corner radius to new LUT overlay
+                    overlayLayer.cornerRadius = self.cornerRadius
                     overlayLayer.masksToBounds = true
                     self.previewLayer.addSublayer(overlayLayer)
-                    print("DEBUG: Added LUT overlay layer")
+                    print("DEBUG: Added LUT overlay layer with frame: \(screenBounds)")
                 }
                 
                 CATransaction.commit()
