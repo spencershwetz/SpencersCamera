@@ -12,24 +12,13 @@ struct CameraPreviewView: UIViewRepresentable {
         
         // Create container with explicit bounds
         let screen = UIScreen.main.bounds
-        let container = RotationLockedContainer(frame: screen)
+        let container = RotationLockedContainer(contentView: CustomPreviewView(frame: screen, 
+                                                                              session: session, 
+                                                                              lutManager: lutManager,
+                                                                              viewModel: viewModel))
         
         // Store reference to this container in the view model for LUT processing
         viewModel.owningView = container
-        
-        // Create preview view
-        let preview = CustomPreviewView(frame: screen, 
-                                      session: session, 
-                                      lutManager: lutManager,
-                                      viewModel: viewModel)
-        
-        // Ensure all views have black backgrounds
-        container.backgroundColor = .black
-        preview.backgroundColor = .black
-        preview.tag = 100
-        
-        // Add preview to container
-        container.addSubview(preview)
         
         // Force layout
         container.setNeedsLayout()
@@ -64,67 +53,79 @@ struct CameraPreviewView: UIViewRepresentable {
     
     // A container view that actively resists rotation changes
     class RotationLockedContainer: UIView {
-        override init(frame: CGRect) {
-            super.init(frame: frame)
+        private let contentView: UIView
+        
+        init(contentView: UIView) {
+            self.contentView = contentView
+            super.init(frame: .zero)
             setupView()
         }
         
         required init?(coder: NSCoder) {
-            super.init(coder: coder)
-            setupView()
+            fatalError("init(coder:) has not been implemented")
         }
         
         private func setupView() {
+            // Set background to black
             backgroundColor = .black
-            frame = UIScreen.main.bounds
-            autoresizingMask = [.flexibleWidth, .flexibleHeight]
             
-            // Completely disable safe area layout guide
-            if #available(iOS 11.0, *) {
-                insetsLayoutMarginsFromSafeArea = false
-                layoutMargins = .zero
-                preservesSuperviewLayoutMargins = false
-            }
+            // Add content view to fill the container
+            addSubview(contentView)
+            contentView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                contentView.topAnchor.constraint(equalTo: topAnchor),
+                contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
+                contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                contentView.trailingAnchor.constraint(equalTo: trailingAnchor)
+            ])
             
-            // Set content mode to scale to fill
-            contentMode = .scaleToFill
+            // Disable safe area insets
+            contentView.insetsLayoutMarginsFromSafeArea = false
             
-            // Debug: Let's print our superview hierarchy to investigate the white bar
-            inspectSuperviewColors()
-            print("DEBUG: RotationLockedContainer background set to black")
+            // Set black background for all parent views
+            setBlackBackgroundForParentViews()
         }
         
-        private func inspectSuperviewColors() {
-            var currentView: UIView? = self
-            var level = 0
-            
-            while let view = currentView {
-                print("DEBUG: Superview Level \(level) - Type: \(type(of: view)), backgroundColor: \(view.backgroundColor?.debugDescription ?? "nil")")
-                currentView = view.superview
-                level += 1
-            }
-        }
-        
-        override func layoutSubviews() {
-            super.layoutSubviews()
-            // Ensure all subviews fill the entire bounds and have black backgrounds
-            for subview in subviews {
-                subview.frame = bounds
-                if subview.backgroundColor == nil || subview.backgroundColor == .white {
-                    subview.backgroundColor = .black
-                    print("DEBUG: Fixed white background in subview: \(type(of: subview))")
-                }
-            }
-        }
-        
-        // Force zero safe area insets to prevent the white bar
+        // Make safe area insets zero to prevent any white bars
         override var safeAreaInsets: UIEdgeInsets {
             return .zero
         }
         
-        // Override hitTest to make sure any touch events outside "safe area" still work
-        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            return super.hitTest(point, with: event)
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            // Force black background when safe area changes
+            setBlackBackgroundForParentViews()
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            
+            // Keep background color black during layout changes
+            backgroundColor = .black
+            
+            // Check for changes in safe area insets
+            if safeAreaInsets != .zero {
+                // Force content to fill entire view
+                contentView.frame = bounds
+            }
+            
+            // Set black background for parent views
+            setBlackBackgroundForParentViews()
+        }
+        
+        private func setBlackBackgroundForParentViews() {
+            // Recursively set black background color on all parent views
+            var currentView: UIView? = self
+            while let view = currentView {
+                view.backgroundColor = .black
+                
+                // Also set any CALayer backgrounds to black
+                view.layer.backgroundColor = UIColor.black.cgColor
+                
+                currentView = view.superview
+            }
+            
+            print("DEBUG: RotationLockedContainer set black background for all parent views")
         }
     }
     

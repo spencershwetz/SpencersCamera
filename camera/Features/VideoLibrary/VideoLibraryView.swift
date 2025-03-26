@@ -10,7 +10,7 @@ struct VideoLibraryView: View {
     @State private var rotationLockApplied = false
     
     var body: some View {
-        OrientationFixView(allowsLandscape: true) {
+        OrientationFixView(allowsLandscapeMode: true) {
             NavigationStack {
                 ZStack {
                     Color.black.edgesIgnoringSafeArea(.all)
@@ -394,7 +394,7 @@ struct VideoPlayerView: View {
     @State private var currentOrientation = UIDevice.current.orientation
     
     var body: some View {
-        OrientationFixView(allowsLandscape: true) {
+        OrientationFixView(allowsLandscapeMode: true) {
             ZStack {
                 if let player = player {
                     VideoPlayer(player: player)

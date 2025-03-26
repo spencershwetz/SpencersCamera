@@ -4,20 +4,23 @@ import SwiftUI
 /// A UIViewController that restricts orientation and hosts the camera preview
 class OrientationFixViewController: UIViewController {
     private let contentView: UIView
-    fileprivate(set) var allowsLandscape: Bool
+    private(set) var allowsLandscapeMode: Bool
     private var hasAppliedInitialOrientation = false
     
-    init(contentView: UIView, allowsLandscape: Bool = false) {
-        self.contentView = contentView
-        self.allowsLandscape = allowsLandscape
+    init(rootView: UIView, allowLandscape: Bool = false) {
+        self.contentView = rootView
+        self.allowsLandscapeMode = allowLandscape
         super.init(nibName: nil, bundle: nil)
         
-        // Set the view's background color to black
+        // Set black background color
         self.view.backgroundColor = .black
         
-        // Set presentation style to full screen if allowing landscape
-        if allowsLandscape {
+        // Configure modal presentation style based on landscape allowance
+        if !allowsLandscapeMode {
             self.modalPresentationStyle = .fullScreen
+            print("DEBUG: OrientationFixViewController initializing with portrait-only mode")
+        } else {
+            print("DEBUG: OrientationFixViewController initializing with all orientations allowed")
         }
     }
     
@@ -28,237 +31,124 @@ class OrientationFixViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Set background color to black
+        // Ensure view background is black
         view.backgroundColor = .black
-        print("DEBUG: OrientationFixViewController set background to black")
         
-        // Add the content view
+        // Add content view to controller's view
+        contentView.frame = view.bounds
+        contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(contentView)
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: view.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        ])
         
-        // Apply orientation settings
-        if !allowsLandscape {
-            enforcePortraitOrientation()
-            print("DEBUG: OrientationFixViewController loaded - enforcing portrait orientation")
-        } else {
-            // If we allow landscape, explicitly enable landscape orientation
-            enableAllOrientations()
-            print("DEBUG: OrientationFixViewController loaded - allowing landscape orientation")
-            
-            // Also set the AppDelegate flag
-            AppDelegate.isVideoLibraryPresented = true
-        }
+        // Disable safe area insets
+        contentView.insetsLayoutMarginsFromSafeArea = false
+        additionalSafeAreaInsets = .zero
+        
+        // Set black background for all parent views up the hierarchy
+        setBlackBackgroundForAllParentViews()
+        
+        print("DEBUG: OrientationFixViewController viewDidLoad - background set to black")
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        if !allowsLandscape {
-            // Always force portrait orientation
+        // Set background to black
+        view.backgroundColor = .black
+        
+        // Apply orientation settings
+        if !allowsLandscapeMode {
             enforcePortraitOrientation()
+            print("DEBUG: OrientationFixViewController viewWillAppear - enforcing portrait mode")
         } else {
-            // When allowing landscape, make sure to update to current device orientation
-            if !hasAppliedInitialOrientation {
-                hasAppliedInitialOrientation = true
-                updateToCurrentDeviceOrientation()
-                
-                // Also set the AppDelegate flag
-                AppDelegate.isVideoLibraryPresented = true
-            }
+            enableAllOrientations()
+            print("DEBUG: OrientationFixViewController viewWillAppear - allowing all orientations")
         }
         
-        // Modern approach to update orientation
-        self.setNeedsUpdateOfSupportedInterfaceOrientations()
+        // Set black background for all parent views
+        setBlackBackgroundForAllParentViews()
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        if allowsLandscape {
-            // Force device to consider rotating when view appears
-            AppDelegate.isVideoLibraryPresented = true
-            
-            // Use a slight delay to ensure the view has fully appeared
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                // Ensure we're still in landscape mode by using setNeedsUpdateOfSupportedInterfaceOrientations
-                // which is the modern replacement for attemptRotationToDeviceOrientation
-                self.setNeedsUpdateOfSupportedInterfaceOrientations()
-                
-                // Also notify others that might need to update
-                if let windowScene = self.findActiveWindowScene() {
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
-                
-                // Post notification for orientation change
-                NotificationCenter.default.post(
-                    name: UIDevice.orientationDidChangeNotification,
-                    object: nil
-                )
-            }
-        }
-    }
-    
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
+        // Set black background for all parent views again after appearing
+        setBlackBackgroundForAllParentViews()
         
-        // If this is a landscape-allowed view, reset to portrait when it disappears
-        // but only if it's not being replaced by another landscape view
-        if allowsLandscape && !AppDelegate.isVideoLibraryPresented {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if !AppDelegate.isVideoLibraryPresented {
-                    self.enforcePortraitOrientation()
-                }
-            }
-        }
-    }
-    
-    // Helper method to enforce portrait orientation using modern API
-    private func enforcePortraitOrientation() {
-        // Find the active window scene
-        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                print("DEBUG: Portrait orientation applied: \(error.localizedDescription)")
-            }
-            
-            // Also update all view controllers
-            for window in windowScene.windows {
-                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            }
-        }
-    }
-    
-    // Helper method to enable all orientations
-    private func enableAllOrientations() {
-        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
-            let orientations: UIInterfaceOrientationMask = [.portrait, .landscapeLeft, .landscapeRight]
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                print("DEBUG: All orientations enabled: \(error.localizedDescription)")
-            }
-            
-            // Also update all view controllers
-            for window in windowScene.windows {
-                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            }
-        }
-    }
-    
-    // Update to match current device orientation
-    private func updateToCurrentDeviceOrientation() {
-        let currentOrientation = UIDevice.current.orientation
-        
-        if let windowScene = findActiveWindowScene() ?? view.window?.windowScene {
-            var preferredOrientations: UIInterfaceOrientationMask
-            var targetOrientation: UIInterfaceOrientation?
-            
-            if currentOrientation.isLandscape {
-                print("DEBUG: OrientationFixVC adapting to landscape orientation: \(currentOrientation.rawValue)")
-                preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
-                
-                // Map device orientation to interface orientation
-                if currentOrientation == .landscapeLeft {
-                    targetOrientation = .landscapeRight
-                } else if currentOrientation == .landscapeRight {
-                    targetOrientation = .landscapeLeft
-                }
-            } else if currentOrientation == .faceUp || currentOrientation == .faceDown {
-                print("DEBUG: OrientationFixVC handling face up/down orientation: \(currentOrientation.rawValue)")
-                
-                // If we allow landscape and video library is presented, maintain landscape
-                if allowsLandscape && AppDelegate.isVideoLibraryPresented {
-                    preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
-                    
-                    // Check current interface orientation
-                    let currentInterfaceOrientation = windowScene.interfaceOrientation
-                    if currentInterfaceOrientation.isLandscape {
-                        // Maintain current landscape orientation
-                        targetOrientation = currentInterfaceOrientation
-                        print("DEBUG: OrientationFixVC maintaining landscape interface orientation: \(currentInterfaceOrientation.rawValue)")
-                    } else {
-                        // Default to landscape right
-                        targetOrientation = .landscapeRight
-                        print("DEBUG: OrientationFixVC defaulting to landscape right for face orientation")
-                    }
-                } else {
-                    // Default to portrait in other cases
-                    preferredOrientations = .portrait
-                    targetOrientation = .portrait
-                }
+        // Apply orientation settings again after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if !self.allowsLandscapeMode {
+                self.enforcePortraitOrientation()
             } else {
-                // Default to all orientations allowed if we allow landscape
-                if allowsLandscape {
-                    preferredOrientations = [.portrait, .landscapeLeft, .landscapeRight]
-                } else {
-                    preferredOrientations = .portrait
-                    targetOrientation = .portrait
-                }
-            }
-            
-            // Apply orientation mask
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: preferredOrientations)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                print("DEBUG: OrientationFixVC orientation adaptation complete: \(error.localizedDescription)")
-            }
-            
-            // If we have a specific target orientation, set it explicitly
-            if let targetOrientation = targetOrientation {
-                // Create proper mask from single orientation
-                let orientationMask: UIInterfaceOrientationMask
-                switch targetOrientation {
-                case .portrait: orientationMask = .portrait
-                case .portraitUpsideDown: orientationMask = .portraitUpsideDown
-                case .landscapeLeft: orientationMask = .landscapeLeft
-                case .landscapeRight: orientationMask = .landscapeRight
-                default: orientationMask = .portrait
-                }
-                
-                let specificGeometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
-                windowScene.requestGeometryUpdate(specificGeometryPreferences) { error in
-                    print("DEBUG: OrientationFixVC specific orientation update: \(error.localizedDescription)")
-                }
-            }
-            
-            // Also update all view controllers
-            for window in windowScene.windows {
-                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                self.enableAllOrientations()
             }
         }
     }
     
-    // Only allow portrait orientation or both based on setting
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        // If the video library flag is set in AppDelegate, always return all orientations
-        if AppDelegate.isVideoLibraryPresented {
-            return [.portrait, .landscapeLeft, .landscapeRight]
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        
+        // Force black background during layout
+        view.backgroundColor = .black
+        setBlackBackgroundForAllParentViews()
+    }
+    
+    // Force zero safe area insets
+    override var additionalSafeAreaInsets: UIEdgeInsets {
+        get {
+            return .zero
+        }
+        set {
+            super.additionalSafeAreaInsets = .zero
+        }
+    }
+    
+    private func enforcePortraitOrientation() {
+        // Use UIDevice notification-based orientation instead of the unsafe KVC approach
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        
+        // Set preferred orientation via UIApplication
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            if #available(iOS 16.0, *) {
+                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
         }
         
-        // Otherwise use the local property
-        return allowsLandscape ? [.portrait, .landscapeLeft, .landscapeRight] : .portrait
+        // Report current orientation settings
+        print("DEBUG: Enforcing portrait orientation")
+    }
+    
+    private func enableAllOrientations() {
+        // Allow all orientations
+        print("DEBUG: Enabling all orientations")
+    }
+    
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        if allowsLandscapeMode {
+            return .all
+        } else {
+            return .portrait
+        }
     }
     
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        // If we allow landscape and the current orientation is landscape, match it
-        if (allowsLandscape || AppDelegate.isVideoLibraryPresented) && UIDevice.current.orientation.isLandscape {
-            // Map device orientation to interface orientation
-            // Note that UIDeviceOrientation.landscapeLeft maps to UIInterfaceOrientation.landscapeRight and vice versa
-            return UIDevice.current.orientation == .landscapeLeft ? .landscapeRight : .landscapeLeft
-        }
-        
-        // Default to portrait
         return .portrait
     }
     
-    override var shouldAutorotate: Bool {
-        return allowsLandscape || AppDelegate.isVideoLibraryPresented
+    private func setBlackBackgroundForAllParentViews() {
+        // Recursively set black background color on all parent views
+        var currentView: UIView? = self.view
+        while let view = currentView {
+            view.backgroundColor = .black
+            currentView = view.superview
+        }
+        
+        // Also ensure all window backgrounds are black
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .forEach { $0.backgroundColor = .black }
+        
+        print("DEBUG: Set black background for all parent views")
     }
 }
 
@@ -278,14 +168,14 @@ extension UIViewController {
 /// A SwiftUI wrapper for the orientation fix view controller
 struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
     var content: Content
-    var allowsLandscape: Bool
+    var allowsLandscapeMode: Bool
     
-    init(allowsLandscape: Bool = false, @ViewBuilder content: () -> Content) {
+    init(allowsLandscapeMode: Bool = false, @ViewBuilder content: () -> Content) {
         self.content = content()
-        self.allowsLandscape = allowsLandscape
+        self.allowsLandscapeMode = allowsLandscapeMode
         
         // Set AppDelegate flag if we're initializing with landscape allowed
-        if allowsLandscape {
+        if allowsLandscapeMode {
             AppDelegate.isVideoLibraryPresented = true
         }
     }
@@ -296,15 +186,18 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
         
         // Extract the UIView from the hosting controller
         let contentView = hostingController.view!
-        contentView.backgroundColor = .clear
+        contentView.backgroundColor = .black // Force black background
+        
+        // Force UIHostingController background to black as well
+        hostingController.view.backgroundColor = .black
         
         // Create and return the orientation fix view controller
-        return OrientationFixViewController(contentView: contentView, allowsLandscape: allowsLandscape)
+        return OrientationFixViewController(rootView: contentView, allowLandscape: allowsLandscapeMode)
     }
     
     func updateUIViewController(_ uiViewController: OrientationFixViewController, context: Context) {
         // If we allow landscape, ensure orientation is updated
-        if allowsLandscape {
+        if allowsLandscapeMode {
             AppDelegate.isVideoLibraryPresented = true
             uiViewController.setNeedsUpdateOfSupportedInterfaceOrientations()
         }

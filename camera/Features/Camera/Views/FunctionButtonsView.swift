@@ -1,62 +1,114 @@
 import SwiftUI
+import UIKit
 
 struct FunctionButtonsView: View {
+    @State private var topSafeAreaHeight: CGFloat = 44 // Default value
+    
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Debug view to show the top of the screen area
-                Rectangle()
-                    .fill(Color.red.opacity(0.3))
-                    .frame(height: 1)
-                    .padding(.horizontal, 0)
-                
-                HStack {
-                    // Left side function buttons
-                    HStack(spacing: 12) {
-                        Button("F1") { }
-                            .buttonStyle(FunctionButtonStyle())
-                        Button("F2") { }
-                            .buttonStyle(FunctionButtonStyle())
+            HStack {
+                // Left side buttons
+                HStack(spacing: 12) {
+                    Button("F1") {
+                        print("F1 tapped")
                     }
+                    .buttonStyle(FunctionButtonStyle())
                     
-                    Spacer()
-                        .frame(minWidth: geometry.size.width * 0.4) // Forces significant space in middle
-                    
-                    // Right side function buttons
-                    HStack(spacing: 12) {
-                        Button("F3") { }
-                            .buttonStyle(FunctionButtonStyle())
-                        Button("F4") { }
-                            .buttonStyle(FunctionButtonStyle())
+                    Button("F2") {
+                        print("F2 tapped")
                     }
+                    .buttonStyle(FunctionButtonStyle())
                 }
-                .padding(.horizontal)
-                .padding(.top, 4)
                 
-                Text("SafeArea Top: \(geometry.safeAreaInsets.top)")
-                    .font(.system(size: 10))
-                    .foregroundColor(.red)
-                    .padding(.top, 2)
-                    .opacity(0.7)
+                Spacer()
+                
+                // Right side buttons
+                HStack(spacing: 12) {
+                    Button("F3") {
+                        print("F3 tapped")
+                    }
+                    .buttonStyle(FunctionButtonStyle())
+                    
+                    Button("F4") {
+                        print("F4 tapped")
+                    }
+                    .buttonStyle(FunctionButtonStyle())
+                }
             }
-            .onAppear {
-                print("DEBUG: FunctionButtonsView appeared, safeAreaInsets: \(geometry.safeAreaInsets)")
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 2)
+            .frame(width: geometry.size.width, height: 44) // Fixed height for status bar area
+            .background(Color.black.opacity(0.01))
+            .position(x: geometry.size.width / 2, y: 22) // Position in status bar area
         }
-        .frame(height: 60) // Increased height to accommodate debugging elements
-        .background(Color.black) // Solid black background
+        .ignoresSafeArea()
+    }
+}
+
+// A container that uses UIViewRepresentable to completely bypass safe areas
+struct FunctionButtonsContainer<Content: View>: UIViewRepresentable {
+    let content: Content
+    
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+    
+    func makeUIView(context: Context) -> UIView {
+        let hostingController = UIHostingController(rootView: content)
+        hostingController.view.backgroundColor = .clear
+        
+        // Disable safe area insets
+        hostingController.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
+        
+        // Set up the container view
+        let containerView = UIView()
+        containerView.backgroundColor = .clear
+        
+        // Add hosting view as a child view
+        containerView.addSubview(hostingController.view)
+        
+        // Set up constraints to position at the absolute top
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hostingController.view.topAnchor.constraint(equalTo: containerView.topAnchor),
+            hostingController.view.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            hostingController.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+        
+        // Store the hosting controller in the context
+        context.coordinator.hostingController = hostingController
+        
+        return containerView
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // Update the hosting controller's rootView if needed
+        context.coordinator.hostingController?.rootView = content
+        
+        // Make sure it still has negative safe area insets
+        context.coordinator.hostingController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator {
+        var hostingController: UIHostingController<Content>?
     }
 }
 
 struct FunctionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .background(Color.gray.opacity(0.3))
+            .cornerRadius(5)
             .foregroundColor(.white)
-            .font(.system(size: 16, weight: .medium))
-            .padding(.vertical, 6)
-            .padding(.horizontal, 12)
-            .background(Color.black.opacity(0.6))
-            .cornerRadius(8)
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
     }
 }

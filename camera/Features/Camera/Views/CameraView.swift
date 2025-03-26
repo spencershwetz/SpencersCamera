@@ -34,123 +34,58 @@ struct CameraView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                // Black background for entire view
-                Color.black.edgesIgnoringSafeArea(.all)
+            ZStack {
+                // Background
+                Color.black
+                    .edgesIgnoringSafeArea(.all)
                 
-                // Main camera content
-                ZStack {
-                    if viewModel.isSessionRunning {
-                        // Camera is running - show camera preview
-                        CameraPreviewView(
-                            session: viewModel.session,
-                            lutManager: lutManager,
-                            viewModel: viewModel
-                        )
-                        .ignoresSafeArea()
-                        // Fixed frame that won't change with rotation
-                        .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                        
-                        // Fixed position UI overlay (no rotation)
-                        fixedUIOverlay()
-                    } else {
-                        // Show loading or error state
-                        VStack {
-                            Text("Starting camera...")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                            
-                            if viewModel.status == .failed, let error = viewModel.error {
-                                Text("Error: \(error.description)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.red)
-                                    .padding()
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black)
-                    }
-                }
+                // Camera preview with LUT
+                cameraPreview
+                    .edgesIgnoringSafeArea(.all)
                 
-                // Function buttons at top
-                VStack(spacing: 0) {
-                    FunctionButtonsView()
-                        .ignoresSafeArea(edges: .top)
-                        .background(Color.black)
-                        .onAppear {
-                            // Debug print safe area insets
-                            print("DEBUG: Function buttons safe area: Top: \(geometry.safeAreaInsets.top), Bottom: \(geometry.safeAreaInsets.bottom)")
-                            print("DEBUG: Screen size: \(UIScreen.main.bounds)")
-                        }
-                    Spacer()
-                }
+                // Function buttons overlay
+                FunctionButtonsView()
+                    .zIndex(100) // Ensure it's above everything else
+                    .allowsHitTesting(true) // Make sure buttons are tappable
+                    .ignoresSafeArea()
             }
             .onAppear {
-                print("DEBUG: CameraView size: \(geometry.size)")
-                print("DEBUG: CameraView safeAreaInsets: \(geometry.safeAreaInsets)")
-                // Start the camera session when the view appears
-                if !viewModel.session.isRunning {
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        viewModel.session.startRunning()
-                        DispatchQueue.main.async {
-                            viewModel.isSessionRunning = viewModel.session.isRunning
-                            viewModel.status = viewModel.session.isRunning ? .running : .failed
-                            viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
-                            print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
-                        }
-                    }
-                }
-                
-                // Double enforce orientation lock on view appearance
-                viewModel.updateInterfaceOrientation(lockCamera: true)
-                
-                // Setup notification for when app becomes active
-                NotificationCenter.default.addObserver(
-                    forName: UIApplication.didBecomeActiveNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    print("DEBUG: App became active - re-enforcing camera orientation")
-                    viewModel.updateInterfaceOrientation(lockCamera: true)
-                }
-                
-                // Share the lutManager between views
-                viewModel.lutManager = lutManager
-                
-                // Enable LUT preview by default
-                showLUTPreview = true
-                
-                // Enable device orientation notifications
-                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
+                startSession()
             }
             .onDisappear {
-                // Remove notification observer when the view disappears
-                NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-                
-                // Stop the camera session when the view disappears
-                if viewModel.session.isRunning {
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        viewModel.session.stopRunning()
-                        DispatchQueue.main.async {
-                            viewModel.isSessionRunning = false
-                        }
-                    }
-                }
-                
-                // Disable device orientation notifications
-                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+                stopSession()
             }
-            .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
-                if newValue.isValidInterfaceOrientation {
-                    print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
-                    
-                    // Always lock camera preview orientation to portrait
-                    viewModel.updateInterfaceOrientation(lockCamera: true)
-                    
-                    // Re-enforce after a short delay to catch any late layout updates
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        viewModel.updateInterfaceOrientation(lockCamera: true)
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                // When app is moved to background
+                stopSession()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                // When app returns to foreground
+                startSession()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                // Get the current device orientation
+                let deviceOrientation = UIDevice.current.orientation
+                
+                // Only update when the device orientation is a valid interface orientation
+                if deviceOrientation.isValidInterfaceOrientation {
+                    print("DEBUG: Device orientation changed to: \(deviceOrientation.rawValue)")
+                    // Convert device orientation to interface orientation
+                    let interfaceOrientation: UIInterfaceOrientation
+                    switch deviceOrientation {
+                    case .portrait:
+                        interfaceOrientation = .portrait
+                    case .portraitUpsideDown:
+                        interfaceOrientation = .portraitUpsideDown
+                    case .landscapeLeft:
+                        interfaceOrientation = .landscapeRight // Note: these are flipped
+                    case .landscapeRight:
+                        interfaceOrientation = .landscapeLeft  // Note: these are flipped
+                    default:
+                        interfaceOrientation = .portrait
                     }
+                    viewModel.updateOrientation(interfaceOrientation)
                 }
             }
             .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
@@ -182,6 +117,41 @@ struct CameraView: View {
                 }
             }
             .statusBar(hidden: statusBarHidden)
+        }
+    }
+    
+    private var cameraPreview: some View {
+        Group {
+            if viewModel.isSessionRunning {
+                // Camera is running - show camera preview
+                CameraPreviewView(
+                    session: viewModel.session,
+                    lutManager: lutManager,
+                    viewModel: viewModel
+                )
+                .ignoresSafeArea()
+                // Fixed frame that won't change with rotation
+                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+                
+                // Fixed position UI overlay (no rotation)
+                .overlay(fixedUIOverlay())
+            } else {
+                // Show loading or error state
+                VStack {
+                    Text("Starting camera...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    if viewModel.status == .failed, let error = viewModel.error {
+                        Text("Error: \(error.description)")
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                            .padding()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
+            }
         }
     }
     
@@ -506,5 +476,60 @@ struct CameraView: View {
                 print("DEBUG: LUT import failed")
             }
         }
+    }
+    
+    private func startSession() {
+        // Start the camera session when the view appears
+        if !viewModel.session.isRunning {
+            DispatchQueue.global(qos: .userInitiated).async {
+                viewModel.session.startRunning()
+                DispatchQueue.main.async {
+                    viewModel.isSessionRunning = viewModel.session.isRunning
+                    viewModel.status = viewModel.session.isRunning ? .running : .failed
+                    viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
+                    print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
+                }
+            }
+        }
+        
+        // Double enforce orientation lock on view appearance
+        viewModel.updateInterfaceOrientation(lockCamera: true)
+        
+        // Setup notification for when app becomes active
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("DEBUG: App became active - re-enforcing camera orientation")
+            viewModel.updateInterfaceOrientation(lockCamera: true)
+        }
+        
+        // Share the lutManager between views
+        viewModel.lutManager = lutManager
+        
+        // Enable LUT preview by default
+        showLUTPreview = true
+        
+        // Enable device orientation notifications
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+    }
+    
+    private func stopSession() {
+        // Remove notification observer when the view disappears
+        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+        
+        // Stop the camera session when the view disappears
+        if viewModel.session.isRunning {
+            DispatchQueue.global(qos: .userInitiated).async {
+                viewModel.session.stopRunning()
+                DispatchQueue.main.async {
+                    viewModel.isSessionRunning = false
+                }
+            }
+        }
+        
+        // Disable device orientation notifications
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 }

@@ -28,6 +28,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             window?.overrideUserInterfaceStyle = .dark
             UIApplication.shared.windows.forEach { window in
                 window.overrideUserInterfaceStyle = .dark
+                
+                // Disable safe area insets for all windows
+                window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
             }
         }
         
@@ -46,16 +49,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Set modal presentation style
         hostingController.modalPresentationStyle = .overFullScreen
         
-        // Disable safe area insets
-        if #available(iOS 11.0, *) {
-            window?.rootViewController?.additionalSafeAreaInsets = .zero
-        }
-        hostingController.additionalSafeAreaInsets = .zero
+        // Disable safe area insets completely
+        hostingController.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
         hostingController.view.frame = UIScreen.main.bounds
         
         // Set window properties
         window?.rootViewController = hostingController
         window?.makeKeyAndVisible()
+        
+        // Disable safe area insets at window level again
+        window?.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
         
         // Force dark mode again after window is visible
         window?.overrideUserInterfaceStyle = .dark
@@ -226,13 +229,6 @@ extension UIViewController {
         }
         
         return self
-    }
-}
-
-// MARK: - Make allowsLandscape property public
-extension OrientationFixViewController {
-    var allowsLandscapeMode: Bool {
-        return self.allowsLandscape
     }
 }
 

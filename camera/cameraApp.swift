@@ -30,6 +30,7 @@ struct cameraApp: App {
                     CameraView()
                 }
             }
+            .disableSafeArea() // Use our custom modifier to completely disable safe areas
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Hide status bar at app level
             .hideStatusBar()
@@ -39,6 +40,13 @@ struct cameraApp: App {
                    let window = windowScene.windows.first {
                     window.backgroundColor = .black
                     print("DEBUG: Set window background to black")
+                    
+                    // Apply negative safe area insets to completely remove safe areas
+                    window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
+                    
+                    // Force update layout
+                    window.rootViewController?.view.setNeedsLayout()
+                    window.rootViewController?.view.layoutIfNeeded()
                 }
             }
         }

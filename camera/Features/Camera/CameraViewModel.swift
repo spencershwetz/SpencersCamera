@@ -1121,6 +1121,11 @@ class CameraViewModel: NSObject, ObservableObject {
         
         print("DEBUG: Started orientation monitoring timer")
     }
+    
+    func updateOrientation(_ orientation: UIInterfaceOrientation) {
+        self.currentInterfaceOrientation = orientation
+        updateInterfaceOrientation()
+    }
 }
 
 extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
