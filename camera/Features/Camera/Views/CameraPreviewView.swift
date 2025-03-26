@@ -26,14 +26,19 @@ struct CameraPreviewView: UIViewRepresentable {
         // Add the preview to our container
         container.addSubview(preview)
         
-        // Pin the preview to the container with auto layout
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            preview.topAnchor.constraint(equalTo: container.topAnchor),
-            preview.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            preview.leftAnchor.constraint(equalTo: container.leftAnchor),
-            preview.rightAnchor.constraint(equalTo: container.rightAnchor)
-        ])
+        // Set a fixed frame that is 80% of the screen size, centered (in portrait orientation)
+        let screenBounds = UIScreen.main.bounds
+        let screenWidth = min(screenBounds.width, screenBounds.height)
+        let screenHeight = max(screenBounds.width, screenBounds.height)
+        let previewWidth = screenWidth * 0.8
+        let previewHeight = screenHeight * 0.8
+        let previewX = (screenWidth - previewWidth) / 2
+        let previewY = (screenHeight - previewHeight) / 2
+        
+        // Use absolute positioning instead of constraints to prevent layout changes during rotation
+        preview.frame = CGRect(x: previewX, y: previewY, width: previewWidth, height: previewHeight)
+        preview.autoresizingMask = [] // Disable autoresizing
+        preview.translatesAutoresizingMaskIntoConstraints = true // Use frame-based layout
         
         return container
     }
@@ -80,9 +85,11 @@ struct CameraPreviewView: UIViewRepresentable {
         // Add a property to track animation state
         private var isAnimating = false
         private let cornerRadius: CGFloat = 20.0  // Define corner radius value
+        private var originalFrame: CGRect = .zero
         
         override init(frame: CGRect) {
             super.init(frame: frame)
+            self.originalFrame = frame
             setupView()
         }
         
@@ -93,13 +100,19 @@ struct CameraPreviewView: UIViewRepresentable {
         
         private func setupView() {
             // Basics
-            autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            autoresizingMask = []  // Disable autoresizing
             backgroundColor = .black
             clipsToBounds = true
             
             // Apply rounded corners
             layer.cornerRadius = cornerRadius
             layer.masksToBounds = true
+            
+            // Completely disable rotation animation
+            layer.allowsEdgeAntialiasing = false
+            
+            // Disable any inherited transforms
+            transform = .identity
             
             // Register for orientation changes
             NotificationCenter.default.addObserver(
@@ -120,62 +133,43 @@ struct CameraPreviewView: UIViewRepresentable {
             // Register for trait changes in iOS 17+
             if #available(iOS 17.0, *) {
                 registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { [weak self] (_: RotationLockedContainer, _: UITraitCollection) in
-                    // Use animation to prevent abrupt changes
-                    UIView.animate(withDuration: 0.3) {
-                        self?.enforceBounds()
-                    }
+                    self?.enforceBounds()
                 }
             }
             
-            print("DEBUG: RotationLockedContainer initialized")
+            print("DEBUG: RotationLockedContainer initialized with fixed portrait layout")
         }
         
         @objc private func orientationDidChange() {
-            print("DEBUG: Container detected device orientation change")
-            // Use animation to prevent abrupt changes
-            UIView.animate(withDuration: 0.3) {
-                self.enforceBounds()
-            }
+            print("DEBUG: Container detected device orientation change - enforcing fixed portrait layout")
+            enforceBounds()
         }
         
         @objc private func interfaceOrientationDidChange() {
-            print("DEBUG: Container detected interface orientation change")
-            // Use animation to prevent abrupt changes
-            UIView.animate(withDuration: 0.3) {
-                self.enforceBounds()
-            }
-        }
-        
-        // Using availability attribute to silence the warning
-        @available(iOS, obsoleted: 17.0, message: "Use registerForTraitChanges instead")
-        override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-            // Don't call super.traitCollectionDidChange on iOS 17+ to avoid the warning
-            if #available(iOS 17.0, *) {
-                // No-op, we're using registerForTraitChanges in setupView
-            } else {
-                super.traitCollectionDidChange(previousTraitCollection)
-                // Use animation to prevent abrupt changes
-                UIView.animate(withDuration: 0.3) {
-                    self.enforceBounds()
-                }
-            }
+            print("DEBUG: Container detected interface orientation change - enforcing fixed portrait layout")
+            enforceBounds()
         }
         
         private func enforceBounds() {
             // Set flag to indicate animation in progress
             isAnimating = true
             
-            // Always maintain full screen bounds regardless of rotation
-            frame = UIScreen.main.bounds
+            // Force frame to be original size and position
+            frame = originalFrame
             
-            // Re-enforce rotation settings for all subviews
+            // Reset any transforms
+            transform = .identity
+            
+            // Update preview without applying transformations
             for case let preview as CustomPreviewView in subviews {
-                preview.frame = bounds
+                // Maintain exact frame - don't allow any layout changes
+                let currentFrame = preview.frame
                 preview.updateFrameSize()
+                preview.frame = currentFrame
             }
             
             // Reset animation flag after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.isAnimating = false
             }
         }
@@ -197,6 +191,14 @@ struct CameraPreviewView: UIViewRepresentable {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             enforceBounds()
+        }
+        
+        // Completely prevent any transform-based animations
+        override func action(for layer: CALayer, forKey event: String) -> CAAction? {
+            if event == "transform" || event == "position" || event == "bounds" {
+                return NSNull()
+            }
+            return super.action(for: layer, forKey: event)
         }
         
         deinit {
@@ -229,6 +231,9 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
+            // Disable autoresizing to prevent layout changes during rotation
+            autoresizingMask = []
+            
             // Apply rounded corners to the view itself
             layer.cornerRadius = cornerRadius
             layer.masksToBounds = true
@@ -242,14 +247,20 @@ struct CameraPreviewView: UIViewRepresentable {
             previewLayer.cornerRadius = cornerRadius
             previewLayer.masksToBounds = true
             
+            // Prevent any transform animations
+            layer.allowsEdgeAntialiasing = false
+            transform = .identity
+            
             layer.addSublayer(previewLayer)
             
-            // Set initial orientation
-            if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
-                previewLayer.connection?.videoRotationAngle = 90
+            // Force portrait orientation
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
             }
             
-            print("DEBUG: CustomPreviewView set up with AVCaptureVideoPreviewLayer")
+            print("DEBUG: CustomPreviewView set up with fixed portrait layout")
             
             // Set up data output if LUT filter is available
             if let filter = lutManager.currentLUTFilter {
@@ -261,21 +272,26 @@ struct CameraPreviewView: UIViewRepresentable {
         func updateFrameSize() {
             // Use animation to prevent abrupt changes
             CATransaction.begin()
-            CATransaction.setAnimationDuration(0.3)
+            CATransaction.setDisableActions(true)  // Disable animations for stability
             
-            previewLayer.frame = bounds
+            // Keep the same frame dimensions - don't update based on container
+            let currentBounds = bounds
+            previewLayer.frame = currentBounds
             
             // Ensure corners stay rounded after frame updates
             previewLayer.cornerRadius = cornerRadius
             
-            // Also update connection orientation
-            if previewLayer.connection?.isVideoRotationAngleSupported(90) == true {
-                previewLayer.connection?.videoRotationAngle = 90
+            // Force portrait orientation
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
             }
             
             // Also update any LUT overlay layer
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                 overlay.frame = previewLayer.bounds
+                overlay.cornerRadius = cornerRadius
             }
             
             CATransaction.commit()
@@ -352,10 +368,11 @@ struct CameraPreviewView: UIViewRepresentable {
                 session.addOutput(output)
                 dataOutput = output
                 
-                // Ensure proper orientation
-                if let connection = output.connection(with: .video),
-                   connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
+                // Ensure proper orientation - force portrait
+                if let connection = output.connection(with: .video) {
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    }
                 }
                 
                 print("DEBUG: Added video data output for LUT processing")
@@ -435,6 +452,14 @@ struct CameraPreviewView: UIViewRepresentable {
                 
                 CATransaction.commit()
             }
+        }
+        
+        // Completely prevent any transform-based animations
+        override func action(for layer: CALayer, forKey event: String) -> CAAction? {
+            if event == "transform" || event == "position" || event == "bounds" {
+                return NSNull()
+            }
+            return super.action(for: layer, forKey: event)
         }
     }
 }
