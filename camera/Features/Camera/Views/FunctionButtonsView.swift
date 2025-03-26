@@ -8,38 +8,40 @@ struct FunctionButtonsView: View {
         GeometryReader { geometry in
             HStack {
                 // Left side buttons
-                HStack(spacing: 12) {
+                HStack {
                     Button("F1") {
                         print("F1 tapped")
                     }
                     .buttonStyle(FunctionButtonStyle())
+                    .padding(.trailing, 16) // Space between F1 and F2
                     
                     Button("F2") {
                         print("F2 tapped")
                     }
                     .buttonStyle(FunctionButtonStyle())
                 }
+                .padding(.leading, geometry.size.width * 0.15) // Keep F2 in current position
                 
                 Spacer()
                 
                 // Right side buttons
-                HStack(spacing: 12) {
+                HStack {
                     Button("F3") {
                         print("F3 tapped")
                     }
                     .buttonStyle(FunctionButtonStyle())
+                    .padding(.trailing, 16) // Space between F3 and F4
                     
                     Button("F4") {
                         print("F4 tapped")
                     }
                     .buttonStyle(FunctionButtonStyle())
                 }
+                .padding(.trailing, geometry.size.width * 0.15) // Keep F3 in current position
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 2)
-            .frame(width: geometry.size.width, height: 44) // Fixed height for status bar area
+            .frame(width: geometry.size.width, height: 44)
             .background(Color.black.opacity(0.01))
-            .position(x: geometry.size.width / 2, y: 22) // Position in status bar area
+            .position(x: geometry.size.width / 2, y: 28)
         }
         .ignoresSafeArea()
     }
