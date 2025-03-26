@@ -3,39 +3,53 @@ import UIKit
 
 struct FunctionButtonsView: View {
     @State private var topSafeAreaHeight: CGFloat = 44 // Default value
+    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     
     var body: some View {
         GeometryReader { geometry in
-            HStack {
+            HStack(spacing: 0) { // Set HStack spacing to 0 to have full control
                 // Left side buttons
                 HStack {
-                    Button("F1") {
-                        print("F1 tapped")
+                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+                        Button("F1") {
+                            print("F1 tapped")
+                        }
+                        .buttonStyle(FunctionButtonStyle())
                     }
-                    .buttonStyle(FunctionButtonStyle())
+                    .frame(width: 40, height: 30)
                     .padding(.trailing, 16) // Space between F1 and F2
                     
-                    Button("F2") {
-                        print("F2 tapped")
+                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+                        Button("F2") {
+                            print("F2 tapped")
+                        }
+                        .buttonStyle(FunctionButtonStyle())
                     }
-                    .buttonStyle(FunctionButtonStyle())
+                    .frame(width: 40, height: 30)
                 }
                 .padding(.leading, geometry.size.width * 0.15) // Keep F2 in current position
                 
                 Spacer()
+                    .frame(minWidth: geometry.size.width * 0.3) // Ensure minimum space for Dynamic Island
                 
                 // Right side buttons
                 HStack {
-                    Button("F3") {
-                        print("F3 tapped")
+                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+                        Button("F3") {
+                            print("F3 tapped")
+                        }
+                        .buttonStyle(FunctionButtonStyle())
                     }
-                    .buttonStyle(FunctionButtonStyle())
+                    .frame(width: 40, height: 30)
                     .padding(.trailing, 16) // Space between F3 and F4
                     
-                    Button("F4") {
-                        print("F4 tapped")
+                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+                        Button("F4") {
+                            print("F4 tapped")
+                        }
+                        .buttonStyle(FunctionButtonStyle())
                     }
-                    .buttonStyle(FunctionButtonStyle())
+                    .frame(width: 40, height: 30)
                 }
                 .padding(.trailing, geometry.size.width * 0.15) // Keep F3 in current position
             }

@@ -4,14 +4,16 @@ import UIKit
 struct RotatingView<Content: View>: UIViewControllerRepresentable {
     let content: Content
     @ObservedObject var orientationViewModel: DeviceOrientationViewModel
+    let invertRotation: Bool
     
-    init(orientationViewModel: DeviceOrientationViewModel, @ViewBuilder content: () -> Content) {
+    init(orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool = false, @ViewBuilder content: () -> Content) {
         self.content = content()
         self._orientationViewModel = ObservedObject(wrappedValue: orientationViewModel)
+        self.invertRotation = invertRotation
     }
     
     func makeUIViewController(context: Context) -> RotatingViewController<Content> {
-        return RotatingViewController(rootView: content, orientationViewModel: orientationViewModel)
+        return RotatingViewController(rootView: content, orientationViewModel: orientationViewModel, invertRotation: invertRotation)
     }
     
     func updateUIViewController(_ uiViewController: RotatingViewController<Content>, context: Context) {
@@ -23,10 +25,12 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
 class RotatingViewController<Content: View>: UIViewController {
     private var hostingController: UIHostingController<Content>
     private var orientationViewModel: DeviceOrientationViewModel
+    private var invertRotation: Bool
     
-    init(rootView: Content, orientationViewModel: DeviceOrientationViewModel) {
+    init(rootView: Content, orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool) {
         self.hostingController = UIHostingController(rootView: rootView)
         self.orientationViewModel = orientationViewModel
+        self.invertRotation = invertRotation
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -62,9 +66,9 @@ class RotatingViewController<Content: View>: UIViewController {
         
         switch orientation {
         case .landscapeLeft:
-            transform = CGAffineTransform(rotationAngle: -CGFloat.pi / 2)
+            transform = CGAffineTransform(rotationAngle: invertRotation ? CGFloat.pi / 2 : -CGFloat.pi / 2)
         case .landscapeRight:
-            transform = CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+            transform = CGAffineTransform(rotationAngle: invertRotation ? -CGFloat.pi / 2 : CGFloat.pi / 2)
         case .portraitUpsideDown:
             transform = CGAffineTransform(rotationAngle: CGFloat.pi)
         default:
