@@ -33,37 +33,46 @@ struct CameraView: View {
     }
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                if viewModel.isSessionRunning {
-                    // Camera is running - show camera preview
-                    CameraPreviewView(
-                        session: viewModel.session,
-                        lutManager: lutManager,
-                        viewModel: viewModel
-                    )
-                    .ignoresSafeArea()
-                    // Fixed frame that won't change with rotation
-                    .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
-                    
-                    // Fixed position UI overlay (no rotation)
-                    fixedUIOverlay()
-                } else {
-                    // Show loading or error state
-                    VStack {
-                        Text("Starting camera...")
-                            .font(.headline)
-                            .foregroundColor(.white)
+        ZStack {
+            // ADD: Function buttons at the top
+            VStack {
+                FunctionButtonsView()
+                Spacer()
+            }
+            .zIndex(1) // Ensure buttons are above other content
+            
+            GeometryReader { geometry in
+                ZStack {
+                    if viewModel.isSessionRunning {
+                        // Camera is running - show camera preview
+                        CameraPreviewView(
+                            session: viewModel.session,
+                            lutManager: lutManager,
+                            viewModel: viewModel
+                        )
+                        .ignoresSafeArea()
+                        // Fixed frame that won't change with rotation
+                        .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                         
-                        if viewModel.status == .failed, let error = viewModel.error {
-                            Text("Error: \(error.description)")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .padding()
+                        // Fixed position UI overlay (no rotation)
+                        fixedUIOverlay()
+                    } else {
+                        // Show loading or error state
+                        VStack {
+                            Text("Starting camera...")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            
+                            if viewModel.status == .failed, let error = viewModel.error {
+                                Text("Error: \(error.description)")
+                                    .font(.subheadline)
+                                    .foregroundColor(.red)
+                                    .padding()
+                            }
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
                 }
             }
         }

@@ -2,7 +2,9 @@ import UIKit
 import SwiftUI
 
 /// Main application delegate that handles orientation locking and other app-level functionality
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+
     // MARK: - Orientation Lock Properties
     
     /// Static variable to track view controllers that need landscape support
@@ -18,78 +20,62 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // MARK: - Application Lifecycle
     
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        print("DEBUG: AppDelegate - Application launching")
+        
+        // Force dark mode at UIApplication level
+        if #available(iOS 13.0, *) {
+            window?.overrideUserInterfaceStyle = .dark
+            UIApplication.shared.windows.forEach { window in
+                window.overrideUserInterfaceStyle = .dark
+            }
+        }
+        
+        // Create and configure window
+        window = UIWindow(frame: UIScreen.main.bounds)
+        window?.backgroundColor = .black
+        
+        // Configure root view controller
+        let contentView = ContentView()
+        let hostingController = UIHostingController(rootView: contentView)
+        hostingController.view.backgroundColor = .black
+        
+        // Force dark mode for view controller
+        hostingController.overrideUserInterfaceStyle = .dark
+        
+        // Set modal presentation style
+        hostingController.modalPresentationStyle = .overFullScreen
+        
+        // Disable safe area insets
+        if #available(iOS 11.0, *) {
+            window?.rootViewController?.additionalSafeAreaInsets = .zero
+        }
+        hostingController.additionalSafeAreaInsets = .zero
+        hostingController.view.frame = UIScreen.main.bounds
+        
+        // Set window properties
+        window?.rootViewController = hostingController
+        window?.makeKeyAndVisible()
+        
+        // Force dark mode again after window is visible
+        window?.overrideUserInterfaceStyle = .dark
+        
+        // Force black backgrounds
+        if let rootView = window?.rootViewController?.view {
+            forceBlackBackgrounds(rootView)
+        }
+        
+        // Inspect view hierarchy colors
+        inspectViewHierarchyBackgroundColors(hostingController.view)
+        
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
         // Setup orientation lock observer
         UIWindowScene.setupOrientationLockSupport()
         
-        // Add notification observer for orientation debugging
-        NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            let orientation = UIDevice.current.orientation
-            print("🔄 AppDelegate detected orientation change: \(orientation.rawValue)")
-            
-            // Force attempt rotation when orientation changes
-            if AppDelegate.isVideoLibraryPresented {
-                DispatchQueue.main.async {
-                    // Update to modern API for iOS 16+
-                    if let windowScene = UIApplication.shared.connectedScenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene {
-                        let currentInterfaceOrientation = windowScene.interfaceOrientation
-                        var targetOrientation: UIInterfaceOrientation = currentInterfaceOrientation
-                        
-                        // If device orientation is landscape, map it to the corresponding interface orientation
-                        if orientation.isLandscape {
-                            // Device landscapeLeft is interface landscapeRight and vice versa
-                            targetOrientation = orientation == .landscapeLeft ? .landscapeRight : .landscapeLeft
-                            print("DEBUG: AppDelegate mapping device orientation \(orientation.rawValue) to interface orientation \(targetOrientation.rawValue)")
-                        } 
-                        // For face up/down orientations, maintain current interface orientation if it's landscape
-                        else if (orientation == .faceUp || orientation == .faceDown) && currentInterfaceOrientation.isLandscape {
-                            targetOrientation = currentInterfaceOrientation
-                            print("DEBUG: AppDelegate maintaining landscape orientation \(targetOrientation.rawValue) for face up/down")
-                        }
-                        // If returning to portrait from face up/down, but video library is active, force landscape
-                        else if (orientation == .portrait || orientation == .portraitUpsideDown || 
-                               orientation == .faceUp || orientation == .faceDown) && AppDelegate.isVideoLibraryPresented {
-                            // Default to landscape right if we need to force landscape
-                            targetOrientation = .landscapeRight
-                            print("DEBUG: AppDelegate forcing landscape for video library despite portrait/face orientation")
-                        }
-                        
-                        // Apply specific orientation
-                        // Create proper mask from single orientation
-                        let orientationMask: UIInterfaceOrientationMask
-                        switch targetOrientation {
-                        case .portrait: orientationMask = .portrait
-                        case .portraitUpsideDown: orientationMask = .portraitUpsideDown
-                        case .landscapeLeft: orientationMask = .landscapeLeft
-                        case .landscapeRight: orientationMask = .landscapeRight
-                        default: orientationMask = .portrait
-                        }
-                        
-                        let specificGeometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
-                        windowScene.requestGeometryUpdate(specificGeometryPreferences) { error in
-                            print("DEBUG: AppDelegate specific orientation update: \(error.localizedDescription)")
-                        }
-                        
-                        // Update all view controllers
-                        for window in windowScene.windows {
-                            window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                            
-                            // Also update any presented controllers
-                            if let presented = window.rootViewController?.presentedViewController {
-                                presented.setNeedsUpdateOfSupportedInterfaceOrientations()
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Remove debug observer for orientation
+        NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
         
         return true
     }
@@ -97,6 +83,62 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func applicationWillTerminate(_ application: UIApplication) {
         // Stop device orientation notifications to clean up
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
+    
+    // MARK: - Debug Helpers
+    
+    private func inspectViewHierarchyBackgroundColors(_ view: UIView, level: Int = 0) {
+        let indent = String(repeating: "  ", count: level)
+        print("\(indent)DEBUG: View \(type(of: view)) - backgroundColor: \(view.backgroundColor?.debugDescription ?? "nil")")
+        
+        // Get superview chain
+        if level == 0 {
+            var currentView: UIView? = view
+            var superviewLevel = 0
+            while let superview = currentView?.superview {
+                print("\(indent)DEBUG: Superview \(superviewLevel) - Type: \(type(of: superview)) - backgroundColor: \(superview.backgroundColor?.debugDescription ?? "nil")")
+                currentView = superview
+                superviewLevel += 1
+            }
+        }
+        
+        for subview in view.subviews {
+            inspectViewHierarchyBackgroundColors(subview, level: level + 1)
+        }
+    }
+    
+    // MARK: - Helper to force black backgrounds
+    
+    private func forceBlackBackgrounds(_ view: UIView) {
+        // Force black background on the view itself
+        view.backgroundColor = .black
+        
+        // Special handling for system views
+        let systemViewClasses = [
+            "UIDropShadowView",
+            "UITransitionView",
+            "UINavigationTransitionView",
+            "_UIInteractiveHighlightEffectWindow"
+        ]
+        
+        for className in systemViewClasses {
+            if let viewClass = NSClassFromString(className),
+               view.isKind(of: viewClass) {
+                view.backgroundColor = .black
+                view.layer.backgroundColor = UIColor.black.cgColor
+            }
+        }
+        
+        // Handle status bar background
+        if view.bounds.height <= 50 && view.bounds.minY == 0 {
+            view.backgroundColor = .black
+            view.layer.backgroundColor = UIColor.black.cgColor
+        }
+        
+        // Recursively process subviews
+        for subview in view.subviews {
+            forceBlackBackgrounds(subview)
+        }
     }
     
     // MARK: - Orientation Support
@@ -192,4 +234,15 @@ extension OrientationFixViewController {
     var allowsLandscapeMode: Bool {
         return self.allowsLandscape
     }
-} 
+}
+
+// MARK: - UIWindow Extension
+extension UIWindow {
+    override open func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        // Force dark mode when traits change
+        if #available(iOS 13.0, *) {
+            self.overrideUserInterfaceStyle = .dark
+        }
+    }
+}

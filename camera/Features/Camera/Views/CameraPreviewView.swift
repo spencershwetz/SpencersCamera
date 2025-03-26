@@ -9,57 +9,39 @@ struct CameraPreviewView: UIViewRepresentable {
     
     func makeUIView(context: Context) -> RotationLockedContainer {
         print("DEBUG: Creating CameraPreviewView")
-        // Create a rotation-locked container to hold our preview
-        let container = RotationLockedContainer(frame: UIScreen.main.bounds)
+        
+        // Create container with explicit bounds
+        let screen = UIScreen.main.bounds
+        let container = RotationLockedContainer(frame: screen)
         
         // Store reference to this container in the view model for LUT processing
         viewModel.owningView = container
         
-        // Create a custom preview view that will handle LUT processing
-        let preview = CustomPreviewView(frame: UIScreen.main.bounds, 
-                                       session: session, 
-                                       lutManager: lutManager,
-                                       viewModel: viewModel)
-        preview.backgroundColor = .black
-        preview.tag = 100 // Tag for identification
+        // Create preview view
+        let preview = CustomPreviewView(frame: screen, 
+                                      session: session, 
+                                      lutManager: lutManager,
+                                      viewModel: viewModel)
         
-        // Add the preview to our container
+        // Ensure all views have black backgrounds
+        container.backgroundColor = .black
+        preview.backgroundColor = .black
+        preview.tag = 100
+        
+        // Add preview to container
         container.addSubview(preview)
         
-        // Set a fixed frame that is 80% of the screen size, centered (in portrait orientation)
-        let screenBounds = UIScreen.main.bounds
-        let screenWidth = min(screenBounds.width, screenBounds.height)
-        let screenHeight = max(screenBounds.width, screenBounds.height)
-        let previewWidth = screenWidth * 0.8
-        let previewHeight = screenHeight * 0.8
-        let previewX = (screenWidth - previewWidth) / 2
-        let previewY = (screenHeight - previewHeight) / 2
-        
-        // Use absolute positioning instead of constraints to prevent layout changes during rotation
-        preview.frame = CGRect(x: previewX, y: previewY, width: previewWidth, height: previewHeight)
-        preview.autoresizingMask = [] // Disable autoresizing
-        preview.translatesAutoresizingMaskIntoConstraints = true // Use frame-based layout
+        // Force layout
+        container.setNeedsLayout()
+        container.layoutIfNeeded()
         
         return container
     }
     
     func updateUIView(_ uiView: RotationLockedContainer, context: Context) {
-        // Verify session is running
-        if !session.isRunning {
-            print("DEBUG: Camera session NOT running during update! Starting...")
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.session.startRunning()
-                DispatchQueue.main.async {
-                    print("DEBUG: Camera session started in updateUIView: \(self.session.isRunning)")
-                }
-            }
-        }
-        
-        // Re-enforce the fixed frame and rotation settings
-        uiView.frame = UIScreen.main.bounds
-        
-        // Find and update the preview view
+        print("DEBUG: updateUIView - Container frame: \(uiView.frame)")
         if let preview = uiView.viewWithTag(100) as? CustomPreviewView {
+            print("DEBUG: updateUIView - Preview frame: \(preview.frame)")
             // Update LUT if needed - just pass the reference, don't modify
             preview.updateLUT(lutManager.currentLUTFilter)
         }
@@ -82,14 +64,8 @@ struct CameraPreviewView: UIViewRepresentable {
     
     // A container view that actively resists rotation changes
     class RotationLockedContainer: UIView {
-        // Add a property to track animation state
-        private var isAnimating = false
-        private let cornerRadius: CGFloat = 20.0  // Define corner radius value
-        private var originalFrame: CGRect = .zero
-        
         override init(frame: CGRect) {
             super.init(frame: frame)
-            self.originalFrame = frame
             setupView()
         }
         
@@ -99,116 +75,48 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Basics
-            autoresizingMask = []  // Disable autoresizing
             backgroundColor = .black
-            clipsToBounds = true
+            frame = UIScreen.main.bounds
+            autoresizingMask = [.flexibleWidth, .flexibleHeight]
             
-            // Apply rounded corners
-            layer.cornerRadius = cornerRadius
-            layer.masksToBounds = true
-            
-            // Completely disable rotation animation
-            layer.allowsEdgeAntialiasing = false
-            
-            // Disable any inherited transforms
-            transform = .identity
-            
-            // Register for orientation changes
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(orientationDidChange),
-                name: UIDevice.orientationDidChangeNotification,
-                object: nil
-            )
-            
-            // Use modern approach to detect size changes - observe view bounds
-            NotificationCenter.default.addObserver(
-                self, 
-                selector: #selector(interfaceOrientationDidChange),
-                name: UIWindow.didBecomeVisibleNotification, 
-                object: nil
-            )
-            
-            // Register for trait changes in iOS 17+
-            if #available(iOS 17.0, *) {
-                registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { [weak self] (_: RotationLockedContainer, _: UITraitCollection) in
-                    self?.enforceBounds()
-                }
+            // Disable safe area layout guide
+            if #available(iOS 11.0, *) {
+                insetsLayoutMarginsFromSafeArea = false
             }
             
-            print("DEBUG: RotationLockedContainer initialized with fixed portrait layout")
+            // Set content mode to scale to fill
+            contentMode = .scaleToFill
+            
+            inspectSuperviewColors()
         }
         
-        @objc private func orientationDidChange() {
-            print("DEBUG: Container detected device orientation change - enforcing fixed portrait layout")
-            enforceBounds()
-        }
-        
-        @objc private func interfaceOrientationDidChange() {
-            print("DEBUG: Container detected interface orientation change - enforcing fixed portrait layout")
-            enforceBounds()
-        }
-        
-        private func enforceBounds() {
-            // Set flag to indicate animation in progress
-            isAnimating = true
+        private func inspectSuperviewColors() {
+            var currentView: UIView? = self
+            var level = 0
             
-            // Force frame to be original size and position
-            frame = originalFrame
-            
-            // Reset any transforms
-            transform = .identity
-            
-            // Update preview without applying transformations
-            for case let preview as CustomPreviewView in subviews {
-                // Maintain exact frame - don't allow any layout changes
-                let currentFrame = preview.frame
-                preview.updateFrameSize()
-                preview.frame = currentFrame
-            }
-            
-            // Reset animation flag after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.isAnimating = false
+            while let view = currentView {
+                print("DEBUG: Superview Level \(level) - Type: \(type(of: view)), backgroundColor: \(view.backgroundColor?.debugDescription ?? "nil")")
+                currentView = view.superview
+                level += 1
             }
         }
         
-        // Override these methods to prevent rotation from affecting our view
         override func layoutSubviews() {
             super.layoutSubviews()
-            // Only enforce bounds if not already animating to prevent conflicts
-            if !isAnimating {
-                enforceBounds()
+            for subview in subviews {
+                subview.frame = bounds
+                subview.backgroundColor = .black
             }
         }
         
-        override func didMoveToSuperview() {
-            super.didMoveToSuperview()
-            enforceBounds()
-        }
-        
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            enforceBounds()
-        }
-        
-        // Completely prevent any transform-based animations
-        override func action(for layer: CALayer, forKey event: String) -> CAAction? {
-            if event == "transform" || event == "position" || event == "bounds" {
-                return NSNull()
-            }
-            return super.action(for: layer, forKey: event)
-        }
-        
-        deinit {
-            NotificationCenter.default.removeObserver(self)
+        override var safeAreaInsets: UIEdgeInsets {
+            return .zero
         }
     }
     
     // Custom preview view that handles LUT processing
     class CustomPreviewView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
-        private let previewLayer = AVCaptureVideoPreviewLayer()
+        private let previewLayer: AVCaptureVideoPreviewLayer
         private var dataOutput: AVCaptureVideoDataOutput?
         private let session: AVCaptureSession
         private var lutManager: LUTManager
@@ -222,6 +130,7 @@ struct CameraPreviewView: UIViewRepresentable {
             self.session = session
             self.lutManager = lutManager
             self.viewModel = viewModel
+            self.previewLayer = AVCaptureVideoPreviewLayer()
             super.init(frame: frame)
             setupView()
         }
@@ -231,42 +140,29 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Disable autoresizing to prevent layout changes during rotation
+            // Disable autoresizing mask
             autoresizingMask = []
-            
-            // Apply rounded corners to the view itself
-            layer.cornerRadius = cornerRadius
-            layer.masksToBounds = true
+            translatesAutoresizingMaskIntoConstraints = false
             
             // Configure preview layer
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.frame = bounds
             
-            // Apply rounded corners to the preview layer
-            previewLayer.cornerRadius = cornerRadius
-            previewLayer.masksToBounds = true
-            
-            // Prevent any transform animations
-            layer.allowsEdgeAntialiasing = false
-            transform = .identity
-            
+            // Add preview layer
             layer.addSublayer(previewLayer)
             
-            // Force portrait orientation
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
+            print("DEBUG: CustomPreviewView setupView - Initial frame: \(frame)")
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            print("DEBUG: CustomPreviewView layoutSubviews - Frame: \(frame), Bounds: \(bounds)")
             
-            print("DEBUG: CustomPreviewView set up with fixed portrait layout")
-            
-            // Set up data output if LUT filter is available
-            if let filter = lutManager.currentLUTFilter {
-                setupDataOutput()
-                currentLUTFilter = filter
-            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            previewLayer.frame = bounds
+            print("DEBUG: PreviewLayer frame set to: \(previewLayer.frame)")
+            CATransaction.commit()
         }
         
         func updateFrameSize() {
