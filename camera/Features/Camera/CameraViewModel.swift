@@ -31,7 +31,11 @@ class CameraViewModel: NSObject, ObservableObject {
     @Published var whiteBalance: Float = 5000 // Kelvin
     @Published var iso: Float = 100
     @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60)
-    @Published var isRecording = false
+    @Published var isRecording = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+        }
+    }
     @Published var recordingFinished = false
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false

@@ -54,11 +54,21 @@ struct CameraPreviewView: UIViewRepresentable {
     // A container view that actively resists rotation changes
     class RotationLockedContainer: UIView {
         private let contentView: UIView
+        private var borderLayer: CALayer?
+        private let cornerRadius: CGFloat = 20.0
+        private let borderWidth: CGFloat = 4.0
         
         init(contentView: UIView) {
             self.contentView = contentView
             super.init(frame: .zero)
             setupView()
+            setupBorderLayer()
+            
+            // Observe recording state changes
+            NotificationCenter.default.addObserver(self,
+                                                 selector: #selector(handleRecordingStateChange),
+                                                 name: NSNotification.Name("RecordingStateChanged"),
+                                                 object: nil)
         }
         
         required init?(coder: NSCoder) {
@@ -69,14 +79,14 @@ struct CameraPreviewView: UIViewRepresentable {
             // Set background to black
             backgroundColor = .black
             
-            // Add content view to fill the container
+            // Add content view to fill the container but with space only for border
             addSubview(contentView)
             contentView.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
-                contentView.topAnchor.constraint(equalTo: topAnchor),
-                contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
-                contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
-                contentView.trailingAnchor.constraint(equalTo: trailingAnchor)
+                contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth),
+                contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth),
+                contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth),
+                contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
             ])
             
             // Disable safe area insets
@@ -86,27 +96,64 @@ struct CameraPreviewView: UIViewRepresentable {
             setBlackBackgroundForParentViews()
         }
         
-        // Make safe area insets zero to prevent any white bars
-        override var safeAreaInsets: UIEdgeInsets {
-            return .zero
+        private func setupBorderLayer() {
+            let border = CALayer()
+            border.borderWidth = borderWidth
+            border.borderColor = UIColor.clear.cgColor
+            border.cornerRadius = cornerRadius  // Use the same corner radius as the preview
+            layer.addSublayer(border)
+            borderLayer = border
         }
         
-        override func safeAreaInsetsDidChange() {
-            super.safeAreaInsetsDidChange()
-            // Force black background when safe area changes
-            setBlackBackgroundForParentViews()
+        @objc private func handleRecordingStateChange() {
+            if let viewModel = (contentView as? CustomPreviewView)?.viewModel {
+                if viewModel.isRecording {
+                    animateBorderIn()
+                } else {
+                    animateBorderOut()
+                }
+            }
+        }
+        
+        private func animateBorderIn() {
+            let animation = CABasicAnimation(keyPath: "borderColor")
+            animation.fromValue = UIColor.clear.cgColor
+            animation.toValue = UIColor.red.cgColor
+            animation.duration = 0.3
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            borderLayer?.add(animation, forKey: "borderColorAnimation")
+        }
+        
+        private func animateBorderOut() {
+            let animation = CABasicAnimation(keyPath: "borderColor")
+            animation.fromValue = UIColor.red.cgColor
+            animation.toValue = UIColor.clear.cgColor
+            animation.duration = 0.3
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            borderLayer?.add(animation, forKey: "borderColorAnimation")
         }
         
         override func layoutSubviews() {
             super.layoutSubviews()
+            
+            // Update border frame to match view bounds
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            borderLayer?.frame = bounds
+            CATransaction.commit()
             
             // Keep background color black during layout changes
             backgroundColor = .black
             
             // Check for changes in safe area insets
             if safeAreaInsets != .zero {
-                // Force content to fill entire view
-                contentView.frame = bounds
+                // Force content to fill entire view with just border width
+                contentView.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
+                                                                left: borderWidth,
+                                                                bottom: borderWidth,
+                                                                right: borderWidth))
             }
             
             // Set black background for parent views
@@ -127,6 +174,17 @@ struct CameraPreviewView: UIViewRepresentable {
             
             print("DEBUG: RotationLockedContainer set black background for all parent views")
         }
+        
+        // Make safe area insets zero to prevent any white bars
+        override var safeAreaInsets: UIEdgeInsets {
+            return .zero
+        }
+        
+        override func safeAreaInsetsDidChange() {
+            super.safeAreaInsetsDidChange()
+            // Force black background when safe area changes
+            setBlackBackgroundForParentViews()
+        }
     }
     
     // Custom preview view that handles LUT processing
@@ -135,11 +193,11 @@ struct CameraPreviewView: UIViewRepresentable {
         private var dataOutput: AVCaptureVideoDataOutput?
         private let session: AVCaptureSession
         private var lutManager: LUTManager
-        private var viewModel: CameraViewModel
+        var viewModel: CameraViewModel  // Changed to internal access
         private var ciContext = CIContext(options: [.useSoftwareRenderer: false])
         private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
         private var currentLUTFilter: CIFilter?
-        private let cornerRadius: CGFloat = 20.0  // Define corner radius value
+        private let cornerRadius: CGFloat = 20.0
         
         init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
             self.session = session
@@ -184,8 +242,8 @@ struct CameraPreviewView: UIViewRepresentable {
             previewLayer.frame = bounds
             
             // Ensure corners stay rounded
-            previewLayer.cornerRadius = 20
-            layer.cornerRadius = 20
+            previewLayer.cornerRadius = cornerRadius
+            layer.cornerRadius = cornerRadius
             
             print("DEBUG: PreviewLayer frame set to: \(previewLayer.frame)")
             CATransaction.commit()
