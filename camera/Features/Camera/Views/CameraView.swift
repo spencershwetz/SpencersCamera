@@ -58,13 +58,15 @@ struct CameraView: View {
                         recordButton
                             .frame(width: 75, height: 75)
                         
-                        // Position library button on the left
+                        // Position library button on the left and settings button on the right
                         HStack {
                             videoLibraryButton
                                 .frame(width: 60, height: 60)
                             Spacer()
+                            settingsButton
+                                .frame(width: 60, height: 60)
                         }
-                        .padding(.leading, 67.5) // Half the record button width (75/2) + button width (60)
+                        .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
                     }
                     .padding(.bottom, 30) // Approximately 1cm from USB-C port
                 }
@@ -128,7 +130,7 @@ struct CameraView: View {
                 )
             }
             .sheet(isPresented: $isShowingSettings) {
-                SettingsView(lutManager: lutManager)
+                SettingsView(lutManager: lutManager, viewModel: viewModel)
             }
             .sheet(isPresented: $isShowingDocumentPicker) {
                 DocumentPicker(types: LUTManager.supportedTypes) { url in
@@ -282,6 +284,26 @@ struct CameraView: View {
             }
         }) {
             VideoLibraryView()
+        }
+    }
+    
+    private var settingsButton: some View {
+        RotatingView(orientationViewModel: orientationViewModel) {
+            Button(action: {
+                isShowingSettings = true
+            }) {
+                ZStack {
+                    // Button background
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 60, height: 60)
+                    
+                    // Settings icon
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.white)
+                }
+            }
         }
     }
     
