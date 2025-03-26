@@ -6,6 +6,7 @@ import UIKit
 struct CameraView: View {
     @StateObject private var viewModel = CameraViewModel()
     @StateObject private var lutManager = LUTManager()
+    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
@@ -222,32 +223,39 @@ struct CameraView: View {
     }
     
     private var videoLibraryButton: some View {
-        Button(action: {
-            print("DEBUG: [ORIENTATION-DEBUG] Setting AppDelegate.isVideoLibraryPresented = true")
-            AppDelegate.isVideoLibraryPresented = true
-            isShowingVideoLibrary = true
-        }) {
-            ZStack {
-                // Thumbnail background
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.black.opacity(0.6))
-                    .frame(width: 60, height: 60)
-                
-                // Placeholder or actual thumbnail
-                if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
-                    Image(uiImage: thumbnailImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 54, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                } else {
-                    Image(systemName: "film")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
+        RotatingView(orientationViewModel: orientationViewModel) {
+            Button(action: {
+                print("DEBUG: [LibraryButton] Button tapped")
+                print("DEBUG: [LibraryButton] Current orientation: \(orientationViewModel.orientation.rawValue)")
+                AppDelegate.isVideoLibraryPresented = true
+                isShowingVideoLibrary = true
+            }) {
+                ZStack {
+                    // Thumbnail background
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.6))
+                        .frame(width: 60, height: 60)
+                    
+                    // Placeholder or actual thumbnail
+                    if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
+                        Image(uiImage: thumbnailImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 54, height: 54)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Image(systemName: "film")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                    }
                 }
             }
+            .buttonStyle(PlainButtonStyle())
         }
-        .buttonStyle(PlainButtonStyle())
+        .frame(width: 60, height: 60)
+        .onChange(of: orientationViewModel.orientation) { oldValue, newValue in
+            print("DEBUG: [LibraryButton] Orientation changed: \(oldValue.rawValue) -> \(newValue.rawValue)")
+        }
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
             print("DEBUG: [ORIENTATION-DEBUG] fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
             AppDelegate.isVideoLibraryPresented = false
