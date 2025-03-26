@@ -301,10 +301,12 @@ struct CameraView: View {
     private var recordButton: some View {
         Button(action: {
             withAnimation(.easeInOut(duration: 0.3)) {
-                if viewModel.isRecording {
-                    viewModel.stopRecording()
-                } else {
-                    viewModel.startRecording()
+                let task: Task<Void, Never> = Task { @MainActor in
+                    if viewModel.isRecording {
+                        await viewModel.stopRecording()
+                    } else {
+                        await viewModel.startRecording()
+                    }
                 }
             }
         }) {

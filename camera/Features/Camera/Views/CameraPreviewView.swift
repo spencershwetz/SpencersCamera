@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import CoreImage
+import AVKit
 
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
@@ -57,12 +58,14 @@ struct CameraPreviewView: UIViewRepresentable {
         private var borderLayer: CALayer?
         private let cornerRadius: CGFloat = 20.0
         private let borderWidth: CGFloat = 4.0
+        private var volumeButtonHandler: VolumeButtonHandler?
         
         init(contentView: UIView) {
             self.contentView = contentView
             super.init(frame: .zero)
             setupView()
             setupBorderLayer()
+            setupVolumeButtonHandler()
             
             // Observe recording state changes
             NotificationCenter.default.addObserver(self,
@@ -103,6 +106,26 @@ struct CameraPreviewView: UIViewRepresentable {
             border.cornerRadius = cornerRadius  // Use the same corner radius as the preview
             layer.addSublayer(border)
             borderLayer = border
+        }
+        
+        private func setupVolumeButtonHandler() {
+            if #available(iOS 17.2, *) {
+                if let previewView = contentView as? CustomPreviewView {
+                    volumeButtonHandler = VolumeButtonHandler(viewModel: previewView.viewModel)
+                    volumeButtonHandler?.attachToView(self)
+                    print("✅ Volume button handler initialized and attached")
+                }
+            } else {
+                print("⚠️ Volume button recording requires iOS 17.2 or later")
+            }
+        }
+        
+        deinit {
+            if #available(iOS 17.2, *) {
+                Task { @MainActor in
+                    volumeButtonHandler?.detachFromView(self)
+                }
+            }
         }
         
         @objc private func handleRecordingStateChange() {

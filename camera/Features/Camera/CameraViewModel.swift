@@ -721,77 +721,34 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    func startRecording() {
-    guard !isRecording && !isProcessingRecording else { return }
- 
-    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    let videoName = "recording-\(Date().timeIntervalSince1970).mov"
-    currentRecordingURL = documentsPath.appendingPathComponent(videoName)
- 
-    guard let videoConnection = movieOutput.connection(with: .video),
-          videoConnection.isVideoRotationAngleSupported(0) else {
-        error = .configurationFailed
-        return
+    @MainActor
+    func startRecording() async {
+        guard !isRecording else { return }
+        
+        do {
+            // Create temporary URL for recording
+            let tempDir = FileManager.default.temporaryDirectory
+            let fileName = "recording_\(Date().timeIntervalSince1970).mov"
+            let tempURL = tempDir.appendingPathComponent(fileName)
+            currentRecordingURL = tempURL
+            
+            // Start recording
+            movieOutput.startRecording(to: tempURL, recordingDelegate: self)
+            isRecording = true
+            print("✅ Started recording to: \(tempURL.path)")
+        } catch {
+            self.error = .recordingFailed
+            print("❌ Failed to start recording: \(error)")
+        }
     }
- 
-    let orientation = UIDevice.current.orientation
- 
-    switch orientation {
-    case .portrait:
-        videoConnection.videoRotationAngle = 90
-    case .portraitUpsideDown:
-        videoConnection.videoRotationAngle = 270
-    case .landscapeLeft:
-        videoConnection.videoRotationAngle = 0
-    case .landscapeRight:
-        videoConnection.videoRotationAngle = 180
-    default:
-        videoConnection.videoRotationAngle = 90
-    }
- 
-    movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
-    isRecording = true
-}
     
-    func stopRecording() {
-        guard isRecording else {
-            print("Cannot stop recording: No ongoing recording")
-            return
-        }
+    @MainActor
+    func stopRecording() async {
+        guard isRecording else { return }
         
-        print("\n=== Stop Recording ===")
-        isProcessingRecording = true
         movieOutput.stopRecording()
-        
-        // Generate thumbnail from the recorded video
-        if let currentURL = currentRecordingURL {
-            generateThumbnail(from: currentURL)
-        }
-        
-        // Restore orientation enforcement timer and original settings
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self else { return }
-            
-            // Restore all original rotation values
-            for (connection, angle) in self.originalRotationValues {
-                if connection.isVideoRotationAngleSupported(angle) {
-                    connection.videoRotationAngle = angle
-                    print("DEBUG: Restored connection rotation angle to \(angle)°")
-                }
-            }
-            
-            // Clear saved values
-            self.originalRotationValues.removeAll()
-            
-            // Reinitiate orientation monitoring
-            self.isOrientationLocked = false
-            self.startOrientationMonitoring()
-            
-            // Re-enforce orientation lock for UI
-            self.updateInterfaceOrientation(lockCamera: true)
-        }
-        
-        print("=== End Stop Recording ===\n")
+        isRecording = false
+        print("�� Stopping recording...")
     }
     
     private func generateThumbnail(from videoURL: URL) {
