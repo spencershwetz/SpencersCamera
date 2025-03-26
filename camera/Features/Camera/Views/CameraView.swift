@@ -10,6 +10,7 @@ struct CameraView: View {
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
     @State private var isShowingVideoLibrary = false
+    @State private var statusBarHidden = true
     
     // Initialize with proper handling of StateObjects
     init() {
@@ -160,6 +161,7 @@ struct CameraView: View {
                 }
             }
         }
+        .statusBar(hidden: statusBarHidden)
     }
     
     // Fixed UI overlay that doesn't rotate
@@ -484,4 +486,4 @@ struct CameraView: View {
             }
         }
     }
-} 
+}

@@ -9,6 +9,7 @@ import SwiftUI
 
 @main
 struct cameraApp: App {
+    let persistenceController = PersistenceController.shared
     // Register AppDelegate for orientation control
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
@@ -18,6 +19,9 @@ struct cameraApp: App {
             OrientationFixView {
                 CameraView()
             }
+            .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            // ADD: Hide status bar at app level
+            .hideStatusBar()
         }
     }
 }

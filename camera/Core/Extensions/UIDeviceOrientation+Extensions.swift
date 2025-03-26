@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 
 // MARK: - UIDeviceOrientation Extensions
 extension UIDeviceOrientation {
@@ -52,4 +53,18 @@ extension UIDeviceOrientation {
             return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
         }
     }
-} 
+}
+
+// ADD: StatusBarHidingModifier
+struct StatusBarHidingModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .statusBar(hidden: true)
+    }
+}
+
+extension View {
+    func hideStatusBar() -> some View {
+        modifier(StatusBarHidingModifier())
+    }
+}
