@@ -48,6 +48,25 @@ struct CameraView: View {
                     .zIndex(100) // Ensure it's above everything else
                     .allowsHitTesting(true) // Make sure buttons are tappable
                     .ignoresSafeArea()
+                
+                // Record button positioned at bottom with precise spacing
+                VStack {
+                    Spacer()
+                    recordButton
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 30) // Approximately 1cm from USB-C port
+                }
+                .ignoresSafeArea()
+                .zIndex(101) // Ensure it's above everything
+                .background(
+                    GeometryReader { buttonGeometry in
+                        Color.clear.onAppear {
+                            print("DEBUG: Root record button frame - \(buttonGeometry.frame(in: .global))")
+                            print("DEBUG: Root screen size - width: \(geometry.size.width), height: \(geometry.size.height)")
+                            print("DEBUG: Root safe area insets - \(geometry.safeAreaInsets)")
+                        }
+                    }
+                )
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
@@ -166,12 +185,13 @@ struct CameraView: View {
     // Fixed UI overlay that doesn't rotate
     private func fixedUIOverlay() -> some View {
         GeometryReader { geometry in
+            // Main controls only
             VStack {
                 Spacer()
                 portraitControlsLayout
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 80) // Increased bottom padding for better visibility
-                    .position(x: geometry.size.width / 2, y: geometry.size.height - 100) // Keep controls at original position
+                    .padding(.bottom, 80)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height - 100)
             }
         }
     }
@@ -188,7 +208,7 @@ struct CameraView: View {
             lutControls
             exposureControls
             appleLogToggle
-            recordButton
+            // Record button removed from here
         }
         .padding()
         .background(Color.black.opacity(0.5))
@@ -443,26 +463,49 @@ struct CameraView: View {
     
     private var recordButton: some View {
         Button(action: {
-            if viewModel.isRecording {
-                viewModel.stopRecording()
-            } else {
-                viewModel.startRecording()
+            withAnimation(.easeInOut(duration: 0.3)) {
+                if viewModel.isRecording {
+                    viewModel.stopRecording()
+                } else {
+                    viewModel.startRecording()
+                }
             }
         }) {
-            Image(systemName: viewModel.isRecording ? "stop.circle.fill" : "record.circle.fill")
-                .font(.system(size: 70)) // Increased size
-                .foregroundColor(viewModel.isRecording ? .white : .red)
-                .background(Circle().fill(viewModel.isRecording ? Color.red : Color.clear))
-                .padding(10) // Add padding
-                .background(
-                    Circle()
-                        .fill(Color.black.opacity(0.4))
-                        .shadow(color: .black.opacity(0.5), radius: 5)
-                )
-                .opacity(viewModel.isProcessingRecording ? 0.5 : 1.0)
+            ZStack {
+                // White border circle
+                Circle()
+                    .strokeBorder(Color.white, lineWidth: 4)
+                    .frame(width: 75, height: 75)
+                
+                // Red recording indicator
+                Group {
+                    if viewModel.isRecording {
+                        // Square when recording
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red)
+                            .frame(width: 30, height: 30)
+                    } else {
+                        // Circle when not recording
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 54, height: 54)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)
+            }
+            .opacity(viewModel.isProcessingRecording ? 0.5 : 1.0)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(ScaleButtonStyle()) // Custom button style for press animation
         .disabled(viewModel.isProcessingRecording)
+    }
+    
+    // Custom button style for scale animation on press
+    private struct ScaleButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+                .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
+        }
     }
     
     private func handleLUTImport(url: URL) {
@@ -540,4 +583,11 @@ struct CameraView: View {
         // Disable device orientation notifications
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
+}
+
+// Add preview at the bottom of the file
+#Preview("Camera View") {
+    CameraView()
+        .preferredColorScheme(.dark)
+        .environment(\.colorScheme, .dark)
 }
