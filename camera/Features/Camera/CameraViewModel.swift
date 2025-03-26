@@ -1079,9 +1079,6 @@ class CameraViewModel: NSObject, ObservableObject {
     private func enforceFixedOrientation() {
         guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
         
-        // Add debug log to track when this is called
-        print("DEBUG: [ORIENTATION-DEBUG] CameraViewModel.enforceFixedOrientation called - AppDelegate.isVideoLibraryPresented = \(AppDelegate.isVideoLibraryPresented)")
-        
         // If video library is presented, we should not enforce orientation
         guard !AppDelegate.isVideoLibraryPresented else {
             print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
@@ -1112,11 +1109,6 @@ class CameraViewModel: NSObject, ObservableObject {
         orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self, !self.isOrientationLocked else { return }
-                
-                // Add debug log
-                if AppDelegate.isVideoLibraryPresented {
-                    print("DEBUG: [ORIENTATION-DEBUG] Orientation timer fired while video library is active")
-                }
                 
                 // Skip enforcing orientation if video library is presented
                 if !AppDelegate.isVideoLibraryPresented {
@@ -1228,4 +1220,3 @@ extension CameraError {
         return .custom(message: message)
     }
 }
-
