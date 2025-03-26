@@ -33,15 +33,12 @@ struct CameraView: View {
     }
     
     var body: some View {
-        ZStack {
-            // ADD: Function buttons at the top
-            VStack {
-                FunctionButtonsView()
-                Spacer()
-            }
-            .zIndex(1) // Ensure buttons are above other content
-            
-            GeometryReader { geometry in
+        GeometryReader { geometry in
+            ZStack(alignment: .top) {
+                // Black background for entire view
+                Color.black.edgesIgnoringSafeArea(.all)
+                
+                // Main camera content
                 ZStack {
                     if viewModel.isSessionRunning {
                         // Camera is running - show camera preview
@@ -74,103 +71,118 @@ struct CameraView: View {
                         .background(Color.black)
                     }
                 }
-            }
-        }
-        .onAppear {
-            // Start the camera session when the view appears
-            if !viewModel.session.isRunning {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    viewModel.session.startRunning()
-                    DispatchQueue.main.async {
-                        viewModel.isSessionRunning = viewModel.session.isRunning
-                        viewModel.status = viewModel.session.isRunning ? .running : .failed
-                        viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
-                        print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
-                    }
+                
+                // Function buttons at top
+                VStack(spacing: 0) {
+                    FunctionButtonsView()
+                        .ignoresSafeArea(edges: .top)
+                        .background(Color.black)
+                        .onAppear {
+                            // Debug print safe area insets
+                            print("DEBUG: Function buttons safe area: Top: \(geometry.safeAreaInsets.top), Bottom: \(geometry.safeAreaInsets.bottom)")
+                            print("DEBUG: Screen size: \(UIScreen.main.bounds)")
+                        }
+                    Spacer()
                 }
             }
-            
-            // Double enforce orientation lock on view appearance
-            viewModel.updateInterfaceOrientation(lockCamera: true)
-            
-            // Setup notification for when app becomes active
-            NotificationCenter.default.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: .main
-            ) { _ in
-                print("DEBUG: App became active - re-enforcing camera orientation")
-                viewModel.updateInterfaceOrientation(lockCamera: true)
-            }
-            
-            // Share the lutManager between views
-            viewModel.lutManager = lutManager
-            
-            // Enable LUT preview by default
-            showLUTPreview = true
-            
-            // Enable device orientation notifications
-            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        }
-        .onDisappear {
-            // Remove notification observer when the view disappears
-            NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-            
-            // Stop the camera session when the view disappears
-            if viewModel.session.isRunning {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    viewModel.session.stopRunning()
-                    DispatchQueue.main.async {
-                        viewModel.isSessionRunning = false
+            .onAppear {
+                print("DEBUG: CameraView size: \(geometry.size)")
+                print("DEBUG: CameraView safeAreaInsets: \(geometry.safeAreaInsets)")
+                // Start the camera session when the view appears
+                if !viewModel.session.isRunning {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        viewModel.session.startRunning()
+                        DispatchQueue.main.async {
+                            viewModel.isSessionRunning = viewModel.session.isRunning
+                            viewModel.status = viewModel.session.isRunning ? .running : .failed
+                            viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
+                            print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
+                        }
                     }
                 }
-            }
-            
-            // Disable device orientation notifications
-            UIDevice.current.endGeneratingDeviceOrientationNotifications()
-        }
-        .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
-            if newValue.isValidInterfaceOrientation {
-                print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
                 
-                // Always lock camera preview orientation to portrait
+                // Double enforce orientation lock on view appearance
                 viewModel.updateInterfaceOrientation(lockCamera: true)
                 
-                // Re-enforce after a short delay to catch any late layout updates
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Setup notification for when app becomes active
+                NotificationCenter.default.addObserver(
+                    forName: UIApplication.didBecomeActiveNotification,
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    print("DEBUG: App became active - re-enforcing camera orientation")
                     viewModel.updateInterfaceOrientation(lockCamera: true)
                 }
-            }
-        }
-        .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
-            // When LUT changes, update preview indicator
-            if newValue != nil {
-                print("DEBUG: LUT filter updated to: \(lutManager.currentLUTName)")
-                // Automatically turn on preview when a new LUT is loaded
+                
+                // Share the lutManager between views
+                viewModel.lutManager = lutManager
+                
+                // Enable LUT preview by default
                 showLUTPreview = true
-            } else {
-                print("DEBUG: LUT filter removed")
+                
+                // Enable device orientation notifications
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             }
-        }
-        .alert(item: $viewModel.error) { error in
-            Alert(
-                title: Text("Error"),
-                message: Text(error.description),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .sheet(isPresented: $isShowingSettings) {
-            SettingsView(lutManager: lutManager)
-        }
-        .sheet(isPresented: $isShowingDocumentPicker) {
-            DocumentPicker(types: LUTManager.supportedTypes) { url in
-                DispatchQueue.main.async {
-                    handleLUTImport(url: url)
-                    isShowingDocumentPicker = false
+            .onDisappear {
+                // Remove notification observer when the view disappears
+                NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
+                
+                // Stop the camera session when the view disappears
+                if viewModel.session.isRunning {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        viewModel.session.stopRunning()
+                        DispatchQueue.main.async {
+                            viewModel.isSessionRunning = false
+                        }
+                    }
+                }
+                
+                // Disable device orientation notifications
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            }
+            .onChange(of: UIDevice.current.orientation) { oldValue, newValue in
+                if newValue.isValidInterfaceOrientation {
+                    print("DEBUG: ContentView - Device orientation changed to \(newValue.rawValue)")
+                    
+                    // Always lock camera preview orientation to portrait
+                    viewModel.updateInterfaceOrientation(lockCamera: true)
+                    
+                    // Re-enforce after a short delay to catch any late layout updates
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        viewModel.updateInterfaceOrientation(lockCamera: true)
+                    }
                 }
             }
+            .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
+                // When LUT changes, update preview indicator
+                if newValue != nil {
+                    print("DEBUG: LUT filter updated to: \(lutManager.currentLUTName)")
+                    // Automatically turn on preview when a new LUT is loaded
+                    showLUTPreview = true
+                } else {
+                    print("DEBUG: LUT filter removed")
+                }
+            }
+            .alert(item: $viewModel.error) { error in
+                Alert(
+                    title: Text("Error"),
+                    message: Text(error.description),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                SettingsView(lutManager: lutManager)
+            }
+            .sheet(isPresented: $isShowingDocumentPicker) {
+                DocumentPicker(types: LUTManager.supportedTypes) { url in
+                    DispatchQueue.main.async {
+                        handleLUTImport(url: url)
+                        isShowingDocumentPicker = false
+                    }
+                }
+            }
+            .statusBar(hidden: statusBarHidden)
         }
-        .statusBar(hidden: statusBarHidden)
     }
     
     // Fixed UI overlay that doesn't rotate

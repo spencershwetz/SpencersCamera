@@ -79,15 +79,19 @@ struct CameraPreviewView: UIViewRepresentable {
             frame = UIScreen.main.bounds
             autoresizingMask = [.flexibleWidth, .flexibleHeight]
             
-            // Disable safe area layout guide
+            // Completely disable safe area layout guide
             if #available(iOS 11.0, *) {
                 insetsLayoutMarginsFromSafeArea = false
+                layoutMargins = .zero
+                preservesSuperviewLayoutMargins = false
             }
             
             // Set content mode to scale to fill
             contentMode = .scaleToFill
             
+            // Debug: Let's print our superview hierarchy to investigate the white bar
             inspectSuperviewColors()
+            print("DEBUG: RotationLockedContainer background set to black")
         }
         
         private func inspectSuperviewColors() {
@@ -103,14 +107,24 @@ struct CameraPreviewView: UIViewRepresentable {
         
         override func layoutSubviews() {
             super.layoutSubviews()
+            // Ensure all subviews fill the entire bounds and have black backgrounds
             for subview in subviews {
                 subview.frame = bounds
-                subview.backgroundColor = .black
+                if subview.backgroundColor == nil || subview.backgroundColor == .white {
+                    subview.backgroundColor = .black
+                    print("DEBUG: Fixed white background in subview: \(type(of: subview))")
+                }
             }
         }
         
+        // Force zero safe area insets to prevent the white bar
         override var safeAreaInsets: UIEdgeInsets {
             return .zero
+        }
+        
+        // Override hitTest to make sure any touch events outside "safe area" still work
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            return super.hitTest(point, with: event)
         }
     }
     

@@ -12,6 +12,9 @@ class OrientationFixViewController: UIViewController {
         self.allowsLandscape = allowsLandscape
         super.init(nibName: nil, bundle: nil)
         
+        // Set the view's background color to black
+        self.view.backgroundColor = .black
+        
         // Set presentation style to full screen if allowing landscape
         if allowsLandscape {
             self.modalPresentationStyle = .fullScreen
@@ -24,6 +27,10 @@ class OrientationFixViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        // Set background color to black
+        view.backgroundColor = .black
+        print("DEBUG: OrientationFixViewController set background to black")
         
         // Add the content view
         view.addSubview(contentView)
