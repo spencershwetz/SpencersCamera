@@ -27,16 +27,13 @@ struct cameraApp: App {
                 
                 // Wrap CameraView in OrientationFixView for strict orientation control
                 OrientationFixView {
-                    RotatingView {
-                        ContentView()
-                    }
+                    CameraView()
                 }
             }
             .disableSafeArea() // Use our custom modifier to completely disable safe areas
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Hide status bar at app level
             .hideStatusBar()
-            .preferredColorScheme(.dark)  // ADD: Force dark mode
             .onAppear {
                 // Set the window's background color
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
