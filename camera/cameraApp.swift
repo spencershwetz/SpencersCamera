@@ -16,7 +16,18 @@ struct cameraApp: App {
     init() {
         // Set background color for the entire app to black
         UIWindow.appearance().backgroundColor = UIColor.black
-        print("DEBUG: Set window appearance background to black")
+        
+        // Force dark mode for the entire app
+        UIApplication.shared.windows.forEach { window in
+            window.overrideUserInterfaceStyle = .dark
+        }
+        
+        // Set dark mode for all windows that will be created
+        if #available(iOS 13.0, *) {
+            UIWindow.appearance().overrideUserInterfaceStyle = .dark
+        }
+        
+        print("DEBUG: Set window appearance background to black and enforced dark mode")
     }
     
     var body: some Scene {
@@ -34,12 +45,14 @@ struct cameraApp: App {
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Hide status bar at app level
             .hideStatusBar()
+            .preferredColorScheme(.dark) // Force dark mode at the SwiftUI level
             .onAppear {
-                // Set the window's background color
+                // Set the window's background color and interface style
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                    let window = windowScene.windows.first {
                     window.backgroundColor = .black
-                    print("DEBUG: Set window background to black")
+                    window.overrideUserInterfaceStyle = .dark
+                    print("DEBUG: Set window background to black and enforced dark mode")
                     
                     // Apply negative safe area insets to completely remove safe areas
                     window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
