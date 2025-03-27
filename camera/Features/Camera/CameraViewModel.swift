@@ -276,6 +276,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
         static let transferFunctionITUR709 = "ITU_R_709_2" as CFString
         static let yCbCrMatrix2020 = "ITU_R_2020" as CFString
         static let yCbCrMatrixITUR709 = "ITU_R_709_2" as CFString
+        
+        // VideoToolbox constants
+        static let compressionPropertyKeyPriority = "Priority" as CFString
+        static let sessionPriorityRealtimePreview = "RealtimePreview" as CFString
     }
     
     private var encoderSpecification: [CFString: Any] {
@@ -287,6 +291,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
     }
     
     override init() {
+        // Set default values before super.init()
         super.init()
         print("\n=== Camera Initialization ===")
         
@@ -308,6 +313,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
         }
         
         do {
+            // Enable Apple Log by default
+            isAppleLogEnabled = true
+            selectedCodec = .hevc
+            
             try setupSession()
             if let device = device {
                 print("📊 Device Capabilities:")
@@ -328,6 +337,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
             isAppleLogSupported = device?.formats.contains { format in
                 format.supportedColorSpaces.contains(.appleLog)
             } ?? false
+            
+            // Configure Apple Log and HEVC encoding
+            Task {
+                do {
+                    try await configureAppleLog()
+                    try setupHEVCEncoder()
+                } catch {
+                    print("Error configuring default settings: \(error)")
+                }
+            }
         } catch {
             self.error = .setupFailed
             print("Failed to setup session: \(error)")
@@ -1630,13 +1649,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
         
         // Enhanced encoder specification for real-time encoding
         let enhancedEncoderSpec: [CFString: Any] = [
-            VTConstants.hardwareAcceleratorOnly: true,
-            VTConstants.requireHardwareEncoder: true,
-            VTConstants.enableLowLatency: true,
+            kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true,
             kVTCompressionPropertyKey_RealTime: true,
             kVTCompressionPropertyKey_MaxKeyFrameInterval: 1,
-            kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 1,
-            VTConstants.priority: VTConstants.priorityRealtimePreview
+            kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 1
         ]
         
         print("⚙️ Creating compression session with hardware acceleration")
@@ -1693,7 +1711,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureFileOutputRecordingD
             kVTCompressionPropertyKey_DataRateLimits: [50_000_000, 1] as [NSNumber],
             kVTCompressionPropertyKey_ExpectedFrameRate: Float64(selectedFrameRate),
             kVTCompressionPropertyKey_RealTime: true,
-            VTConstants.priority: VTConstants.priorityRealtimePreview,
+            VTConstants.compressionPropertyKeyPriority: VTConstants.sessionPriorityRealtimePreview,
             kVTCompressionPropertyKey_ColorPrimaries: isAppleLogEnabled ? 
                 VTConstants.colorPrimariesP3D65 : VTConstants.colorPrimariesITUR709,
             kVTCompressionPropertyKey_TransferFunction: isAppleLogEnabled ? 

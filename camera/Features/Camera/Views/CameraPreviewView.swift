@@ -11,19 +11,21 @@ struct CameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> RotationLockedContainer {
         print("DEBUG: Creating CameraPreviewView")
         
-        // Create container with explicit bounds
+        // Create container with explicit size
         let screen = UIScreen.main.bounds
-        let container = RotationLockedContainer(contentView: CustomPreviewView(frame: screen, 
-                                                                              session: session, 
-                                                                              lutManager: lutManager,
-                                                                              viewModel: viewModel))
+        let container = RotationLockedContainer(frame: screen)
+        
+        // Create preview view with same frame
+        let previewView = CustomPreviewView(frame: screen,
+                                          session: session,
+                                          lutManager: lutManager,
+                                          viewModel: viewModel)
+        
+        // Add preview view to container
+        container.addContentView(previewView)
         
         // Store reference to this container in the view model for LUT processing
         viewModel.owningView = container
-        
-        // Force layout
-        container.setNeedsLayout()
-        container.layoutIfNeeded()
         
         return container
     }
@@ -54,15 +56,14 @@ struct CameraPreviewView: UIViewRepresentable {
     
     // A container view that actively resists rotation changes
     class RotationLockedContainer: UIView {
-        private let contentView: UIView
+        private var contentView: UIView?
         private var borderLayer: CALayer?
         private let cornerRadius: CGFloat = 20.0
         private let borderWidth: CGFloat = 4.0
         private var volumeButtonHandler: VolumeButtonHandler?
         
-        init(contentView: UIView) {
-            self.contentView = contentView
-            super.init(frame: .zero)
+        override init(frame: CGRect) {
+            super.init(frame: frame)
             setupView()
             setupBorderLayer()
             setupVolumeButtonHandler()
@@ -79,24 +80,36 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Set background to black
+            // Set background to black and disable autoresizing mask
             backgroundColor = .black
-            
-            // Add content view to fill the container but with space only for border
-            addSubview(contentView)
-            contentView.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth),
-                contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth),
-                contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth),
-                contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
-            ])
-            
-            // Disable safe area insets
-            contentView.insetsLayoutMarginsFromSafeArea = false
+            translatesAutoresizingMaskIntoConstraints = false
             
             // Set black background for all parent views
             setBlackBackgroundForParentViews()
+        }
+        
+        func addContentView(_ view: UIView) {
+            // Remove existing content view if any
+            contentView?.removeFromSuperview()
+            
+            // Add new content view
+            contentView = view
+            addSubview(view)
+            
+            // Setup constraints with border width
+            view.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth),
+                view.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth),
+                view.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth),
+                view.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
+            ])
+            
+            // Ensure content view fills the container
+            view.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
+                                                      left: borderWidth,
+                                                      bottom: borderWidth,
+                                                      right: borderWidth))
         }
         
         private func setupBorderLayer() {
@@ -170,9 +183,8 @@ struct CameraPreviewView: UIViewRepresentable {
             // Keep background color black during layout changes
             backgroundColor = .black
             
-            // Check for changes in safe area insets
-            if safeAreaInsets != .zero {
-                // Force content to fill entire view with just border width
+            // Update content view frame if needed
+            if let contentView = contentView {
                 contentView.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
                                                                 left: borderWidth,
                                                                 bottom: borderWidth,
@@ -226,8 +238,16 @@ struct CameraPreviewView: UIViewRepresentable {
             self.session = session
             self.lutManager = lutManager
             self.viewModel = viewModel
-            self.previewLayer = AVCaptureVideoPreviewLayer()
+            
+            // Initialize preview layer
+            previewLayer = AVCaptureVideoPreviewLayer(session: session)
+            previewLayer.videoGravity = .resizeAspectFill
+            previewLayer.cornerRadius = cornerRadius
+            previewLayer.masksToBounds = true
+            
             super.init(frame: frame)
+            
+            // Set up view
             setupView()
         }
         
@@ -236,21 +256,11 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Set up preview layer
-            previewLayer.session = session
-            previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.cornerRadius = cornerRadius
-            previewLayer.masksToBounds = true
+            // Add preview layer
             layer.addSublayer(previewLayer)
             
             // Tag this view for easy lookup
             tag = 100
-            
-            // Ensure preview layer fills the entire view
-            previewLayer.frame = bounds
-            
-            // Disable autoresizing mask to use constraints
-            translatesAutoresizingMaskIntoConstraints = false
             
             // Set background color
             backgroundColor = .black
@@ -269,18 +279,10 @@ struct CameraPreviewView: UIViewRepresentable {
         override func layoutSubviews() {
             super.layoutSubviews()
             
-            // Ensure preview layer and LUT overlay fill the entire view
+            // Update preview layer frame
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            
-            // Update preview layer frame
             previewLayer.frame = bounds
-            
-            // Update LUT overlay if it exists
-            if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                overlay.frame = bounds
-            }
-            
             CATransaction.commit()
             
             // Force portrait orientation
