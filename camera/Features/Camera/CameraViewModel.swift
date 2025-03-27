@@ -82,7 +82,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    @Published var isAppleLogEnabled = false {
+    @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
         didSet {
             print("\n=== Apple Log Toggle ===")
             print("🔄 Status: \(status)")
@@ -205,13 +205,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         var bitrate: Int {
             switch self {
-            case .hevc: return 35_000_000 // 35 Mbps for 10-bit 4:2:2
+            case .hevc: return 50_000_000 // Increased to 50 Mbps for 4:2:2
             case .proRes: return 0 // ProRes doesn't use bitrate control
             }
         }
     }
     
-    @Published var selectedCodec: VideoCodec = .hevc {
+    @Published var selectedCodec: VideoCodec = .hevc { // Set HEVC as default codec
         didSet {
             updateVideoConfiguration()
         }
@@ -275,11 +275,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Color space constants for HEVC
         static let primariesITUR709 = "ITU_R_709_2"
-        static let primariesP3D65 = "P3_D65"
-        static let transferFunctionHLG = "ITU_R_2100_HLG"
-        static let transferFunctionITUR709 = "ITU_R_709_2"
+        static let primariesBT2020 = "ITU_R_2020"
         static let yCbCrMatrix2020 = "ITU_R_2020"
         static let yCbCrMatrixITUR709 = "ITU_R_709_2"
+        
+        // HEVC Profile constants
+        static let hevcMain422_10Profile = "HEVC_Main42210_AutoLevel"
     }
     
     private var encoderSpecification: [CFString: Any] {
@@ -585,7 +586,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             let input = try AVCaptureDeviceInput(device: videoDevice)
             self.videoDeviceInput = input
             
-            if isAppleLogEnabled, let appleLogFormat = findBestAppleLogFormat(videoDevice) {
+            // Always try to set up Apple Log format initially
+            if let appleLogFormat = findBestAppleLogFormat(videoDevice) {
                 let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
                 try videoDevice.lockForConfiguration()
                 videoDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
@@ -594,6 +596,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 videoDevice.activeColorSpace = .appleLog
                 print("Initial setup: Enabled Apple Log in 4K ProRes format")
                 videoDevice.unlockForConfiguration()
+            } else {
+                print("Initial setup: Apple Log format not available")
+                isAppleLogEnabled = false
             }
             
             if session.canAddInput(input) {
@@ -617,6 +622,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             if session.canAddOutput(videoDataOutput) {
                 session.addOutput(videoDataOutput)
                 print("DEBUG: ✅ Added video data output to session")
+                
+                // Configure initial video settings
+                updateVideoConfiguration()
             } else {
                 print("DEBUG: ❌ Failed to add video data output to session")
             }
@@ -847,16 +855,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 // ProRes doesn't use compression properties
             } else {
                 videoSettings[AVVideoCodecKey] = AVVideoCodecType.hevc
-                videoSettings[AVVideoCompressionPropertiesKey] = [
+                
+                // Create a single dictionary for all compression properties
+                let compressionProperties: [String: Any] = [
                     AVVideoAverageBitRateKey: selectedCodec.bitrate,
                     AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
                     AVVideoMaxKeyFrameIntervalKey: 1,
                     AVVideoAllowFrameReorderingKey: false,
-                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main10_AutoLevel,
-                    AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesP3D65 : VTConstants.primariesITUR709,
-                    AVVideoTransferFunctionKey: isAppleLogEnabled ? VTConstants.transferFunctionHLG : VTConstants.transferFunctionITUR709,
-                    AVVideoYCbCrMatrixKey: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709
+                    AVVideoProfileLevelKey: VTConstants.hevcMain422_10Profile,
+                    AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
+                    AVVideoYCbCrMatrixKey: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709,
+                    "AllowOpenGOP": false,
+                    "EncoderID": "com.apple.videotoolbox.videoencoder.hevc.422v2"
                 ]
+                
+                videoSettings[AVVideoCompressionPropertiesKey] = compressionProperties
             }
             
             // Create video input
@@ -880,11 +893,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             
             // Create pixel buffer adaptor with appropriate format
             let sourcePixelBufferAttributes: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: selectedCodec == .proRes ? 
-                    kCVPixelFormatType_422YpCbCr10 : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_422YpCbCr10,
                 kCVPixelBufferWidthKey as String: dimensions.width,
                 kCVPixelBufferHeightKey as String: dimensions.height,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                kCVPixelBufferMetalCompatibilityKey as String: true
             ]
             
             assetWriterPixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
@@ -928,7 +941,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             print("📊 Recording settings:")
             print("- Resolution: \(dimensions.width)x\(dimensions.height)")
             print("- Codec: \(selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC")")
-            print("- Color Space: \(isAppleLogEnabled ? "P3/HLG/2020" : "Rec.709")")
+            print("- Color Space: \(isAppleLogEnabled ? "Apple Log (BT.2020)" : "Rec.709")")
+            print("- Chroma subsampling: 4:2:2")
             print("- Frame Rate: \(selectedFrameRate) fps")
             print("- Start Time: \(recordingStartTime!.seconds)")
             
@@ -981,16 +995,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     private func saveToPhotoLibrary(_ outputURL: URL) async {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-        guard status == .authorized else {
-            await MainActor.run {
-                self.error = .savingFailed
-                print("Photo library access denied")
-            }
-            return
-        }
-        
         do {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+            guard status == .authorized else {
+                await MainActor.run {
+                    self.error = .savingFailed
+                    print("Photo library access denied")
+                }
+                return
+            }
+            
             try await PHPhotoLibrary.shared().performChanges {
                 let options = PHAssetResourceCreationOptions()
                 let creationRequest = PHAssetCreationRequest.forAsset()
@@ -1463,7 +1477,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             print("- Codec: HEVC")
             print("- Bitrate: \(selectedCodec.bitrate / 1_000_000) Mbps")
             print("- Frame Rate: \(selectedFrameRate) fps")
-            print("- Color Space: \(isAppleLogEnabled ? "Apple Log (P3/HLG/2020)" : "Rec.709")")
+            print("- Color Space: \(isAppleLogEnabled ? "Apple Log (BT.2020)" : "Rec.709")")
+            print("- Matrix: \(isAppleLogEnabled ? "BT.2020 non-constant" : "Rec.709")")
+            print("- Transfer: Apple Log")
+            print("- Chroma subsampling: 4:2:2")
             print("- Profile Level: \(isAppleLogEnabled ? "HEVC_Main42210_AutoLevel" : "HEVC_Main_AutoLevel")")
         }
         
@@ -1691,9 +1708,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             compressedDataAllocator: nil,
             outputCallback: { outputCallbackRefCon, sourceFrameRefCon, status, flags, sampleBuffer in
                 guard let sampleBuffer = sampleBuffer else { return }
-                // Handle encoded frame
                 DispatchQueue.main.async {
-                    // Add to movie file output
                     print("✅ Encoded HEVC frame received")
                 }
             },
@@ -1709,16 +1724,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Configure encoder properties
         let properties: [CFString: Any] = [
             kVTCompressionPropertyKey_RealTime: true,
-            kVTCompressionPropertyKey_ProfileLevel: isAppleLogEnabled ? kVTProfileLevel_HEVC_Main10_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel,
+            kVTCompressionPropertyKey_ProfileLevel: VTConstants.hevcMain422_10Profile,
             kVTCompressionPropertyKey_MaxKeyFrameInterval: 1,
             kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 1,
             kVTCompressionPropertyKey_AllowFrameReordering: false,
             VTConstants.priority: VTConstants.priorityRealtimePreview,
-            kVTCompressionPropertyKey_AverageBitRate: isAppleLogEnabled ? 35_000_000 : 25_000_000,
+            kVTCompressionPropertyKey_AverageBitRate: selectedCodec.bitrate,
             kVTCompressionPropertyKey_ExpectedFrameRate: selectedFrameRate,
-            kVTCompressionPropertyKey_ColorPrimaries: isAppleLogEnabled ? VTConstants.primariesP3D65 : VTConstants.primariesITUR709,
-            kVTCompressionPropertyKey_TransferFunction: isAppleLogEnabled ? VTConstants.transferFunctionHLG : VTConstants.transferFunctionITUR709,
-            kVTCompressionPropertyKey_YCbCrMatrix: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709
+            kVTCompressionPropertyKey_ColorPrimaries: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
+            kVTCompressionPropertyKey_YCbCrMatrix: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709,
+            kVTCompressionPropertyKey_EncoderID: "com.apple.videotoolbox.videoencoder.hevc.422v2" as CFString
         ]
         
         // Apply properties
