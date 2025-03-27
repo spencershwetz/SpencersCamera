@@ -193,7 +193,14 @@ class CameraViewModel: NSObject, ObservableObject {
         var avCodecKey: AVVideoCodecType {
             switch self {
             case .hevc: return .hevc
-            case .proRes: return AVVideoCodecType(rawValue: "apcn")
+            case .proRes: return .proRes422HQ
+            }
+        }
+        
+        var bitrate: Int {
+            switch self {
+            case .hevc: return 35_000_000 // 35 Mbps
+            case .proRes: return 0 // ProRes doesn't use bitrate control
             }
         }
     }
@@ -404,7 +411,16 @@ class CameraViewModel: NSObject, ObservableObject {
                 session.startRunning()
             }
             
-            // Find a format that supports both Apple Log and our selected resolution
+            // Check available codecs first
+            let availableCodecs = movieOutput.availableVideoCodecTypes
+            print("📝 Available codecs: \(availableCodecs)")
+            
+            // When Apple Log is enabled, we must use ProRes
+            await MainActor.run {
+                selectedCodec = .proRes
+            }
+            
+            // Find a format that supports Apple Log and ProRes
             let formats = device.formats.filter { format in
                 let desc = format.formatDescription
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
@@ -421,13 +437,21 @@ class CameraViewModel: NSObject, ObservableObject {
             
             print("✅ Found suitable Apple Log format")
             
+            // Set the format first
+            device.activeFormat = selectedFormat
+            
+            // Verify the format supports Apple Log
+            guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
+                print("❌ Selected format does not support Apple Log")
+                throw CameraError.configurationFailed
+            }
+            
+            print("✅ Format supports Apple Log")
+            
+            // Set frame duration
             let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
-            
-            device.activeFormat = selectedFormat
-            device.activeColorSpace = .appleLog
-            print("🎨 Set color space to Apple Log")
             
             // Configure HDR if supported
             if selectedFormat.isVideoHDRSupported {
@@ -436,13 +460,11 @@ class CameraViewModel: NSObject, ObservableObject {
                 print("✅ Enabled HDR support")
             }
             
-            // Set up hardware-accelerated HEVC encoder if HEVC is selected
-            if selectedCodec == .hevc {
-                try setupHEVCEncoder()
-                print("✅ Configured hardware-accelerated HEVC encoder")
-            }
+            // Set color space
+            device.activeColorSpace = .appleLog
+            print("✅ Set color space to Apple Log")
             
-            // Update video configuration with selected codec
+            // Update video configuration
             updateVideoConfiguration()
             print("🎬 Updated video configuration for codec: \(selectedCodec.rawValue)")
             
@@ -1274,81 +1296,117 @@ class CameraViewModel: NSObject, ObservableObject {
             return
         }
         
-        // Find format that supports selected codec
-        let formats = device.formats.filter { format in
-            let desc = format.formatDescription
-            let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-            let codecType = CMFormatDescriptionGetMediaSubType(desc)
-            
-            let is4K = dimensions.width == 3840 && dimensions.height == 2160
-            let supportsCodec = selectedCodec == .proRes ? 
-                              codecType == 2016686642 : // Explicit ProRes codec type
-                              true // HEVC is handled differently
-            let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
-                range.minFrameRate <= selectedFrameRate && selectedFrameRate <= range.maxFrameRate
-            }
-            
-            return is4K && supportsCodec && supportsFrameRate
-        }
-        
-        if let selectedFormat = formats.first {
-            do {
-                try device.lockForConfiguration()
-                device.activeFormat = selectedFormat
-                device.activeColorSpace = .sRGB
-                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
-                device.activeVideoMinFrameDuration = duration
-                device.activeVideoMaxFrameDuration = duration
-                device.unlockForConfiguration()
-                print("✅ Set device format for \(selectedCodec.rawValue)")
-            } catch {
-                print("❌ Error setting device format: \(error)")
-            }
-        }
-        
         // Check available codecs
         let availableCodecs = movieOutput.availableVideoCodecTypes
         print("📝 Available codecs: \(availableCodecs)")
         
-        var compressionProperties: [String: Any] = [:]
-        
-        if selectedCodec == .hevc {
-            // HEVC configuration
-            compressionProperties = [
-                AVVideoAverageBitRateKey: isAppleLogEnabled ? 35_000_000 : 25_000_000,
-                AVVideoMaxKeyFrameIntervalKey: 1,
-                AVVideoAllowFrameReorderingKey: false,
-                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
-                AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesP3D65 : VTConstants.primariesITUR709,
-                AVVideoTransferFunctionKey: isAppleLogEnabled ? VTConstants.transferFunctionHLG : VTConstants.transferFunctionITUR709,
-                AVVideoYCbCrMatrixKey: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709
-            ]
-        } else {
-            // ProRes configuration - minimal settings
-            compressionProperties = [
-                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
-            ]
+        // First, ensure we're in the right format for ProRes if needed
+        if selectedCodec == .proRes || isAppleLogEnabled {
+            do {
+                try device.lockForConfiguration()
+                
+                // Find a suitable format that supports ProRes
+                let formats = device.formats.filter { format in
+                    let desc = format.formatDescription
+                    let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
+                    let matchesResolution = dimensions.width >= selectedResolution.dimensions.width &&
+                                          dimensions.height >= selectedResolution.dimensions.height
+                    let hasAppleLog = isAppleLogEnabled ? format.supportedColorSpaces.contains(.appleLog) : true
+                    
+                    return matchesResolution && hasAppleLog
+                }
+                
+                if let selectedFormat = formats.first {
+                    device.activeFormat = selectedFormat
+                    
+                    // Set frame rate
+                    let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+                    device.activeVideoMinFrameDuration = duration
+                    device.activeVideoMaxFrameDuration = duration
+                    
+                    // Set color space
+                    device.activeColorSpace = isAppleLogEnabled ? .appleLog : .sRGB
+                    
+                    print("✅ Set appropriate format for \(isAppleLogEnabled ? "Apple Log" : "Rec.709") ProRes recording")
+                } else {
+                    print("❌ No suitable format found for ProRes")
+                    // Fall back to HEVC if ProRes is not available
+                    if selectedCodec == .proRes {
+                        DispatchQueue.main.async {
+                            self.selectedCodec = .hevc
+                        }
+                        device.unlockForConfiguration()
+                        return
+                    }
+                }
+                
+                device.unlockForConfiguration()
+            } catch {
+                print("❌ Error configuring device for ProRes: \(error)")
+                return
+            }
         }
         
+        // Configure video settings based on codec
+        if selectedCodec == .proRes {
+            // ProRes configuration
+            let proResVariants: [AVVideoCodecType] = [
+                AVVideoCodecType(rawValue: "apch"), // ProRes 422 HQ
+                AVVideoCodecType(rawValue: "apcn"), // ProRes 422
+                AVVideoCodecType(rawValue: "apcs"), // ProRes 422 LT
+                AVVideoCodecType(rawValue: "apco")  // ProRes 422 Proxy
+            ]
+            
+            if let bestProRes = proResVariants.first(where: { availableCodecs.contains($0) }) {
+                let videoSettings: [String: Any] = [
+                    AVVideoCodecKey: bestProRes,
+                    AVVideoCompressionPropertiesKey: [
+                        AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
+                    ]
+                ]
+                
+                do {
+                    movieOutput.setOutputSettings(videoSettings, for: connection)
+                    print("✅ Successfully configured ProRes")
+                    print("📊 Using codec: \(bestProRes)")
+                    return
+                } catch {
+                    print("❌ Failed to set ProRes settings: \(error)")
+                    // Fall back to HEVC
+                    DispatchQueue.main.async {
+                        self.selectedCodec = .hevc
+                    }
+                }
+            }
+            return
+        }
+        
+        // Handle HEVC (default)
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: selectedCodec.bitrate,
+            AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
+            AVVideoMaxKeyFrameIntervalKey: 1,
+            AVVideoAllowFrameReorderingKey: false,
+            AVVideoColorPrimariesKey: VTConstants.primariesITUR709,
+            AVVideoTransferFunctionKey: VTConstants.transferFunctionITUR709,
+            AVVideoYCbCrMatrixKey: VTConstants.yCbCrMatrixITUR709
+        ]
+        
         let videoSettings: [String: Any] = [
-            AVVideoCodecKey: selectedCodec.avCodecKey,
+            AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoCompressionPropertiesKey: compressionProperties
         ]
         
-        print("📊 Configured with:")
-        print("- Codec: \(selectedCodec.avCodecKey)")
-        if selectedCodec == .hevc {
-            print("- Bitrate: \(compressionProperties[AVVideoAverageBitRateKey] as! Int / 1_000_000) Mbps")
-        }
-        print("- Frame Rate: \(selectedFrameRate) fps")
-        print("- Color Space: \(selectedCodec == .proRes ? "sRGB" : (isAppleLogEnabled ? "Apple Log (HLG)" : "Rec.709"))")
-        
         do {
-            // Try to set the output settings
             movieOutput.setOutputSettings(videoSettings, for: connection)
-            print("✅ Successfully applied video configuration")
+            print("✅ Successfully configured HEVC")
+            print("📊 Configured with:")
+            print("- Codec: HEVC")
+            print("- Bitrate: \(compressionProperties[AVVideoAverageBitRateKey] as! Int / 1_000_000) Mbps")
+            print("- Frame Rate: \(selectedFrameRate) fps")
+            print("- Color Space: Rec.709")
         } catch {
-            print("❌ Failed to set output settings: \(error)")
+            print("❌ Failed to set HEVC settings: \(error)")
         }
         
         print("=== End Video Configuration ===\n")
