@@ -5,6 +5,19 @@ import VideoToolbox
 import CoreVideo
 import os.log
 import CoreImage
+import CoreMedia
+
+extension CFString {
+    var string: String {
+        self as String
+    }
+}
+
+extension AVCaptureDevice.Format {
+    var dimensions: CMVideoDimensions? {
+        CMVideoFormatDescriptionGetDimensions(formatDescription)
+    }
+}
 
 class CameraViewModel: NSObject, ObservableObject {
     // Add property to track the view containing the camera preview
@@ -180,7 +193,7 @@ class CameraViewModel: NSObject, ObservableObject {
         var avCodecKey: AVVideoCodecType {
             switch self {
             case .hevc: return .hevc
-            case .proRes: return .proRes422
+            case .proRes: return AVVideoCodecType(rawValue: "apcn")
             }
         }
     }
@@ -236,6 +249,33 @@ class CameraViewModel: NSObject, ObservableObject {
     
     @Published var currentZoomFactor: CGFloat = 1.0
     private var lastZoomFactor: CGFloat = 1.0
+    
+    // HEVC Hardware Encoding Properties
+    private var compressionSession: VTCompressionSession?
+    private let encoderQueue = DispatchQueue(label: "com.camera.encoder", qos: .userInteractive)
+    
+    // Add constants that are missing from VideoToolbox
+    private enum VTConstants {
+        static let hardwareAcceleratorOnly = "EnableHardwareAcceleratedVideoEncoder" as CFString
+        static let priority = "Priority" as CFString
+        static let priorityRealtimePreview = "RealtimePreview" as CFString
+        
+        // Color space constants for HEVC
+        static let primariesITUR709 = "ITU_R_709_2"
+        static let primariesP3D65 = "P3_D65"
+        static let transferFunctionHLG = "ITU_R_2100_HLG"
+        static let transferFunctionITUR709 = "ITU_R_709_2"
+        static let yCbCrMatrix2020 = "ITU_R_2020"
+        static let yCbCrMatrixITUR709 = "ITU_R_709_2"
+    }
+    
+    private var encoderSpecification: [CFString: Any] {
+        [
+            kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true
+        ]
+    }
     
     override init() {
         super.init()
@@ -333,24 +373,12 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func configureAppleLog() async throws {
+        print("\n=== Configuring Apple Log ===")
+        
         guard let device = device else {
             print("❌ No camera device available")
-            return
+            throw CameraError.configurationFailed
         }
-        
-        print("\n=== Apple Log Configuration ===")
-        print("🎥 Current device: \(device.localizedName)")
-        print("📊 Current format: \(device.activeFormat.formatDescription)")
-        print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
-        print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
-        print("🎬 Selected codec: \(selectedCodec.rawValue)")
-        
-        session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        
-        let supportsAppleLog = device.formats.contains { format in
-            format.supportedColorSpaces.contains(.appleLog)
-        }
-        print("✓ Device supports Apple Log: \(supportsAppleLog)")
         
         do {
             session.stopRunning()
@@ -359,7 +387,12 @@ class CameraViewModel: NSObject, ObservableObject {
             try await Task.sleep(for: .milliseconds(100))
             session.beginConfiguration()
             
-            try device.lockForConfiguration()
+            do {
+                try device.lockForConfiguration()
+            } catch {
+                throw CameraError.configurationFailed
+            }
+            
             defer {
                 device.unlockForConfiguration()
                 session.commitConfiguration()
@@ -401,6 +434,12 @@ class CameraViewModel: NSObject, ObservableObject {
                 device.automaticallyAdjustsVideoHDREnabled = false
                 device.isVideoHDREnabled = true
                 print("✅ Enabled HDR support")
+            }
+            
+            // Set up hardware-accelerated HEVC encoder if HEVC is selected
+            if selectedCodec == .hevc {
+                try setupHEVCEncoder()
+                print("✅ Configured hardware-accelerated HEVC encoder")
             }
             
             // Update video configuration with selected codec
@@ -763,20 +802,25 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     
     private func generateThumbnail(from videoURL: URL) {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         
         // Get thumbnail from first frame
         let time = CMTime(seconds: 0, preferredTimescale: 600)
         
-        do {
-            let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-            DispatchQueue.main.async { [weak self] in
-                self?.lastRecordedVideoThumbnail = UIImage(cgImage: cgImage)
+        // Use async thumbnail generation
+        imageGenerator.generateCGImageAsynchronously(for: time) { [weak self] cgImage, actualTime, error in
+            if let error = error {
+                print("Error generating thumbnail: \(error)")
+                return
             }
-        } catch {
-            print("Error generating thumbnail: \(error)")
+            
+            if let cgImage = cgImage {
+                DispatchQueue.main.async {
+                    self?.lastRecordedVideoThumbnail = UIImage(cgImage: cgImage)
+                }
+            }
         }
     }
     
@@ -1224,49 +1268,66 @@ class CameraViewModel: NSObject, ObservableObject {
         print("🎬 Selected Codec: \(selectedCodec.rawValue)")
         print("🎨 Apple Log Enabled: \(isAppleLogEnabled)")
         
-        guard let connection = movieOutput.connection(with: .video) else {
+        guard let device = device,
+              let connection = movieOutput.connection(with: .video) else {
             print("❌ No video connection available")
             return
+        }
+        
+        // Find format that supports selected codec
+        let formats = device.formats.filter { format in
+            let desc = format.formatDescription
+            let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
+            let codecType = CMFormatDescriptionGetMediaSubType(desc)
+            
+            let is4K = dimensions.width == 3840 && dimensions.height == 2160
+            let supportsCodec = selectedCodec == .proRes ? 
+                              codecType == 2016686642 : // Explicit ProRes codec type
+                              true // HEVC is handled differently
+            let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
+                range.minFrameRate <= selectedFrameRate && selectedFrameRate <= range.maxFrameRate
+            }
+            
+            return is4K && supportsCodec && supportsFrameRate
+        }
+        
+        if let selectedFormat = formats.first {
+            do {
+                try device.lockForConfiguration()
+                device.activeFormat = selectedFormat
+                device.activeColorSpace = .sRGB
+                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
+                device.activeVideoMinFrameDuration = duration
+                device.activeVideoMaxFrameDuration = duration
+                device.unlockForConfiguration()
+                print("✅ Set device format for \(selectedCodec.rawValue)")
+            } catch {
+                print("❌ Error setting device format: \(error)")
+            }
         }
         
         // Check available codecs
         let availableCodecs = movieOutput.availableVideoCodecTypes
         print("📝 Available codecs: \(availableCodecs)")
         
-        // Verify selected codec is supported
-        guard availableCodecs.contains(selectedCodec.avCodecKey) else {
-            print("❌ Selected codec \(selectedCodec.avCodecKey) not supported")
-            print("⚠️ Available codecs: \(availableCodecs)")
-            
-            // If ProRes isn't supported but HEVC is, fall back to HEVC
-            if selectedCodec == .proRes && availableCodecs.contains(.hevc) {
-                print("↪️ Falling back to HEVC")
-                DispatchQueue.main.async {
-                    self.selectedCodec = .hevc
-                }
-            }
-            return
-        }
+        var compressionProperties: [String: Any] = [:]
         
-        var bitRate: Int
-        switch selectedCodec {
-        case .hevc:
-            bitRate = isAppleLogEnabled ? 35_000_000 : 25_000_000
-        case .proRes:
-            bitRate = 50_000_000
-        }
-        
-        // Configure video settings with only supported keys
-        var compressionProperties: [String: Any] = [
-            AVVideoAverageBitRateKey: bitRate,
-            AVVideoMaxKeyFrameIntervalKey: 1,
-            AVVideoAllowFrameReorderingKey: false,
-            AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
-        ]
-        
-        // Add codec-specific settings
         if selectedCodec == .hevc {
-            compressionProperties[AVVideoProfileLevelKey] = isAppleLogEnabled ? "HEVC_Main10_AutoLevel" : "HEVC_Main_AutoLevel"
+            // HEVC configuration
+            compressionProperties = [
+                AVVideoAverageBitRateKey: isAppleLogEnabled ? 35_000_000 : 25_000_000,
+                AVVideoMaxKeyFrameIntervalKey: 1,
+                AVVideoAllowFrameReorderingKey: false,
+                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
+                AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesP3D65 : VTConstants.primariesITUR709,
+                AVVideoTransferFunctionKey: isAppleLogEnabled ? VTConstants.transferFunctionHLG : VTConstants.transferFunctionITUR709,
+                AVVideoYCbCrMatrixKey: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709
+            ]
+        } else {
+            // ProRes configuration - minimal settings
+            compressionProperties = [
+                AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate)
+            ]
         }
         
         let videoSettings: [String: Any] = [
@@ -1276,12 +1337,11 @@ class CameraViewModel: NSObject, ObservableObject {
         
         print("📊 Configured with:")
         print("- Codec: \(selectedCodec.avCodecKey)")
-        print("- Bitrate: \(bitRate / 1_000_000) Mbps")
-        print("- Frame Rate: \(selectedFrameRate) fps")
-        print("- Color Space: \(isAppleLogEnabled ? "Apple Log (HLG)" : "Rec.709")")
-        if isAppleLogEnabled {
-            print("- HDR: Enabled")
+        if selectedCodec == .hevc {
+            print("- Bitrate: \(compressionProperties[AVVideoAverageBitRateKey] as! Int / 1_000_000) Mbps")
         }
+        print("- Frame Rate: \(selectedFrameRate) fps")
+        print("- Color Space: \(selectedCodec == .proRes ? "sRGB" : (isAppleLogEnabled ? "Apple Log (HLG)" : "Rec.709"))")
         
         do {
             // Try to set the output settings
@@ -1500,6 +1560,126 @@ class CameraViewModel: NSObject, ObservableObject {
         } catch {
             print("DEBUG: ❌ Failed to set zoom: \(error)")
             self.error = .configurationFailed
+        }
+    }
+    
+    private func setupHEVCEncoder() throws {
+        print("\n=== Setting up HEVC Hardware Encoder ===")
+        
+        // Clean up any existing session
+        if let session = compressionSession {
+            VTCompressionSessionInvalidate(session)
+            compressionSession = nil
+        }
+        
+        // Get dimensions from the active format
+        guard let device = device,
+              let dimensions = device.activeFormat.dimensions else {
+            throw CameraError.configurationFailed
+        }
+        
+        // Create compression session
+        var session: VTCompressionSession?
+        let status = VTCompressionSessionCreate(
+            allocator: kCFAllocatorDefault,
+            width: Int32(dimensions.width),
+            height: Int32(dimensions.height),
+            codecType: kCMVideoCodecType_HEVC,
+            encoderSpecification: encoderSpecification as CFDictionary,
+            imageBufferAttributes: nil,
+            compressedDataAllocator: nil,
+            outputCallback: { outputCallbackRefCon, sourceFrameRefCon, status, flags, sampleBuffer in
+                guard let sampleBuffer = sampleBuffer else { return }
+                // Handle encoded frame
+                DispatchQueue.main.async {
+                    // Add to movie file output
+                    print("✅ Encoded HEVC frame received")
+                }
+            },
+            refcon: nil,
+            compressionSessionOut: &session
+        )
+        
+        guard status == noErr, let session = session else {
+            print("❌ Failed to create compression session: \(status)")
+            throw CameraError.configurationFailed
+        }
+        
+        // Configure encoder properties
+        let properties: [CFString: Any] = [
+            kVTCompressionPropertyKey_RealTime: true,
+            kVTCompressionPropertyKey_ProfileLevel: isAppleLogEnabled ? kVTProfileLevel_HEVC_Main10_AutoLevel : kVTProfileLevel_HEVC_Main_AutoLevel,
+            kVTCompressionPropertyKey_MaxKeyFrameInterval: 1,
+            kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 1,
+            kVTCompressionPropertyKey_AllowFrameReordering: false,
+            VTConstants.priority: VTConstants.priorityRealtimePreview,
+            kVTCompressionPropertyKey_AverageBitRate: isAppleLogEnabled ? 35_000_000 : 25_000_000,
+            kVTCompressionPropertyKey_ExpectedFrameRate: selectedFrameRate,
+            kVTCompressionPropertyKey_ColorPrimaries: isAppleLogEnabled ? VTConstants.primariesP3D65 : VTConstants.primariesITUR709,
+            kVTCompressionPropertyKey_TransferFunction: isAppleLogEnabled ? VTConstants.transferFunctionHLG : VTConstants.transferFunctionITUR709,
+            kVTCompressionPropertyKey_YCbCrMatrix: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709
+        ]
+        
+        // Apply properties
+        for (key, value) in properties {
+            let propStatus = VTSessionSetProperty(session, key: key, value: value as CFTypeRef)
+            if propStatus != noErr {
+                print("⚠️ Failed to set property \(key as String): \(propStatus)")
+            }
+        }
+        
+        // Prepare to encode frames
+        VTCompressionSessionPrepareToEncodeFrames(session)
+        
+        // Store the session
+        compressionSession = session
+        print("✅ HEVC Hardware encoder setup complete")
+        print("=== End HEVC Encoder Setup ===\n")
+    }
+    
+    private func encodeFrame(_ sampleBuffer: CMSampleBuffer) {
+        guard let compressionSession = compressionSession,
+              let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+              let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+            return
+        }
+        
+        // Get frame timing info
+        var timing = CMSampleTimingInfo()
+        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
+        
+        // Create properties for encoding
+        var properties: [String: Any] = [:]
+        if CMSampleBufferGetNumSamples(sampleBuffer) > 0 {
+            properties[kVTEncodeFrameOptionKey_ForceKeyFrame as String] = true
+        }
+        
+        // Encode the frame
+        let status = VTCompressionSessionEncodeFrame(
+            compressionSession,
+            imageBuffer: imageBuffer,
+            presentationTimeStamp: timing.presentationTimeStamp,
+            duration: timing.duration,
+            frameProperties: properties as CFDictionary,
+            sourceFrameRefcon: nil,
+            infoFlagsOut: nil
+        )
+        
+        if status != noErr {
+            print("⚠️ Failed to encode frame: \(status)")
+        }
+    }
+
+    // Update AVCaptureVideoDataOutputSampleBufferDelegate to use hardware encoding
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard isRecording,
+              selectedCodec == .hevc,
+              isAppleLogEnabled else {
+            return
+        }
+        
+        encoderQueue.async { [weak self] in
+            self?.encodeFrame(sampleBuffer)
         }
     }
 }
