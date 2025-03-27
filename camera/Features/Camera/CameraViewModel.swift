@@ -53,14 +53,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
             
             // Handle flashlight state based on recording state
-            if let settings = try? SettingsModel() {
-                if isRecording && settings.isFlashlightEnabled {
-                    Task {
-                        await flashlightManager.performStartupSequence()
-                    }
-                } else {
-                    flashlightManager.cleanup()
+            let settings = SettingsModel()
+            if isRecording && settings.isFlashlightEnabled {
+                Task {
+                    await flashlightManager.performStartupSequence()
                 }
+            } else {
+                flashlightManager.cleanup()
             }
         }
     }
@@ -302,13 +301,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            if let settings = try? SettingsModel() {
-                if self.isRecording && settings.isFlashlightEnabled {
-                    self.flashlightManager.isEnabled = true
-                    self.flashlightManager.intensity = settings.flashlightIntensity
-                } else {
-                    self.flashlightManager.isEnabled = false
-                }
+            let settings = SettingsModel()
+            if self.isRecording && settings.isFlashlightEnabled {
+                self.flashlightManager.isEnabled = true
+                self.flashlightManager.intensity = settings.flashlightIntensity
+            } else {
+                self.flashlightManager.isEnabled = false
             }
         }
         
@@ -828,12 +826,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func startRecording() async {
         guard !isRecording else { return }
         
+        // Reset counters when starting a new recording
+        videoFrameCount = 0
+        audioFrameCount = 0
+        successfulVideoFrames = 0
+        failedVideoFrames = 0
+        
         do {
             // Create temporary URL for recording
             let tempDir = FileManager.default.temporaryDirectory
             let fileName = "recording_\(Date().timeIntervalSince1970).mov"
             let tempURL = tempDir.appendingPathComponent(fileName)
             currentRecordingURL = tempURL
+            
+            print("🎬 START RECORDING: Creating asset writer at \(tempURL.path)")
             
             // Create asset writer
             assetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
@@ -860,7 +866,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 let compressionProperties: [String: Any] = [
                     AVVideoAverageBitRateKey: selectedCodec.bitrate,
                     AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
-                    AVVideoMaxKeyFrameIntervalKey: 1,
+                    AVVideoMaxKeyFrameIntervalKey: Int(selectedFrameRate), // One keyframe per second
+                    AVVideoMaxKeyFrameIntervalDurationKey: 1.0, // Force keyframe every second
                     AVVideoAllowFrameReorderingKey: false,
                     AVVideoProfileLevelKey: VTConstants.hevcMain422_10Profile,
                     AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
@@ -872,9 +879,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 videoSettings[AVVideoCompressionPropertiesKey] = compressionProperties
             }
             
-            // Create video input
+            // Create video input with better buffer handling
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
+            assetWriterInput?.transform = CGAffineTransform(rotationAngle: .pi/2)
+            
+            print("📝 Created asset writer input with settings: \(videoSettings)")
             
             // Configure audio settings
             let audioSettings: [String: Any] = [
@@ -893,7 +903,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             
             // Create pixel buffer adaptor with appropriate format
             let sourcePixelBufferAttributes: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_422YpCbCr10,
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
                 kCVPixelBufferWidthKey as String: dimensions.width,
                 kCVPixelBufferHeightKey as String: dimensions.height,
                 kCVPixelBufferIOSurfacePropertiesKey as String: [:],
@@ -905,12 +915,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 sourcePixelBufferAttributes: sourcePixelBufferAttributes
             )
             
+            print("📐 Created pixel buffer adaptor with format: BGRA (32-bit)")
+            
             // Add inputs to writer
             if assetWriter!.canAdd(assetWriterInput!) {
                 assetWriter!.add(assetWriterInput!)
+                print("✅ Added video input to asset writer")
+            } else {
+                print("❌ FAILED to add video input to asset writer")
             }
+            
             if assetWriter!.canAdd(audioInput) {
                 assetWriter!.add(audioInput)
+                print("✅ Added audio input to asset writer")
+            } else {
+                print("❌ FAILED to add audio input to asset writer")
             }
             
             // Configure video data output if not already configured
@@ -919,7 +938,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
                 if session.canAddOutput(videoDataOutput!) {
                     session.addOutput(videoDataOutput!)
+                    print("✅ Added video data output to session")
+                } else {
+                    print("❌ FAILED to add video data output to session")
                 }
+            } else {
+                print("✅ Using existing video data output")
             }
             
             // Configure audio data output if not already configured
@@ -928,13 +952,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
                 if session.canAddOutput(audioDataOutput!) {
                     session.addOutput(audioDataOutput!)
+                    print("✅ Added audio data output to session")
+                } else {
+                    print("❌ FAILED to add audio data output to session")
                 }
+            } else {
+                print("✅ Using existing audio data output")
             }
             
             // Start writing
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
             assetWriter!.startWriting()
             assetWriter!.startSession(atSourceTime: recordingStartTime!)
+            
+            print("▶️ Started asset writer session at time: \(recordingStartTime!.seconds)")
             
             isRecording = true
             print("✅ Started recording to: \(tempURL.path)")
@@ -956,25 +987,36 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func stopRecording() async {
         guard isRecording else { return }
         
+        print("⏹️ STOP RECORDING: Finalizing video with \(videoFrameCount) frames (\(successfulVideoFrames) successful, \(failedVideoFrames) failed)")
+        
         isProcessingRecording = true
         
         // Mark all inputs as finished
         assetWriterInput?.markAsFinished()
+        print("✅ Marked asset writer inputs as finished")
         
         // Wait for asset writer to finish
         if let assetWriter = assetWriter {
+            print("⏳ Waiting for asset writer to finish writing...")
             await assetWriter.finishWriting()
+            print("✅ Asset writer finished with status: \(assetWriter.status.rawValue)")
+            
+            if let error = assetWriter.error {
+                print("❌ Asset writer error: \(error)")
+            }
         }
         
         // Clean up recording resources
         if let videoDataOutput = videoDataOutput {
             session.removeOutput(videoDataOutput)
             self.videoDataOutput = nil
+            print("🧹 Removed video data output from session")
         }
         
         if let audioDataOutput = audioDataOutput {
             session.removeOutput(audioDataOutput)
             self.audioDataOutput = nil
+            print("🧹 Removed audio data output from session")
         }
         
         // Reset recording state
@@ -983,6 +1025,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Save to photo library if we have a valid recording
         if let outputURL = currentRecordingURL {
+            print("💾 Saving video to photo library: \(outputURL.path)")
+            
+            // Check file size
+            let fileManager = FileManager.default
+            if let attributes = try? fileManager.attributesOfItem(atPath: outputURL.path),
+               let fileSize = attributes[.size] as? Int {
+                print("📊 Video file size: \(fileSize / 1024 / 1024) MB")
+            }
+            
+            // Check duration using AVAsset
+            let asset = AVAsset(url: outputURL)
+            let duration = asset.duration
+            print("⏱️ Video duration: \(CMTimeGetSeconds(duration)) seconds")
+            
             await saveToPhotoLibrary(outputURL)
         }
         
@@ -992,6 +1048,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         assetWriterPixelBufferAdaptor = nil
         currentRecordingURL = nil
         isProcessingRecording = false
+        
+        print("🏁 Recording session completed")
     }
     
     private func saveToPhotoLibrary(_ outputURL: URL) async {
@@ -1505,7 +1563,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         do {
-            try await device.lockForConfiguration()
+            try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             
             // Find all formats that match our resolution
@@ -1722,25 +1780,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         // Configure encoder properties
-        let properties: [CFString: Any] = [
-            kVTCompressionPropertyKey_RealTime: true,
-            kVTCompressionPropertyKey_ProfileLevel: VTConstants.hevcMain422_10Profile,
-            kVTCompressionPropertyKey_MaxKeyFrameInterval: 1,
-            kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration: 1,
-            kVTCompressionPropertyKey_AllowFrameReordering: false,
-            VTConstants.priority: VTConstants.priorityRealtimePreview,
-            kVTCompressionPropertyKey_AverageBitRate: selectedCodec.bitrate,
-            kVTCompressionPropertyKey_ExpectedFrameRate: selectedFrameRate,
-            kVTCompressionPropertyKey_ColorPrimaries: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
-            kVTCompressionPropertyKey_YCbCrMatrix: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709,
-            kVTCompressionPropertyKey_EncoderID: "com.apple.videotoolbox.videoencoder.hevc.422v2" as CFString
+        let properties: [String: Any] = [
+            kVTCompressionPropertyKey_RealTime.string: true,
+            kVTCompressionPropertyKey_ProfileLevel.string: VTConstants.hevcMain422_10Profile,
+            kVTCompressionPropertyKey_MaxKeyFrameInterval.string: Int32(selectedFrameRate),
+            kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration.string: 1,
+            kVTCompressionPropertyKey_AllowFrameReordering.string: false,
+            VTConstants.priority.string: VTConstants.priorityRealtimePreview,
+            kVTCompressionPropertyKey_AverageBitRate.string: selectedCodec.bitrate,
+            kVTCompressionPropertyKey_ExpectedFrameRate.string: selectedFrameRate,
+            kVTCompressionPropertyKey_ColorPrimaries.string: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
+            kVTCompressionPropertyKey_YCbCrMatrix.string: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709,
+            kVTCompressionPropertyKey_EncoderID.string: "com.apple.videotoolbox.videoencoder.hevc.422v2"
         ]
         
         // Apply properties
         for (key, value) in properties {
-            let propStatus = VTSessionSetProperty(session, key: key, value: value as CFTypeRef)
+            let propStatus = VTSessionSetProperty(session, key: key as CFString, value: value as CFTypeRef)
             if propStatus != noErr {
-                print("⚠️ Failed to set property \(key as String): \(propStatus)")
+                print("⚠️ Failed to set property \(key): \(propStatus)")
             }
         }
         
@@ -1756,7 +1814,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private func encodeFrame(_ sampleBuffer: CMSampleBuffer) {
         guard let compressionSession = compressionSession,
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
-              let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+              CMSampleBufferGetFormatDescription(sampleBuffer) != nil else {
             return
         }
         
@@ -1788,6 +1846,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
     
+    // Track frame counts for logging
+    private var videoFrameCount = 0
+    private var audioFrameCount = 0
+    private var successfulVideoFrames = 0
+    private var failedVideoFrames = 0
+    
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let assetWriter = assetWriter,
               assetWriter.status == .writing else {
@@ -1797,25 +1861,61 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Handle video data
         if output == videoDataOutput,
            let assetWriterInput = assetWriterInput,
-           assetWriterInput.isReadyForMoreMediaData,
-           let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+           assetWriterInput.isReadyForMoreMediaData {
             
-            // Get presentation time
-            var presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            if let startTime = recordingStartTime {
-                presentationTime = CMTimeSubtract(presentationTime, startTime)
+            videoFrameCount += 1
+            
+            // Log every 30 frames to avoid flooding
+            let shouldLog = videoFrameCount % 30 == 0
+            if shouldLog {
+                print("📽️ Processing video frame #\(videoFrameCount), writer status: \(assetWriter.status.rawValue)")
             }
             
-            // Apply LUT if enabled
-            if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {
-                let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-                if let processedImage = applyLUT(to: ciImage, using: lutFilter),
-                   let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
-                    assetWriterPixelBufferAdaptor?.append(processedPixelBuffer, withPresentationTime: presentationTime)
+            // Get the original presentation time
+            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            
+            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+                    if let processedImage = applyLUT(to: ciImage, using: lutFilter),
+                       let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
+                        
+                        // Use original timing information
+                        var timing = CMSampleTimingInfo()
+                        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
+                        
+                        // Create format description for processed buffer
+                        var info: CMFormatDescription?
+                        let status = CMVideoFormatDescriptionCreateForImageBuffer(
+                            allocator: kCFAllocatorDefault,
+                            imageBuffer: processedPixelBuffer,
+                            formatDescriptionOut: &info
+                        )
+                        
+                        if status == noErr, let info = info,
+                           let newSampleBuffer = createSampleBuffer(
+                            from: processedPixelBuffer,
+                            formatDescription: info,
+                            timing: &timing
+                           ) {
+                            assetWriterInput.append(newSampleBuffer)
+                            successfulVideoFrames += 1
+                            if shouldLog {
+                                print("✅ Successfully appended processed frame #\(successfulVideoFrames)")
+                            }
+                        } else {
+                            failedVideoFrames += 1
+                            print("⚠️ Failed to create format description for processed frame #\(videoFrameCount), status: \(status)")
+                        }
+                    }
+                } else {
+                    // No LUT processing needed - use original sample buffer directly
+                    assetWriterInput.append(sampleBuffer)
+                    successfulVideoFrames += 1
+                    if shouldLog {
+                        print("✅ Successfully appended original frame #\(successfulVideoFrames)")
+                    }
                 }
-            } else {
-                // No LUT processing needed
-                assetWriterPixelBufferAdaptor?.append(pixelBuffer, withPresentationTime: presentationTime)
             }
         }
         
@@ -1823,7 +1923,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         if output == audioDataOutput,
            let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
            audioInput.isReadyForMoreMediaData {
+            audioFrameCount += 1
             audioInput.append(sampleBuffer)
+            if audioFrameCount % 100 == 0 {
+                print("🎵 Processed audio frame #\(audioFrameCount)")
+            }
         }
     }
     
@@ -1836,10 +1940,42 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                            [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
                            &newPixelBuffer)
         
-        guard let outputBuffer = newPixelBuffer else { return nil }
+        guard let outputBuffer = newPixelBuffer else { 
+            print("⚠️ Failed to create pixel buffer from CI image")
+            return nil 
+        }
         
         ciContext.render(ciImage, to: outputBuffer)
         return outputBuffer
+    }
+
+    // Add helper property for tracking keyframes
+    private var lastKeyFrameTime: CMTime?
+
+    // Add helper method for creating sample buffers
+    private func createSampleBuffer(
+        from pixelBuffer: CVPixelBuffer,
+        formatDescription: CMFormatDescription,
+        timing: UnsafeMutablePointer<CMSampleTimingInfo>
+    ) -> CMSampleBuffer? {
+        var sampleBuffer: CMSampleBuffer?
+        let status = CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: formatDescription,
+            sampleTiming: timing,
+            sampleBufferOut: &sampleBuffer
+        )
+        
+        if status != noErr {
+            print("⚠️ Failed to create sample buffer: \(status)")
+            return nil
+        }
+        
+        return sampleBuffer
     }
 }
 
