@@ -11,18 +11,23 @@ struct CameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> RotationLockedContainer {
         print("DEBUG: Creating CameraPreviewView")
         
-        // Create container with explicit bounds
+        // Get the screen bounds
         let screen = UIScreen.main.bounds
-        let container = RotationLockedContainer(contentView: CustomPreviewView(frame: screen, 
-                                                                              session: session, 
-                                                                              lutManager: lutManager,
-                                                                              viewModel: viewModel))
+        
+        // Create the custom preview view with proper frame
+        let previewView = CustomPreviewView(frame: screen,
+                                          session: session,
+                                          lutManager: lutManager,
+                                          viewModel: viewModel)
+        
+        // Create container with explicit frame
+        let container = RotationLockedContainer(contentView: previewView)
+        container.frame = screen
         
         // Store reference to this container in the view model for LUT processing
         viewModel.owningView = container
         
-        // Force layout
-        container.setNeedsLayout()
+        // Force layout immediately
         container.layoutIfNeeded()
         
         return container
@@ -82,14 +87,27 @@ struct CameraPreviewView: UIViewRepresentable {
             // Set background to black
             backgroundColor = .black
             
-            // Add content view to fill the container but with space only for border
+            // Set initial frame to screen bounds to avoid 0 width/height
+            let screen = UIScreen.main.bounds
+            frame = screen
+            
+            // Add content view
             addSubview(contentView)
             contentView.translatesAutoresizingMaskIntoConstraints = false
+            
+            // Use safe area layout guide for constraints
+            let guide = safeAreaLayoutGuide
+            
             NSLayoutConstraint.activate([
-                contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth),
-                contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth),
-                contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth),
-                contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
+                // Pin content view to container edges with border width spacing
+                contentView.topAnchor.constraint(equalTo: guide.topAnchor, constant: borderWidth),
+                contentView.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -borderWidth),
+                contentView.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: borderWidth),
+                contentView.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -borderWidth),
+                
+                // Set minimum size constraints to prevent 0 width/height
+                widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
+                heightAnchor.constraint(greaterThanOrEqualToConstant: 100)
             ])
             
             // Disable safe area insets
