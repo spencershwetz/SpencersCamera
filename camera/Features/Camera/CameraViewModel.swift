@@ -6,6 +6,7 @@ import CoreVideo
 import os.log
 import CoreImage
 import CoreMedia
+import Combine
 
 extension CFString {
     var string: String {
@@ -247,6 +248,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
+    // Add memory management and buffer setting
+    private let memoryWarningNotification = NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)
+    private var memoryObserver: AnyCancellable?
     
     private var orientationMonitorTimer: Timer?
     
@@ -290,9 +294,181 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         ]
     }
     
+    // Add pre-warming state
+    private var isPreWarmed = false
+    private var preWarmedWriter: AVAssetWriter?
+    private var preWarmedWriterInput: AVAssetWriterInput?
+    private var preWarmedPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private let recordingSetupQueue = DispatchQueue(label: "com.camera.recordingSetup", qos: .userInitiated)
+    
+    // Pre-warm recording components to prevent stuttering
+    private func preWarmRecording() {
+        guard !isPreWarmed else { return }
+        
+        print("🔄 PRE-WARMING: Setting up recording components...")
+        
+        // Use a background queue for setup to avoid blocking the UI
+        recordingSetupQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                // Create temporary URL for potential recording
+                let tempDir = FileManager.default.temporaryDirectory
+                let fileName = "prewarm_\(Date().timeIntervalSince1970).mov"
+                let tempURL = tempDir.appendingPathComponent(fileName)
+                
+                print("🔍 PRE-WARM: Creating asset writer at \(tempURL.path)")
+                
+                // Create asset writer
+                let writer = try AVAssetWriter(url: tempURL, fileType: .mov)
+                
+                // Get dimensions from current format
+                guard let device = self.device,
+                      let dimensions = device.activeFormat.dimensions else {
+                    return
+                }
+                
+                // Configure video settings based on selected codec and resolution
+                let videoSettings: [String: Any] = self.createVideoSettings(dimensions: dimensions)
+                                
+                // Create video input with appropriate settings
+                let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                videoInput.expectsMediaDataInRealTime = true
+                videoInput.transform = self.createVideoTransform()
+                
+                // Configure audio settings
+                let audioSettings: [String: Any] = self.createAudioSettings()
+                
+                // Create audio input
+                let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                audioInput.expectsMediaDataInRealTime = true
+                
+                // Create pixel buffer adaptor with appropriate format
+                let sourcePixelBufferAttributes: [String: Any] = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferWidthKey as String: dimensions.width,
+                    kCVPixelBufferHeightKey as String: dimensions.height,
+                    kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                    kCVPixelBufferMetalCompatibilityKey as String: true
+                ]
+                
+                let pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                    assetWriterInput: videoInput,
+                    sourcePixelBufferAttributes: sourcePixelBufferAttributes
+                )
+                
+                // Add inputs to writer
+                if writer.canAdd(videoInput) {
+                    writer.add(videoInput)
+                }
+                
+                if writer.canAdd(audioInput) {
+                    writer.add(audioInput)
+                }
+                
+                // Store the pre-warmed components
+                DispatchQueue.main.async {
+                    self.preWarmedWriter = writer
+                    self.preWarmedWriterInput = videoInput
+                    self.preWarmedPixelBufferAdaptor = pixelBufferAdaptor
+                    self.isPreWarmed = true
+                    print("✅ PRE-WARM: Recording components ready")
+                }
+                
+            } catch {
+                print("❌ PRE-WARM: Failed to pre-warm recording components: \(error)")
+                DispatchQueue.main.async {
+                    self.isPreWarmed = false
+                }
+            }
+        }
+    }
+    
+    // Create video settings based on current configuration
+    private func createVideoSettings(dimensions: CMVideoDimensions) -> [String: Any] {
+        if selectedCodec == .proRes {
+            return [
+                AVVideoCodecKey: AVVideoCodecType.proRes422HQ,
+                AVVideoWidthKey: dimensions.width,
+                AVVideoHeightKey: dimensions.height,
+                AVVideoColorPropertiesKey: isAppleLogEnabled ? [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+                ] : [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+                ]
+            ]
+        } else {
+            return [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: dimensions.width,
+                AVVideoHeightKey: dimensions.height,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: selectedCodec.bitrate,
+                    AVVideoMaxKeyFrameIntervalKey: Int(selectedFrameRate),
+                    AVVideoAllowFrameReorderingKey: false,
+                    AVVideoExpectedSourceFrameRateKey: selectedFrameRate,
+                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main_AutoLevel
+                ],
+                AVVideoColorPropertiesKey: isAppleLogEnabled ? [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+                ] : [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+                ]
+            ]
+        }
+    }
+    
+    // Create appropriate transform matrix based on orientation
+    private func createVideoTransform() -> CGAffineTransform {
+        switch currentInterfaceOrientation {
+        case .portrait:
+            return CGAffineTransform(rotationAngle: .pi/2)
+        case .portraitUpsideDown:
+            return CGAffineTransform(rotationAngle: -.pi/2)
+        case .landscapeRight:
+            return CGAffineTransform(rotationAngle: .pi)
+        case .landscapeLeft, _:
+            return CGAffineTransform.identity
+        }
+    }
+    
+    // Create audio settings
+    private func createAudioSettings() -> [String: Any] {
+        return [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 48000,
+            AVNumberOfChannelsKey: 2,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsNonInterleaved: false,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false
+        ]
+    }
+    
     override init() {
         super.init()
+        
         print("\n=== Camera Initialization ===")
+        
+        // Set up CIContext with optimal settings for video processing
+        let contextOptions: [CIContextOption: Any] = [
+            .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+            .useSoftwareRenderer: false,
+            .cacheIntermediates: true,
+            .highQualityDownsample: true
+        ]
+        ciContext = CIContext(options: contextOptions)
+        
+        // Configure memory management
+        configureMemoryManagement()
         
         // Add observer for flashlight settings changes
         settingsObserver = NotificationCenter.default.addObserver(
@@ -356,6 +532,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
+        memoryObserver?.cancel()
+        
         orientationMonitorTimer?.invalidate()
         orientationMonitorTimer = nil
         
@@ -368,6 +546,26 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         flashlightManager.cleanup()
+    }
+    
+    private func configureMemoryManagement() {
+        // Set up memory warning observer to clean up resources when memory is low
+        memoryObserver = memoryWarningNotification.sink { [weak self] _ in
+            guard let self = self else { return }
+            print("⚠️ Memory warning received - cleaning up resources")
+            
+            // Clean up cached images and textures
+            self.ciContext.clearCaches()
+            
+            // If not recording, clear pre-warmed resources
+            if !self.isRecording && self.isPreWarmed {
+                self.preWarmedWriter = nil
+                self.preWarmedWriterInput = nil
+                self.preWarmedPixelBufferAdaptor = nil
+                self.isPreWarmed = false
+                print("🧹 Cleared pre-warmed recording resources due to memory pressure")
+            }
+        }
     }
     
     private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {
@@ -712,6 +910,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     self.isSessionRunning = self.session.isRunning
                     self.status = self.session.isRunning ? .running : .failed
                     print("DEBUG: 📷 Camera session running: \(self.session.isRunning)")
+                    
+                    // Pre-warm recording resources when camera is ready
+                    if self.session.isRunning {
+                        Task {
+                            self.preWarmRecording()
+                        }
+                    }
                 }
             } else {
                 print("DEBUG: ⚠️ Camera session already running")
@@ -719,6 +924,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 DispatchQueue.main.async {
                     self.isSessionRunning = true
                     self.status = .running
+                    
+                    // Pre-warm recording resources if not already done
+                    if !self.isPreWarmed {
+                        Task {
+                            self.preWarmRecording()
+                        }
+                    }
                 }
             }
         }
@@ -826,160 +1038,272 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func startRecording() async {
         guard !isRecording else { return }
         
+        // Timing metrics for performance tracking
+        let startTime = CACurrentMediaTime()
+        
+        print("⏱️ START RECORDING REQUEST: \(Date().formatted(.dateTime))")
+        
         // Reset counters when starting a new recording
         videoFrameCount = 0
         audioFrameCount = 0
         successfulVideoFrames = 0
         failedVideoFrames = 0
         
-        do {
-            // Create temporary URL for recording
-            let tempDir = FileManager.default.temporaryDirectory
-            let fileName = "recording_\(Date().timeIntervalSince1970).mov"
-            let tempURL = tempDir.appendingPathComponent(fileName)
-            currentRecordingURL = tempURL
+        // Set recording state immediately to provide instant UI feedback
+        isProcessingRecording = true
+        
+        // Perform the actual recording setup on a background queue to prevent UI stutter
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
             
-            print("🎬 START RECORDING: Creating asset writer at \(tempURL.path)")
-            
-            // Create asset writer
-            assetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
-            
-            // Get dimensions from current format
-            guard let device = device,
-                  let dimensions = device.activeFormat.dimensions else {
-                throw CameraError.configurationFailed
-            }
-            
-            // Configure video settings based on current configuration
-            var videoSettings: [String: Any] = [
-                AVVideoWidthKey: dimensions.width,
-                AVVideoHeightKey: dimensions.height
-            ]
-            
-            if selectedCodec == .proRes {
-                videoSettings[AVVideoCodecKey] = AVVideoCodecType.proRes422HQ
-                // ProRes doesn't use compression properties
-            } else {
-                videoSettings[AVVideoCodecKey] = AVVideoCodecType.hevc
+            do {
+                // Performance logs
+                let setupStartTime = CACurrentMediaTime()
                 
-                // Create a single dictionary for all compression properties
-                let compressionProperties: [String: Any] = [
-                    AVVideoAverageBitRateKey: selectedCodec.bitrate,
-                    AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
-                    AVVideoMaxKeyFrameIntervalKey: Int(selectedFrameRate), // One keyframe per second
-                    AVVideoMaxKeyFrameIntervalDurationKey: 1.0, // Force keyframe every second
-                    AVVideoAllowFrameReorderingKey: false,
-                    AVVideoProfileLevelKey: VTConstants.hevcMain422_10Profile,
-                    AVVideoColorPrimariesKey: isAppleLogEnabled ? VTConstants.primariesBT2020 : VTConstants.primariesITUR709,
-                    AVVideoYCbCrMatrixKey: isAppleLogEnabled ? VTConstants.yCbCrMatrix2020 : VTConstants.yCbCrMatrixITUR709,
-                    "AllowOpenGOP": false,
-                    "EncoderID": "com.apple.videotoolbox.videoencoder.hevc.422v2"
-                ]
+                // Create temporary URL for recording
+                let tempDir = FileManager.default.temporaryDirectory
+                let fileName = "recording_\(Date().timeIntervalSince1970).mov"
+                let tempURL = tempDir.appendingPathComponent(fileName)
                 
-                videoSettings[AVVideoCompressionPropertiesKey] = compressionProperties
+                print("🎬 START RECORDING: Using \(isPreWarmed ? "pre-warmed" : "new") asset writer at \(tempURL.path)")
+                
+                // Use pre-warmed writer if available, otherwise create a new one
+                var writer: AVAssetWriter
+                var videoInput: AVAssetWriterInput
+                var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor
+                
+                if isPreWarmed, let preWarmedWriter = preWarmedWriter, 
+                   let preWarmedInput = preWarmedWriterInput,
+                   let preWarmedAdaptor = preWarmedPixelBufferAdaptor {
+                    
+                    // Delete the pre-warmed file and create a new one at the actual recording path
+                    try? FileManager.default.removeItem(at: preWarmedWriter.outputURL)
+                    
+                    // Create fresh writer
+                    writer = try AVAssetWriter(url: tempURL, fileType: .mov)
+                    
+                    // Get dimensions from current format
+                    guard let device = device,
+                          let dimensions = device.activeFormat.dimensions else {
+                        throw CameraError.setupFailed
+                    }
+                    
+                    // Configure video settings based on selected codec and resolution
+                    let videoSettings: [String: Any] = self.createVideoSettings(dimensions: dimensions)
+                    
+                    // Create video input with appropriate settings
+                    videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                    videoInput.expectsMediaDataInRealTime = true
+                    videoInput.transform = self.createVideoTransform()
+                    
+                    // Configure audio settings
+                    let audioSettings: [String: Any] = self.createAudioSettings()
+                    
+                    // Create audio input
+                    let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                    audioInput.expectsMediaDataInRealTime = true
+                    
+                    // Create pixel buffer adaptor with appropriate format
+                    let sourcePixelBufferAttributes: [String: Any] = [
+                        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                        kCVPixelBufferWidthKey as String: dimensions.width,
+                        kCVPixelBufferHeightKey as String: dimensions.height,
+                        kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                        kCVPixelBufferMetalCompatibilityKey as String: true
+                    ]
+                    
+                    pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                        assetWriterInput: videoInput,
+                        sourcePixelBufferAttributes: sourcePixelBufferAttributes
+                    )
+                    
+                    // Add inputs to writer
+                    if writer.canAdd(videoInput) {
+                        writer.add(videoInput)
+                    } else {
+                        print("❌ FAILED to add video input to asset writer")
+                    }
+                    
+                    if writer.canAdd(audioInput) {
+                        writer.add(audioInput)
+                    } else {
+                        print("❌ FAILED to add audio input to asset writer")
+                    }
+                    
+                    print("♻️ Created new writer using pre-warmed settings")
+                    
+                    // Reset pre-warming flags so we'll prepare a new one after this recording
+                    isPreWarmed = false
+                    self.preWarmedWriter = nil
+                    self.preWarmedWriterInput = nil
+                    self.preWarmedPixelBufferAdaptor = nil
+                } else {
+                    // Create asset writer
+                    writer = try AVAssetWriter(url: tempURL, fileType: .mov)
+                    
+                    // Get dimensions from current format
+                    guard let device = device,
+                          let dimensions = device.activeFormat.dimensions else {
+                        throw CameraError.setupFailed
+                    }
+                    
+                    // Configure video settings based on selected codec and resolution
+                    let videoSettings: [String: Any] = self.createVideoSettings(dimensions: dimensions)
+                    
+                    // Create video input with appropriate settings
+                    videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+                    videoInput.expectsMediaDataInRealTime = true
+                    videoInput.transform = self.createVideoTransform()
+                    
+                    // Configure audio settings
+                    let audioSettings: [String: Any] = self.createAudioSettings()
+                    
+                    // Create audio input
+                    let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                    audioInput.expectsMediaDataInRealTime = true
+                    
+                    // Create pixel buffer adaptor with appropriate format
+                    let sourcePixelBufferAttributes: [String: Any] = [
+                        kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                        kCVPixelBufferWidthKey as String: dimensions.width,
+                        kCVPixelBufferHeightKey as String: dimensions.height,
+                        kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+                        kCVPixelBufferMetalCompatibilityKey as String: true
+                    ]
+                    
+                    pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                        assetWriterInput: videoInput,
+                        sourcePixelBufferAttributes: sourcePixelBufferAttributes
+                    )
+                    
+                    // Add inputs to writer
+                    if writer.canAdd(videoInput) {
+                        writer.add(videoInput)
+                    } else {
+                        print("❌ FAILED to add video input to asset writer")
+                    }
+                    
+                    if writer.canAdd(audioInput) {
+                        writer.add(audioInput)
+                    } else {
+                        print("❌ FAILED to add audio input to asset writer")
+                    }
+                    
+                    print("🆕 Created new writer from scratch")
+                }
+                
+                // Configure video data output if not already configured (retain across recordings)
+                await self.ensureVideoAndAudioOutputsConfigured()
+                
+                // Store the writer components
+                await MainActor.run {
+                    self.assetWriter = writer
+                    self.assetWriterInput = videoInput 
+                    self.assetWriterPixelBufferAdaptor = pixelBufferAdaptor
+                    self.currentRecordingURL = tempURL
+                }
+                
+                // After finishing setup
+                print("⏱️ Recording setup completed in \(String(format: "%.2f", CACurrentMediaTime() - setupStartTime))s")
+                
+                // Start writing
+                let recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
+                await MainActor.run { self.recordingStartTime = recordingStartTime }
+                
+                writer.startWriting()
+                writer.startSession(atSourceTime: recordingStartTime)
+                
+                print("▶️ Started asset writer session at time: \(recordingStartTime.seconds)")
+                
+                // Update UI on main thread
+                await MainActor.run {
+                    self.isRecording = true
+                    self.isProcessingRecording = false
+                    
+                    // Log total time from request to recording active
+                    print("⏱️ Total time from recording request to active: \(String(format: "%.2f", CACurrentMediaTime() - startTime))s")
+                    
+                    // Start pre-warming for next recording
+                    Task {
+                        self.preWarmRecording()
+                    }
+                }
+                
+                print("✅ Started recording to: \(tempURL.path)")
+                print("📊 Recording settings:")
+                if let device = self.device, let dimensions = device.activeFormat.dimensions {
+                    print("- Resolution: \(dimensions.width)x\(dimensions.height)")
+                }
+                print("- Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC")")
+                print("- Color Space: \(self.isAppleLogEnabled ? "Apple Log (BT.2020)" : "Rec.709")")
+                print("- Chroma subsampling: 4:2:2")
+                print("- Frame Rate: \(self.selectedFrameRate) fps")
+                print("- Start Time: \(recordingStartTime.seconds)")
+                
+            } catch {
+                await MainActor.run {
+                    self.error = .recordingFailed
+                    self.isProcessingRecording = false
+                }
+                print("❌ Failed to start recording: \(error)")
             }
+        }
+    }
+    
+    // Configure video and audio outputs once and retain them
+    private func ensureVideoAndAudioOutputsConfigured() async {
+        await MainActor.run {
+            session.beginConfiguration()
+        }
+        
+        // Configure video data output if not already configured
+        if videoDataOutput == nil {
+            let output = AVCaptureVideoDataOutput()
+            output.setSampleBufferDelegate(self, queue: processingQueue)
+            output.alwaysDiscardsLateVideoFrames = true
             
-            // Create video input with better buffer handling
-            assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            assetWriterInput?.expectsMediaDataInRealTime = true
-            assetWriterInput?.transform = CGAffineTransform(rotationAngle: .pi/2)
-            
-            print("📝 Created asset writer input with settings: \(videoSettings)")
-            
-            // Configure audio settings
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
+            // Set video settings for compatibility with CoreImage
+            let settings: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
             ]
+            output.videoSettings = settings
             
-            // Create audio input
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput.expectsMediaDataInRealTime = true
-            
-            // Create pixel buffer adaptor with appropriate format
-            let sourcePixelBufferAttributes: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: dimensions.width,
-                kCVPixelBufferHeightKey as String: dimensions.height,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-                kCVPixelBufferMetalCompatibilityKey as String: true
-            ]
-            
-            assetWriterPixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: assetWriterInput!,
-                sourcePixelBufferAttributes: sourcePixelBufferAttributes
-            )
-            
-            print("📐 Created pixel buffer adaptor with format: BGRA (32-bit)")
-            
-            // Add inputs to writer
-            if assetWriter!.canAdd(assetWriterInput!) {
-                assetWriter!.add(assetWriterInput!)
-                print("✅ Added video input to asset writer")
-            } else {
-                print("❌ FAILED to add video input to asset writer")
-            }
-            
-            if assetWriter!.canAdd(audioInput) {
-                assetWriter!.add(audioInput)
-                print("✅ Added audio input to asset writer")
-            } else {
-                print("❌ FAILED to add audio input to asset writer")
-            }
-            
-            // Configure video data output if not already configured
-            if videoDataOutput == nil {
-                videoDataOutput = AVCaptureVideoDataOutput()
-                videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-                if session.canAddOutput(videoDataOutput!) {
-                    session.addOutput(videoDataOutput!)
+            await MainActor.run {
+                if session.canAddOutput(output) {
+                    session.addOutput(output)
+                    self.videoDataOutput = output
                     print("✅ Added video data output to session")
+                    
+                    // Ensure proper orientation 
+                    if let connection = output.connection(with: .video) {
+                        if connection.isVideoRotationAngleSupported(90) {
+                            connection.videoRotationAngle = 90
+                        }
+                    }
                 } else {
                     print("❌ FAILED to add video data output to session")
                 }
-            } else {
-                print("✅ Using existing video data output")
             }
+        }
+        
+        // Configure audio data output if not already configured
+        if audioDataOutput == nil {
+            let output = AVCaptureAudioDataOutput()
+            output.setSampleBufferDelegate(self, queue: processingQueue)
             
-            // Configure audio data output if not already configured
-            if audioDataOutput == nil {
-                audioDataOutput = AVCaptureAudioDataOutput()
-                audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-                if session.canAddOutput(audioDataOutput!) {
-                    session.addOutput(audioDataOutput!)
+            await MainActor.run {
+                if session.canAddOutput(output) {
+                    session.addOutput(output)
+                    self.audioDataOutput = output
                     print("✅ Added audio data output to session")
                 } else {
                     print("❌ FAILED to add audio data output to session")
                 }
-            } else {
-                print("✅ Using existing audio data output")
             }
-            
-            // Start writing
-            recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
-            assetWriter!.startWriting()
-            assetWriter!.startSession(atSourceTime: recordingStartTime!)
-            
-            print("▶️ Started asset writer session at time: \(recordingStartTime!.seconds)")
-            
-            isRecording = true
-            print("✅ Started recording to: \(tempURL.path)")
-            print("📊 Recording settings:")
-            print("- Resolution: \(dimensions.width)x\(dimensions.height)")
-            print("- Codec: \(selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC")")
-            print("- Color Space: \(isAppleLogEnabled ? "Apple Log (BT.2020)" : "Rec.709")")
-            print("- Chroma subsampling: 4:2:2")
-            print("- Frame Rate: \(selectedFrameRate) fps")
-            print("- Start Time: \(recordingStartTime!.seconds)")
-            
-        } catch {
-            self.error = .recordingFailed
-            print("❌ Failed to start recording: \(error)")
+        }
+        
+        await MainActor.run {
+            session.commitConfiguration()
         }
     }
     
@@ -987,81 +1311,100 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func stopRecording() async {
         guard isRecording else { return }
         
+        // Timing metrics for performance tracking
+        let stopStartTime = CACurrentMediaTime()
+        print("⏱️ STOP RECORDING REQUEST: \(Date().formatted(.dateTime))")
+        
         print("⏹️ STOP RECORDING: Finalizing video with \(videoFrameCount) frames (\(successfulVideoFrames) successful, \(failedVideoFrames) failed)")
         
         isProcessingRecording = true
         
-        // Mark all inputs as finished
-        assetWriterInput?.markAsFinished()
-        print("✅ Marked asset writer inputs as finished")
+        // Create a local copy to work with in the background task
+        let localAssetWriter = assetWriter
+        let localOutputURL = currentRecordingURL
         
-        // Wait for asset writer to finish
-        if let assetWriter = assetWriter {
-            print("⏳ Waiting for asset writer to finish writing...")
-            await assetWriter.finishWriting()
-            print("✅ Asset writer finished with status: \(assetWriter.status.rawValue)")
+        // Process in background to avoid UI stuttering
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
             
-            if let error = assetWriter.error {
-                print("❌ Asset writer error: \(error)")
-            }
-        }
-        
-        // Clean up recording resources
-        if let videoDataOutput = videoDataOutput {
-            session.removeOutput(videoDataOutput)
-            self.videoDataOutput = nil
-            print("🧹 Removed video data output from session")
-        }
-        
-        if let audioDataOutput = audioDataOutput {
-            session.removeOutput(audioDataOutput)
-            self.audioDataOutput = nil
-            print("🧹 Removed audio data output from session")
-        }
-        
-        // Reset recording state
-        isRecording = false
-        recordingStartTime = nil
-        
-        // Save to photo library if we have a valid recording
-        if let outputURL = currentRecordingURL {
-            print("💾 Saving video to photo library: \(outputURL.path)")
+            // Performance logs
+            let finishStartTime = CACurrentMediaTime()
             
-            // Check file size
-            let fileManager = FileManager.default
-            if let attributes = try? fileManager.attributesOfItem(atPath: outputURL.path),
-               let fileSize = attributes[.size] as? Int {
-                print("📊 Video file size: \(fileSize / 1024 / 1024) MB")
+            // Mark all inputs as finished
+            await MainActor.run {
+                self.assetWriterInput?.markAsFinished()
+                print("✅ Marked asset writer inputs as finished")
             }
             
-            // Check duration using AVAsset
-            let asset = AVURLAsset(url: outputURL)
-            let durationTime: CMTime
-            
-            if #available(iOS 16.0, *) {
-                do {
-                    durationTime = try await asset.load(.duration)
-                } catch {
-                    durationTime = CMTime.zero
-                    print("Error loading duration: \(error)")
+            // Wait for asset writer to finish
+            if let assetWriter = localAssetWriter {
+                print("⏳ Waiting for asset writer to finish writing...")
+                await assetWriter.finishWriting()
+                print("⏱️ Asset writer finished writing in \(String(format: "%.2f", CACurrentMediaTime() - finishStartTime))s with status: \(assetWriter.status.rawValue)")
+                
+                if let error = assetWriter.error {
+                    print("❌ Asset writer error: \(error)")
                 }
-            } else {
-                durationTime = asset.duration
             }
             
-            print("⏱️ Video duration: \(CMTimeGetSeconds(durationTime)) seconds")
+            // Clean up and update UI state on main thread
+            await MainActor.run {
+                // Reset recording state
+                self.isRecording = false
+                self.recordingStartTime = nil
+                
+                // Clear pointers but don't remove outputs to prevent setup stuttering
+                self.assetWriter = nil
+                self.assetWriterInput = nil
+                self.assetWriterPixelBufferAdaptor = nil
+                self.currentRecordingURL = nil
+                self.isProcessingRecording = false
+                
+                print("🏁 Recording session completed")
+                print("⏱️ Total time from stop request to completion: \(String(format: "%.2f", CACurrentMediaTime() - stopStartTime))s")
+                
+                // Start pre-warming for next recording
+                Task {
+                    self.preWarmRecording()
+                }
+            }
             
-            await saveToPhotoLibrary(outputURL)
+            // Save to photo library if we have a valid recording (do this after UI is updated)
+            if let outputURL = localOutputURL {
+                let saveStartTime = CACurrentMediaTime()
+                print("💾 Saving video to photo library: \(outputURL.path)")
+                
+                // Check file size
+                let fileManager = FileManager.default
+                if let attributes = try? fileManager.attributesOfItem(atPath: outputURL.path),
+                   let fileSize = attributes[.size] as? Int {
+                    print("📊 Video file size: \(fileSize / 1024 / 1024) MB")
+                }
+                
+                // Check duration using AVAsset
+                let asset = AVURLAsset(url: outputURL)
+                let durationTime: CMTime
+                
+                if #available(iOS 16.0, *) {
+                    do {
+                        durationTime = try await asset.load(.duration)
+                    } catch {
+                        durationTime = CMTime.zero
+                        print("Error loading duration: \(error)")
+                    }
+                } else {
+                    durationTime = asset.duration
+                }
+                
+                print("⏱️ Video duration: \(CMTimeGetSeconds(durationTime)) seconds")
+                
+                await self.saveToPhotoLibrary(outputURL)
+                
+                // Generate thumbnail after saving
+                self.generateThumbnail(from: outputURL)
+                print("⏱️ Save to photo library completed in \(String(format: "%.2f", CACurrentMediaTime() - saveStartTime))s")
+            }
         }
-        
-        // Clean up
-        assetWriter = nil
-        assetWriterInput = nil
-        assetWriterPixelBufferAdaptor = nil
-        currentRecordingURL = nil
-        isProcessingRecording = false
-        
-        print("🏁 Recording session completed")
     }
     
     private func saveToPhotoLibrary(_ outputURL: URL) async {
@@ -1945,11 +2288,27 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
         var newPixelBuffer: CVPixelBuffer?
+        
+        // Use high performance pixel buffer pool settings
+        let poolAttributes: [String: Any] = [
+            kCVPixelBufferPoolMinimumBufferCountKey as String: 3
+        ]
+        
+        let pixelBufferAttributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: CVPixelBufferGetPixelFormatType(template),
+            kCVPixelBufferWidthKey as String: CVPixelBufferGetWidth(template),
+            kCVPixelBufferHeightKey as String: CVPixelBufferGetHeight(template),
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:],
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
+        ]
+        
         CVPixelBufferCreate(kCFAllocatorDefault,
                            CVPixelBufferGetWidth(template),
                            CVPixelBufferGetHeight(template),
                            CVPixelBufferGetPixelFormatType(template),
-                           [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
+                           pixelBufferAttributes as CFDictionary,
                            &newPixelBuffer)
         
         guard let outputBuffer = newPixelBuffer else { 
@@ -1957,7 +2316,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return nil 
         }
         
-        ciContext.render(ciImage, to: outputBuffer)
+        // Lock buffer before rendering
+        CVPixelBufferLockBaseAddress(outputBuffer, [])
+        
+        // Render with high quality
+        ciContext.render(ciImage, to: outputBuffer, bounds: ciImage.extent, colorSpace: CGColorSpaceCreateDeviceRGB())
+        
+        // Unlock buffer after rendering
+        CVPixelBufferUnlockBaseAddress(outputBuffer, [])
+        
         return outputBuffer
     }
 
