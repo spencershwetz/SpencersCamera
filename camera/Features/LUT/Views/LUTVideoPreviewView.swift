@@ -107,8 +107,8 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         }
         
         @objc func deviceOrientationDidChange() {
-            let currentOrientation = UIDevice.current.orientation
-            print("🔄 Device orientation changed to: \(currentOrientation.rawValue)")
+            // Use _ to indicate we're intentionally ignoring the value
+            _ = UIDevice.current.orientation
             
             // Ensure the preview stays fixed in portrait
             DispatchQueue.main.async { [weak self] in

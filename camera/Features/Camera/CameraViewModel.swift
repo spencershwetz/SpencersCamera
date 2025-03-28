@@ -1035,9 +1035,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
             
             // Check duration using AVAsset
-            let asset = AVAsset(url: outputURL)
-            let duration = asset.duration
-            print("⏱️ Video duration: \(CMTimeGetSeconds(duration)) seconds")
+            let asset = AVURLAsset(url: outputURL)
+            let durationTime: CMTime
+            
+            if #available(iOS 16.0, *) {
+                do {
+                    durationTime = try await asset.load(.duration)
+                } catch {
+                    durationTime = CMTime.zero
+                    print("Error loading duration: \(error)")
+                }
+            } else {
+                durationTime = asset.duration
+            }
+            
+            print("⏱️ Video duration: \(CMTimeGetSeconds(durationTime)) seconds")
             
             await saveToPhotoLibrary(outputURL)
         }
@@ -1765,7 +1777,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             imageBufferAttributes: nil,
             compressedDataAllocator: nil,
             outputCallback: { outputCallbackRefCon, sourceFrameRefCon, status, flags, sampleBuffer in
-                guard let sampleBuffer = sampleBuffer else { return }
+                guard sampleBuffer != nil else { return }
                 DispatchQueue.main.async {
                     print("✅ Encoded HEVC frame received")
                 }
@@ -1872,7 +1884,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
             
             // Get the original presentation time
-            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            _ = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {

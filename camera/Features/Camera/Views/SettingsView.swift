@@ -56,7 +56,7 @@ struct SettingsView: View {
                         }
                     }
                     
-                    if let currentLUT = lutManager.currentLUTFilter {
+                    if lutManager.currentLUTFilter != nil {
                         HStack {
                             Text("Current LUT")
                             Spacer()

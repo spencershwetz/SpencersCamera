@@ -18,8 +18,10 @@ struct cameraApp: App {
         UIWindow.appearance().backgroundColor = UIColor.black
         
         // Force dark mode for the entire app
-        UIApplication.shared.windows.forEach { window in
-            window.overrideUserInterfaceStyle = .dark
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            windowScene.windows.forEach { window in
+                window.overrideUserInterfaceStyle = .dark
+            }
         }
         
         // Set dark mode for all windows that will be created

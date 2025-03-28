@@ -21,16 +21,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - Application Lifecycle
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        print("DEBUG: AppDelegate - Application launching")
-        
         // Force dark mode at UIApplication level
         if #available(iOS 13.0, *) {
             window?.overrideUserInterfaceStyle = .dark
-            UIApplication.shared.windows.forEach { window in
-                window.overrideUserInterfaceStyle = .dark
-                
-                // Disable safe area insets for all windows
-                window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
+            
+            // Use UIWindowScene.windows instead of UIApplication.shared.windows
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                windowScene.windows.forEach { window in
+                    window.overrideUserInterfaceStyle = .dark
+                    
+                    // Disable safe area insets for all windows
+                    window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
+                }
             }
         }
         
@@ -62,23 +64,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         
         // Force dark mode again after window is visible
         window?.overrideUserInterfaceStyle = .dark
-        
-        // Force black backgrounds
-        if let rootView = window?.rootViewController?.view {
-            forceBlackBackgrounds(rootView)
-        }
-        
-        // Inspect view hierarchy colors
-        inspectViewHierarchyBackgroundColors(hostingController.view)
-        
-        // Register for device orientation notifications
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        
-        // Setup orientation lock observer
-        UIWindowScene.setupOrientationLockSupport()
-        
-        // Remove debug observer for orientation
-        NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
         
         return true
     }
@@ -150,7 +135,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         // If video library is flagged as presented, always allow landscape
         if AppDelegate.isVideoLibraryPresented {
-            print("DEBUG: AppDelegate allowing landscape for video library")
             return [.portrait, .landscapeLeft, .landscapeRight]
         }
         
@@ -163,27 +147,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 // For SwiftUI presentation controllers, we need to check their content
                 if let childController = topViewController.children.first {
                     let childName = String(describing: type(of: childController))
-                    print("DEBUG: PresentationHostingController contains: \(childName)")
                     
                     // Check if any child view controller supports landscape orientation
                     for controller in topViewController.children {
                         let controllerName = String(describing: type(of: controller))
                         if AppDelegate.landscapeEnabledViewControllers.contains(where: { controllerName.contains($0) }) {
-                            print("DEBUG: AppDelegate allowing landscape for child: \(controllerName)")
                             return [.portrait, .landscapeLeft, .landscapeRight]
                         }
                     }
                     
                     // If the child name contains any of our landscape enabled controllers, allow landscape
                     if AppDelegate.landscapeEnabledViewControllers.contains(where: { childName.contains($0) }) {
-                        print("DEBUG: AppDelegate allowing landscape for child: \(childName)")
                         return [.portrait, .landscapeLeft, .landscapeRight]
                     }
                 }
                 
                 // If we can't determine the content, check if it's a full screen presentation
                 if topViewController.modalPresentationStyle == .fullScreen {
-                    print("DEBUG: AppDelegate allowing landscape for full screen presentation")
                     return [.portrait, .landscapeLeft, .landscapeRight]
                 }
             }
@@ -192,18 +172,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             if let orientationViewController = topViewController as? OrientationFixViewController {
                 // Use property from our custom view controller
                 if orientationViewController.allowsLandscapeMode {
-                    print("DEBUG: AppDelegate allowing landscape for OrientationFixViewController")
                     return [.portrait, .landscapeLeft, .landscapeRight]
                 }
             }
             
             // Check the VC name against our list
             if AppDelegate.landscapeEnabledViewControllers.contains(where: { vcName.contains($0) }) {
-                print("DEBUG: AppDelegate allowing landscape for \(vcName)")
                 return [.portrait, .landscapeLeft, .landscapeRight]
             }
-            
-            print("DEBUG: AppDelegate enforcing portrait for \(vcName)")
         }
         
         // Default to portrait only
@@ -234,11 +210,22 @@ extension UIViewController {
 
 // MARK: - UIWindow Extension
 extension UIWindow {
+    // Fix traitCollectionDidChange deprecation with trait change registration
+    @available(iOS, obsoleted: 17.0, message: "Use the trait change registration APIs declared in the UITraitChangeObservable protocol")
+    @available(*, deprecated, message: "Use the trait change registration APIs")
     override open func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
         // Force dark mode when traits change
         if #available(iOS 13.0, *) {
             self.overrideUserInterfaceStyle = .dark
+        }
+    }
+    
+    // Add UITraitChangeObservable protocol implementation for iOS 17+
+    @available(iOS 17.0, *)
+    func registerForTraitChanges() {
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (window: UIWindow, previousTraitCollection) in
+            window.overrideUserInterfaceStyle = .dark
         }
     }
 }

@@ -61,7 +61,6 @@ class RotatingViewController<Content: View>: UIViewController {
     }
     
     func updateOrientation(_ orientation: UIDeviceOrientation) {
-        print("DEBUG: [RotatingViewController] Updating orientation to: \(orientation.rawValue)")
         var transform: CGAffineTransform = .identity
         
         switch orientation {

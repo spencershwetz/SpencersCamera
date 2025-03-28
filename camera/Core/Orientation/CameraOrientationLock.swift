@@ -46,8 +46,6 @@ final class CameraOrientationLock {
         // Schedule a sequence of re-locks to handle system auto-rotation attempts
         // This helps ensure consistent behavior during portrait-to-landscape transitions
         scheduleReorientationSequence()
-        
-        print("🔒 Camera preview locked to portrait orientation (90°)")
     }
     
     /// Schedule a sequence of orientation reapplications to handle transition edge cases
@@ -143,14 +141,10 @@ final class CameraOrientationLock {
             UIDevice.current.setValue(UIDeviceOrientation.portrait.rawValue, forKey: "orientation")
             UIViewController.attemptRotationToDeviceOrientation()
         }
-        
-        print("🔄 Forced orientation update to portrait")
     }
     
     /// Handle device orientation change - call this from orientation change handlers
     static func handleDeviceOrientationChange(_ newOrientation: UIDeviceOrientation) {
-        print("🔄 Device orientation changed: \(newOrientation) (value: \(newOrientation.rawValue))")
-        
         // If the device is in landscape, enforce portrait lock
         if newOrientation.isLandscape {
             // Refresh the lock to ensure it's maintained during landscape transition

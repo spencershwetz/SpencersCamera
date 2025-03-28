@@ -140,8 +140,10 @@ struct CameraPreviewView: UIViewRepresentable {
         
         deinit {
             if #available(iOS 17.2, *) {
-                Task { @MainActor in
-                    volumeButtonHandler?.detachFromView(self)
+                Task { @MainActor [weak self] in
+                    if let self = self {
+                        self.volumeButtonHandler?.detachFromView(self)
+                    }
                 }
             }
         }
