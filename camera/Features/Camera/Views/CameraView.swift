@@ -397,7 +397,9 @@ struct CameraView: View {
         }
         
         // Double enforce orientation lock on view appearance
-        viewModel.updateInterfaceOrientation(lockCamera: true)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            viewModel.updateOrientation(windowScene.interfaceOrientation)
+        }
         
         // Setup notification for when app becomes active
         NotificationCenter.default.addObserver(
@@ -406,7 +408,9 @@ struct CameraView: View {
             queue: .main
         ) { _ in
             print("DEBUG: App became active - re-enforcing camera orientation")
-            viewModel.updateInterfaceOrientation(lockCamera: true)
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                viewModel.updateOrientation(windowScene.interfaceOrientation)
+            }
         }
         
         // Share the lutManager between views

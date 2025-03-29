@@ -248,10 +248,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
     
-    private var orientationMonitorTimer: Timer?
-    
-    // Temporarily disable the orientation enforcement during recording
-    private var isOrientationLocked = false
+    // Add flag to lock orientation updates during recording
+    private var recordingOrientationLocked = false
     
     // Save the original rotation values to restore them after recording
     private var originalRotationValues: [AVCaptureConnection: CGFloat] = [:]
@@ -341,8 +339,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             object: nil,
             queue: .main) { [weak self] _ in
                 guard let self = self,
+                      // Check connection availability early
                       let connection = self.videoDataOutput?.connection(with: .video) else { return }
-                self.updateVideoOrientation(connection)
+
+                // *** ADD THIS CHECK ***
+                if self.recordingOrientationLocked {
+                    print("DEBUG: Orientation change ignored during recording.")
+                    return
+                }
+                // *** END ADDED CHECK ***
+
+                self.updateVideoOrientation(for: connection) // Pass connection only
         }
         
         DispatchQueue.main.async { [weak self] in
@@ -351,14 +358,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         print("📱 LUT Loading: No default LUTs will be loaded")
-        
-        startOrientationMonitoring()
     }
     
     deinit {
-        orientationMonitorTimer?.invalidate()
-        orientationMonitorTimer = nil
-        
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -410,7 +412,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 session.commitConfiguration()
                 
                 if let videoConnection = videoDataOutput?.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoOrientation(for: videoConnection)
                 }
                 
                 session.startRunning()
@@ -504,7 +506,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 session.commitConfiguration()
                 
                 if let videoConnection = videoDataOutput?.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoOrientation(for: videoConnection)
                 }
                 
                 session.startRunning()
@@ -826,6 +828,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func startRecording() async {
         guard !isRecording else { return }
         
+        // *** Lock orientation updates ***
+        recordingOrientationLocked = true
+        print("🔒 Orientation updates locked for recording.")
+
         // Reset counters when starting a new recording
         videoFrameCount = 0
         audioFrameCount = 0
@@ -1083,6 +1089,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             await saveToPhotoLibrary(outputURL)
         }
         
+        // *** Unlock orientation updates AFTER saving/cleanup but before resetting processing flag ***
+        recordingOrientationLocked = false
+        print("🔓 Orientation updates unlocked.")
+        // Trigger an orientation update based on the current device state
+        if let connection = self.videoDataOutput?.connection(with: .video) {
+            self.updateVideoOrientation(for: connection)
+        }
+
         // Clean up
         assetWriter = nil
         assetWriterInput = nil
@@ -1145,25 +1159,44 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
-        guard connection.isVideoRotationAngleSupported(90) else { return }
-        
-        if lockCamera {
-            connection.videoRotationAngle = 90
-            return
-        }
-        
-        switch currentInterfaceOrientation {
+    private func updateVideoOrientation(for connection: AVCaptureConnection) {
+        let deviceOrientation = UIDevice.current.orientation
+        let newAngle: CGFloat
+
+        switch deviceOrientation {
         case .portrait:
-            connection.videoRotationAngle = 90
-        case .portraitUpsideDown:
-            connection.videoRotationAngle = 270
+            newAngle = 90
         case .landscapeLeft:
-            connection.videoRotationAngle = 0
+            newAngle = 0
         case .landscapeRight:
-            connection.videoRotationAngle = 180
-        default:
-            connection.videoRotationAngle = 90
+            newAngle = 180
+        case .portraitUpsideDown:
+            newAngle = 270
+        case .faceUp, .faceDown, .unknown:
+            // Don't change angle if orientation is ambiguous
+            // Keep the current angle
+            print("DEBUG: Ambiguous orientation (\(deviceOrientation.rawValue)), maintaining current videoRotationAngle: \(connection.videoRotationAngle)°")
+            newAngle = connection.videoRotationAngle // Keep current angle
+        @unknown default:
+            print("DEBUG: Unknown device orientation (\(deviceOrientation.rawValue)), defaulting videoRotationAngle to 90°")
+            newAngle = 90 // Default to portrait
+        }
+
+        // Check if the new angle is supported
+        guard connection.isVideoRotationAngleSupported(newAngle) else {
+             print("⚠️ Rotation angle \(newAngle)° not supported for connection.")
+             // Optionally, try a default like 90 if the calculated one isn't supported?
+             // For now, just return if not supported.
+             return
+        }
+
+        // Only update if the angle is actually different
+        if connection.videoRotationAngle != newAngle {
+            connection.videoRotationAngle = newAngle
+            print("🔄 Updated video connection rotation angle to \(newAngle)° based on device orientation \(deviceOrientation.rawValue)")
+        } else {
+             // Optional: Log that the angle is already correct
+             // print("DEBUG: Video connection rotation angle already \(newAngle)° for device orientation \(deviceOrientation.rawValue)")
         }
     }
     
@@ -1267,53 +1300,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     private var lastAdjustmentTime: TimeInterval = 0
-    
-    func updateInterfaceOrientation(lockCamera: Bool = false) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            print("DEBUG: Enforcing camera orientation lock...")
-            
-            // Update current orientation state
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                self.currentInterfaceOrientation = windowScene.interfaceOrientation
-                
-                // First: Lock movie output connection
-                if let connection = self.videoDataOutput?.connection(with: .video) {
-                    // Always enforce fixed rotation for video
-                    if connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: CameraViewModel enforced fixed angle=90° for video connection")
-                    }
-                    
-                    // Check and set any other connections as well
-                    self.videoDataOutput?.connections.forEach { conn in
-                        if conn !== connection && conn.isVideoRotationAngleSupported(90) && conn.videoRotationAngle != 90 {
-                            conn.videoRotationAngle = 90
-                            print("DEBUG: Set additional connection to 90°")
-                        }
-                    }
-                }
-                
-                // Second: Force all session connections to have fixed rotation
-                self.session.connections.forEach { connection in
-                    if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: Set session connection to 90°")
-                    }
-                }
-                
-                // Third: Check all session outputs and their connections
-                self.session.outputs.forEach { output in
-                    output.connections.forEach { connection in
-                        if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                            connection.videoRotationAngle = 90
-                            print("DEBUG: Set output connection to 90°")
-                        }
-                    }
-                }
-            }
-        }
-    }
     
     private func configureHDR() {
         guard let device = device,
@@ -1423,7 +1409,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         currentTint = newValue.clamped(to: tintRange)
         configureTintSettings()
     }
-    
+
     var shutterAngle: Double {
         get {
             let angle = Double(shutterSpeed.value) / Double(shutterSpeed.timescale) * selectedFrameRate * 360.0
@@ -1510,55 +1496,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         return ciImage
     }
     
-    private func enforceFixedOrientation() {
-        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
-        
-        // If video library is presented, we should not enforce orientation
-        guard !AppDelegate.isVideoLibraryPresented else {
-            print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
-            return
-        }
-        
-        // If video library is not presented, enforce camera orientation
-        DispatchQueue.main.async {
-            self.videoDataOutput?.connections.forEach { connection in
-                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                    connection.videoRotationAngle = 90
-                    print("DEBUG: Timer enforced fixed angle=90° on connection")
-                }
-            }
-            
-            self.session.connections.forEach { connection in
-                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                    connection.videoRotationAngle = 90
-                }
-            }
-        }
-    }
-    
-    private func startOrientationMonitoring() {
-        // Only start if not already locked
-        guard !isOrientationLocked else { return }
-        
-        orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self = self, !self.isOrientationLocked else { return }
-                
-                // Skip enforcing orientation if video library is presented
-                if !AppDelegate.isVideoLibraryPresented {
-                    self.enforceFixedOrientation()
-                } else {
-                    print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
-                }
-            }
-        }
-        
-        print("DEBUG: Started orientation monitoring timer")
-    }
-    
     func updateOrientation(_ orientation: UIInterfaceOrientation) {
         self.currentInterfaceOrientation = orientation
-        updateInterfaceOrientation()
+        // Do NOT call camera update logic from here anymore
+        // updateInterfaceOrientation()
+        // Instead, UI elements should observe currentInterfaceOrientation
+        print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
     }
     
     private func updateVideoConfiguration() {
@@ -1730,7 +1673,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     if connection.isVideoStabilizationSupported {
                         connection.preferredVideoStabilizationMode = .auto
                     }
-                    updateVideoOrientation(connection, lockCamera: true)
+                    updateVideoOrientation(for: connection)
                 }
             } else {
                 print("DEBUG: ❌ Cannot add input for \(lens.rawValue)× lens")
