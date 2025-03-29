@@ -310,6 +310,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         }
         
+        // Start monitoring device orientation
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        
+        // Add observer for orientation changes
+        orientationObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil,
+            queue: .main) { [weak self] _ in
+                guard let self = self else { return }
+                // Only update video orientation if we're not recording
+                if !self.isRecording {
+                    self.updateVideoOrientation()
+                }
+        }
+        
         do {
             try setupSession()
             if let device = device {
@@ -336,26 +351,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             print("Failed to setup session: \(error)")
         }
         
-        orientationObserver = NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil,
-            queue: .main) { [weak self] _ in
-                guard let self = self,
-                      let connection = self.videoDataOutput?.connection(with: .audio) else { return }
-                self.updateVideoOrientation(connection)
-        }
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.updateShutterAngle(180.0)
-        }
-        
         print("📱 LUT Loading: No default LUTs will be loaded")
-        
-        startOrientationMonitoring()
     }
     
     deinit {
+        // Stop monitoring device orientation
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        
         orientationMonitorTimer?.invalidate()
         orientationMonitorTimer = nil
         
@@ -410,7 +412,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 session.commitConfiguration()
                 
                 if let videoConnection = videoDataOutput?.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoOrientation()
                 }
                 
                 session.startRunning()
@@ -504,7 +506,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 session.commitConfiguration()
                 
                 if let videoConnection = videoDataOutput?.connection(with: .video) {
-                    updateVideoOrientation(videoConnection, lockCamera: true)
+                    updateVideoOrientation()
                 }
                 
                 session.startRunning()
@@ -882,7 +884,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // Create video input with better buffer handling
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
-            assetWriterInput?.transform = CGAffineTransform(rotationAngle: .pi/2)
+            
+            // Apply transform based on current device orientation
+            let deviceOrientation = UIDevice.current.orientation
+            assetWriterInput?.transform = transformForDeviceOrientation(deviceOrientation)
             
             print("📝 Created asset writer input with settings: \(videoSettings)")
             
@@ -1116,25 +1121,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    private func updateVideoOrientation(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
-        guard connection.isVideoRotationAngleSupported(90) else { return }
+    private func updateVideoOrientation() {
+        guard let connection = videoDataOutput?.connection(with: .video),
+              connection.isVideoRotationAngleSupported(90) else { return }
         
-        if lockCamera {
-            connection.videoRotationAngle = 90
-            return
-        }
-        
-        switch currentInterfaceOrientation {
-        case .portrait:
-            connection.videoRotationAngle = 90
-        case .portraitUpsideDown:
-            connection.videoRotationAngle = 270
-        case .landscapeLeft:
-            connection.videoRotationAngle = 0
-        case .landscapeRight:
-            connection.videoRotationAngle = 180
-        default:
-            connection.videoRotationAngle = 90
+        // Only update video orientation if we're not recording
+        if !isRecording {
+            let deviceOrientation = UIDevice.current.orientation
+            switch deviceOrientation {
+            case .portrait:
+                connection.videoRotationAngle = 90
+            case .portraitUpsideDown:
+                connection.videoRotationAngle = 270
+            case .landscapeLeft:
+                connection.videoRotationAngle = 0
+            case .landscapeRight:
+                connection.videoRotationAngle = 180
+            default:
+                connection.videoRotationAngle = 90
+            }
         }
     }
     
@@ -1701,7 +1706,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     if connection.isVideoStabilizationSupported {
                         connection.preferredVideoStabilizationMode = .auto
                     }
-                    updateVideoOrientation(connection, lockCamera: true)
+                    updateVideoOrientation()
                 }
             } else {
                 print("DEBUG: ❌ Cannot add input for \(lens.rawValue)× lens")
@@ -1988,6 +1993,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         return sampleBuffer
+    }
+
+    private func transformForDeviceOrientation(_ orientation: UIDeviceOrientation) -> CGAffineTransform {
+        switch orientation {
+        case .portrait:
+            return CGAffineTransform(rotationAngle: .pi/2)
+        case .landscapeLeft: // USB-C port on right
+            return CGAffineTransform(rotationAngle: 0)
+        case .landscapeRight: // USB-C port on left
+            return CGAffineTransform(rotationAngle: .pi)
+        case .portraitUpsideDown:
+            return CGAffineTransform(rotationAngle: -.pi/2)
+        default:
+            return CGAffineTransform(rotationAngle: .pi/2) // Default to portrait
+        }
     }
 }
 

@@ -275,10 +275,10 @@ struct CameraPreviewView: UIViewRepresentable {
             // Set background color
             backgroundColor = .black
             
-            // Force portrait orientation for the preview layer
+            // Keep preview layer in portrait for UI
             if let connection = previewLayer.connection {
                 if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
+                    connection.videoRotationAngle = 90 // Keep preview in portrait
                 }
             }
             
@@ -303,7 +303,7 @@ struct CameraPreviewView: UIViewRepresentable {
             
             CATransaction.commit()
             
-            // Force portrait orientation
+            // Keep preview in portrait
             if let connection = previewLayer.connection {
                 if connection.isVideoRotationAngleSupported(90) {
                     connection.videoRotationAngle = 90
