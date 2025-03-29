@@ -341,7 +341,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             object: nil,
             queue: .main) { [weak self] _ in
                 guard let self = self,
-                      let connection = self.videoDataOutput?.connection(with: .audio) else { return }
+                      let connection = self.videoDataOutput?.connection(with: .video) else { return }
                 self.updateVideoOrientation(connection)
         }
         
@@ -845,15 +845,28 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             assetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
             
             // Get dimensions from current format
-            guard let device = device,
-                  let dimensions = device.activeFormat.dimensions else {
+            guard let device = device else {
+                print("❌ ERROR: Camera device is nil in startRecording")
                 throw CameraError.configurationFailed
             }
             
+            // Get active format (not optional)
+            let format = device.activeFormat
+            
+            // Now safely get dimensions (which are optional)
+            guard let dimensions = format.dimensions else {
+                print("❌ ERROR: Could not get dimensions from active format: \(format)")
+                throw CameraError.configurationFailed
+            }
+            
+            // Set dimensions based on the native format dimensions
+            let videoWidth = dimensions.width
+            let videoHeight = dimensions.height
+            
             // Configure video settings based on current configuration
             var videoSettings: [String: Any] = [
-                AVVideoWidthKey: dimensions.width,
-                AVVideoHeightKey: dimensions.height
+                AVVideoWidthKey: videoWidth,  // Use native width
+                AVVideoHeightKey: videoHeight // Use native height
             ]
             
             if selectedCodec == .proRes {
@@ -882,9 +895,36 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // Create video input with better buffer handling
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
-            assetWriterInput?.transform = CGAffineTransform(rotationAngle: .pi/2)
+            
+            // Determine the correct transform based on device orientation
+            let currentOrientation = UIDevice.current.orientation
+            var transform: CGAffineTransform
+            switch currentOrientation {
+            case .landscapeLeft:
+                transform = .identity // 0 degrees
+                print("📐 Applying transform for landscapeLeft (0°)")
+            case .landscapeRight:
+                transform = CGAffineTransform(rotationAngle: .pi) // 180 degrees
+                print("📐 Applying transform for landscapeRight (180°)")
+            case .portraitUpsideDown:
+                transform = CGAffineTransform(rotationAngle: -.pi / 2) // 270 degrees
+                print("📐 Applying transform for portraitUpsideDown (270°)")
+            case .portrait, .faceUp, .faceDown, .unknown:
+                fallthrough // Treat faceUp/faceDown/unknown as portrait
+            default:
+                transform = CGAffineTransform(rotationAngle: .pi / 2) // 90 degrees (Portrait default)
+                print("📐 Applying transform for portrait/default (90°)")
+            }
+            assetWriterInput?.transform = transform
             
             print("📝 Created asset writer input with settings: \(videoSettings)")
+            
+            // Log the video connection's rotation angle before starting
+            if let videoConnection = self.videoDataOutput?.connection(with: .video) {
+                print("DEBUG: Video connection angle before starting writer: \(videoConnection.videoRotationAngle)°")
+            } else {
+                print("DEBUG: Could not get video connection before starting writer.")
+            }
             
             // Configure audio settings
             let audioSettings: [String: Any] = [
@@ -970,7 +1010,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             isRecording = true
             print("✅ Started recording to: \(tempURL.path)")
             print("📊 Recording settings:")
-            print("- Resolution: \(dimensions.width)x\(dimensions.height)")
+            // Log the actual dimensions being used by the writer
+            print("- Resolution: \(videoWidth)x\(videoHeight) (Writer Dimensions)")
             print("- Codec: \(selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC")")
             print("- Color Space: \(isAppleLogEnabled ? "Apple Log (BT.2020)" : "Rec.709")")
             print("- Chroma subsampling: 4:2:2")
