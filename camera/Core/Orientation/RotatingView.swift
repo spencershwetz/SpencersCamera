@@ -74,8 +74,10 @@ class RotatingViewController<Content: View>: UIViewController {
             transform = .identity
         }
         
-        UIView.animate(withDuration: 0.3) {
-            self.hostingController.view.transform = transform
+        DispatchQueue.main.async {
+            UIView.animate(withDuration: 0.3) {
+                self.hostingController.view.transform = transform
+            }
         }
     }
 } 
