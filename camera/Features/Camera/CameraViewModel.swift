@@ -30,14 +30,36 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
             
+            // Lock orientation when recording starts, unlock when it ends
+            isOrientationLocked = isRecording
+            
+            // Store original rotation values when recording starts
+            if isRecording {
+                // Store current orientation values for all connections
+                session.connections.forEach { connection in
+                    if connection.isVideoRotationAngleSupported(90) {
+                        originalRotationValues[connection] = connection.videoRotationAngle
+                    }
+                }
+                // Force portrait orientation for recording
+                updateInterfaceOrientation(lockCamera: true)
+            } else {
+                // Restore original rotation values when recording ends
+                originalRotationValues.forEach { connection, angle in
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = angle
+                    }
+                }
+                originalRotationValues.removeAll()
+                flashlightManager.cleanup()
+            }
+            
             // Handle flashlight state based on recording state
             let settings = SettingsModel()
             if isRecording && settings.isFlashlightEnabled {
                 Task {
                     await flashlightManager.performStartupSequence()
                 }
-            } else {
-                flashlightManager.cleanup()
             }
         }
     }

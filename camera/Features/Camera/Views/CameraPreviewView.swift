@@ -278,7 +278,11 @@ struct CameraPreviewView: UIViewRepresentable {
             // Keep preview layer in portrait for UI
             if let connection = previewLayer.connection {
                 if connection.isVideoRotationAngleSupported(90) {
+                    // Disable animations for orientation changes
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
                     connection.videoRotationAngle = 90 // Keep preview in portrait
+                    CATransaction.commit()
                 }
             }
             
@@ -301,14 +305,14 @@ struct CameraPreviewView: UIViewRepresentable {
                 overlay.frame = bounds
             }
             
-            CATransaction.commit()
-            
-            // Keep preview in portrait
+            // Keep preview in portrait with disabled animations
             if let connection = previewLayer.connection {
                 if connection.isVideoRotationAngleSupported(90) {
                     connection.videoRotationAngle = 90
                 }
             }
+            
+            CATransaction.commit()
         }
         
         // MARK: - Frame Management
@@ -331,7 +335,7 @@ struct CameraPreviewView: UIViewRepresentable {
             // Ensure corners stay rounded
             previewLayer.cornerRadius = cornerRadius
             
-            // Force portrait orientation
+            // Force portrait orientation without animations
             if let connection = previewLayer.connection {
                 if connection.isVideoRotationAngleSupported(90) {
                     connection.videoRotationAngle = 90

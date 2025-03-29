@@ -11,6 +11,11 @@ extension CameraViewModel {
         // Only update video orientation if we're not recording
         if !isRecording {
             let deviceOrientation = UIDevice.current.orientation
+            
+            // Disable implicit animations to prevent glitches
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            
             switch deviceOrientation {
             case .portrait:
                 connection.videoRotationAngle = 90
@@ -23,53 +28,50 @@ extension CameraViewModel {
             default:
                 connection.videoRotationAngle = 90
             }
+            
+            CATransaction.commit()
         }
     }
     
     func updateInterfaceOrientation(lockCamera: Bool = false) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            print("DEBUG: Enforcing camera orientation lock...")
             
-            // Update current orientation state
+            // Disable animations during orientation changes
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
                 self.currentInterfaceOrientation = windowScene.interfaceOrientation
                 
-                // First: Lock movie output connection
-                if let connection = self.videoDataOutput?.connection(with: .video) {
-                    // Always enforce fixed rotation for video
-                    if connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: CameraViewModel enforced fixed angle=90° for video connection")
-                    }
-                    
-                    // Check and set any other connections as well
-                    self.videoDataOutput?.connections.forEach { conn in
-                        if conn !== connection && conn.isVideoRotationAngleSupported(90) && conn.videoRotationAngle != 90 {
-                            conn.videoRotationAngle = 90
-                            print("DEBUG: Set additional connection to 90°")
+                // Only update connections if not recording or explicitly locking camera
+                if !self.isRecording || lockCamera {
+                    // Update video output connection
+                    if let connection = self.videoDataOutput?.connection(with: .video) {
+                        if connection.isVideoRotationAngleSupported(90) {
+                            connection.videoRotationAngle = 90
                         }
                     }
-                }
-                
-                // Second: Force all session connections to have fixed rotation
-                self.session.connections.forEach { connection in
-                    if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: Set session connection to 90°")
-                    }
-                }
-                
-                // Third: Check all session outputs and their connections
-                self.session.outputs.forEach { output in
-                    output.connections.forEach { connection in
-                        if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
+                    
+                    // Update all session connections
+                    self.session.connections.forEach { connection in
+                        if connection.isVideoRotationAngleSupported(90) {
                             connection.videoRotationAngle = 90
-                            print("DEBUG: Set output connection to 90°")
+                        }
+                    }
+                    
+                    // Update all session outputs and their connections
+                    self.session.outputs.forEach { output in
+                        output.connections.forEach { connection in
+                            if connection.isVideoRotationAngleSupported(90) {
+                                connection.videoRotationAngle = 90
+                            }
                         }
                     }
                 }
             }
+            
+            CATransaction.commit()
         }
     }
     
