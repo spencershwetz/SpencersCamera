@@ -1684,9 +1684,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                         connection.preferredVideoStabilizationMode = .auto
                     }
                     
-                    // Always update the orientation based on the current device state,
-                    // respecting the recording lock which prevents automatic updates.
-                    updateVideoOrientation(for: connection)
+                    // Only update orientation if NOT recording
+                    if !isRecording {
+                        // Update the orientation based on the current device state.
+                        updateVideoOrientation(for: connection)
+                    }
                 }
             } else {
                 print("DEBUG: ❌ Cannot add input for \(lens.rawValue)× lens")
