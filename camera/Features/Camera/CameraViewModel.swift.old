@@ -436,7 +436,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @MainActor
     func startRecording() async {
-        guard !isRecording, status == .running, let device = self.device else { return }
+        guard !isRecording else { return }
         
         // Update configuration for recording
         recordingService.setDevice(device)
@@ -640,39 +640,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return .identity
         }
     }
-
-    // MARK: - LUT Processing
-
-    private func applyLUT(to image: CIImage, using filter: CIFilter) -> CIImage? {
-        filter.setValue(image, forKey: kCIInputImageKey)
-        return filter.outputImage
-    }
-
-    // MARK: - Error Handling
-
-    // Common error handler for all delegate protocols
-    func didEncounterError(_ error: CameraError) {
-        DispatchQueue.main.async {
-            self.error = error
-        }
-    }
-
-    // MARK: - Video Frame Processing
-    
-    func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CVPixelBuffer? {
-        // Process the frame if needed, or handle any frame-level logic
-        // For now, just returning the pixel buffer from the sample buffer
-        return CMSampleBufferGetImageBuffer(sampleBuffer)
-    }
 }
 
-// MARK: - VideoFormatServiceDelegate
-
-extension CameraViewModel: VideoFormatServiceDelegate {
-    func didUpdateFrameRate(_ frameRate: Double) {
-        DispatchQueue.main.async {
-            self.selectedFrameRate = frameRate
-        }
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        return min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -688,6 +660,12 @@ extension CameraViewModel: CameraSetupServiceDelegate {
     func didUpdateSessionStatus(_ status: Status) {
         DispatchQueue.main.async {
             self.status = status
+        }
+    }
+    
+    func didEncounterError(_ error: CameraError) {
+        DispatchQueue.main.async {
+            self.error = error
         }
     }
     
@@ -768,6 +746,16 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
     func didUpdateZoomFactor(_ factor: CGFloat) {
         DispatchQueue.main.async {
             self.currentZoomFactor = factor
+        }
+    }
+}
+
+// MARK: - VideoFormatServiceDelegate
+
+extension CameraViewModel: VideoFormatServiceDelegate {
+    func didUpdateFrameRate(_ frameRate: Double) {
+        DispatchQueue.main.async {
+            self.selectedFrameRate = frameRate
         }
     }
 }
