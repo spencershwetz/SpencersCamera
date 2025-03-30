@@ -24,10 +24,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         print("DEBUG: AppDelegate - Application launching")
         
         // Force dark mode at UIApplication level
-        if #available(iOS 13.0, *) {
-            window?.overrideUserInterfaceStyle = .dark
-            UIApplication.shared.windows.forEach { window in
-                window.overrideUserInterfaceStyle = .dark
+        window?.enforceDarkMode()
+            
+        // Update to use UIWindowScene.windows
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            windowScene.windows.forEach { window in
+                window.enforceDarkMode()
                 
                 // Disable safe area insets for all windows
                 window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
@@ -61,7 +63,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         window?.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
         
         // Force dark mode again after window is visible
-        window?.overrideUserInterfaceStyle = .dark
+        window?.enforceDarkMode()
         
         // Force black backgrounds
         if let rootView = window?.rootViewController?.view {
@@ -234,9 +236,8 @@ extension UIViewController {
 
 // MARK: - UIWindow Extension
 extension UIWindow {
-    override open func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        super.traitCollectionDidChange(previousTraitCollection)
-        // Force dark mode when traits change
+    /// Enforce dark mode for the window
+    func enforceDarkMode() {
         if #available(iOS 13.0, *) {
             self.overrideUserInterfaceStyle = .dark
         }

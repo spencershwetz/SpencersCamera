@@ -8,7 +8,7 @@ struct FlashlightSettingsView: View {
         Section {
             if flashlightManager.isAvailable {
                 Toggle("Enable Recording Light", isOn: $settingsModel.isFlashlightEnabled)
-                    .onChange(of: settingsModel.isFlashlightEnabled) { newValue in
+                    .onChange(of: settingsModel.isFlashlightEnabled) { oldValue, newValue in
                         flashlightManager.isEnabled = newValue
                     }
                 

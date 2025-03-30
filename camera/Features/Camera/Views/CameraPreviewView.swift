@@ -122,9 +122,14 @@ struct CameraPreviewView: UIViewRepresentable {
         
         deinit {
             if #available(iOS 17.2, *) {
+                // Store a weak reference to volumeButtonHandler before deinit
+                let handler = volumeButtonHandler
+                let view = self
                 Task { @MainActor in
-                    volumeButtonHandler?.detachFromView(self)
+                    handler?.detachFromView(view)
                 }
+                // Clear the reference
+                volumeButtonHandler = nil
             }
         }
         

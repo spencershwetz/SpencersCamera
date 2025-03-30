@@ -288,6 +288,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         ]
     }
     
+    // Store recording orientation
+    private var recordingOrientation: CGFloat?
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -341,13 +344,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 guard let self = self,
                       // Check connection availability early
                       let connection = self.videoDataOutput?.connection(with: .video) else { return }
-
-                // *** ADD THIS CHECK ***
-                if self.recordingOrientationLocked {
-                    print("DEBUG: Orientation change ignored during recording.")
-                    return
-                }
-                // *** END ADDED CHECK ***
 
                 self.updateVideoOrientation(for: connection) // Pass connection only
         }
@@ -828,10 +824,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func startRecording() async {
         guard !isRecording else { return }
         
-        // *** Lock orientation updates ***
+        // Store current orientation when starting recording
+        if let videoConnection = videoDataOutput?.connection(with: .video) {
+            recordingOrientation = videoConnection.videoRotationAngle
+            print("🔒 Stored recording orientation: \(recordingOrientation ?? 0)°")
+        }
+        
+        // Lock orientation updates
         recordingOrientationLocked = true
         print("🔒 Orientation updates locked for recording.")
-
+        
         // Reset counters when starting a new recording
         videoFrameCount = 0
         audioFrameCount = 0
@@ -1034,6 +1036,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func stopRecording() async {
         guard isRecording else { return }
         
+        // Clear stored recording orientation
+        recordingOrientation = nil
+        print("🔓 Cleared recording orientation")
+        
         print("⏹️ STOP RECORDING: Finalizing video with \(videoFrameCount) frames (\(successfulVideoFrames) successful, \(failedVideoFrames) failed)")
         
         isProcessingRecording = true
@@ -1082,14 +1088,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
             
             // Check duration using AVAsset
-            let asset = AVAsset(url: outputURL)
-            let duration = asset.duration
-            print("⏱️ Video duration: \(CMTimeGetSeconds(duration)) seconds")
+            let asset = AVURLAsset(url: outputURL)
+            Task {
+                let duration = try? await asset.load(.duration)
+                if let duration = duration {
+                    print("⏱️ Video duration: \(CMTimeGetSeconds(duration)) seconds")
+                }
+            }
             
             await saveToPhotoLibrary(outputURL)
         }
         
-        // *** Unlock orientation updates AFTER saving/cleanup but before resetting processing flag ***
+        // Unlock orientation updates
         recordingOrientationLocked = false
         print("🔓 Orientation updates unlocked.")
         // Trigger an orientation update based on the current device state
@@ -1673,6 +1683,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     if connection.isVideoStabilizationSupported {
                         connection.preferredVideoStabilizationMode = .auto
                     }
+                    
+                    // Always update the orientation based on the current device state,
+                    // respecting the recording lock which prevents automatic updates.
                     updateVideoOrientation(for: connection)
                 }
             } else {
@@ -1749,9 +1762,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             imageBufferAttributes: nil,
             compressedDataAllocator: nil,
             outputCallback: { outputCallbackRefCon, sourceFrameRefCon, status, flags, sampleBuffer in
-                guard let sampleBuffer = sampleBuffer else { return }
-                DispatchQueue.main.async {
-                    print("✅ Encoded HEVC frame received")
+                if sampleBuffer != nil {
+                    DispatchQueue.main.async {
+                        print("✅ Encoded HEVC frame received")
+                    }
                 }
             },
             refcon: nil,
@@ -1854,9 +1868,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             if shouldLog {
                 print("📽️ Processing video frame #\(videoFrameCount), writer status: \(assetWriter.status.rawValue)")
             }
-            
-            // Get the original presentation time
-            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {

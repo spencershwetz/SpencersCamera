@@ -315,7 +315,7 @@ struct CameraView: View {
     private var recordButton: some View {
         Button(action: {
             withAnimation(.easeInOut(duration: 0.3)) {
-                let task: Task<Void, Never> = Task { @MainActor in
+                _ = Task { @MainActor in
                     if viewModel.isRecording {
                         await viewModel.stopRecording()
                     } else {
