@@ -85,11 +85,25 @@ struct CameraPreviewView: UIViewRepresentable {
             // Add content view to fill the container but with space only for border
             addSubview(contentView)
             contentView.translatesAutoresizingMaskIntoConstraints = false
+            
+            // Create constraints with slightly lower priority
+            let topConstraint = contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth)
+            let bottomConstraint = contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth)
+            let leadingConstraint = contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth)
+            let trailingConstraint = contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
+            
+            // Set priority to just below required
+            topConstraint.priority = .required - 1
+            bottomConstraint.priority = .required - 1
+            leadingConstraint.priority = .required - 1
+            trailingConstraint.priority = .required - 1
+            
+            // Activate the constraints
             NSLayoutConstraint.activate([
-                contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth),
-                contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth),
-                contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth),
-                contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
+                topConstraint,
+                bottomConstraint,
+                leadingConstraint,
+                trailingConstraint
             ])
             
             // Disable safe area insets
@@ -178,10 +192,10 @@ struct CameraPreviewView: UIViewRepresentable {
             // Check for changes in safe area insets
             if safeAreaInsets != .zero {
                 // Force content to fill entire view with just border width
-                contentView.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
-                                                                left: borderWidth,
-                                                                bottom: borderWidth,
-                                                                right: borderWidth))
+                // contentView.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
+                //                                                 left: borderWidth,
+                //                                                 bottom: borderWidth,
+                //                                                 right: borderWidth))
             }
             
             // Set black background for parent views

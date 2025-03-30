@@ -903,28 +903,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // Create video input with better buffer handling
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
-            
-            // Determine the correct transform based on device orientation
-            let currentOrientation = UIDevice.current.orientation
-            var transform: CGAffineTransform
-            switch currentOrientation {
-            case .landscapeLeft:
-                transform = .identity // 0 degrees
-                print("📐 Applying transform for landscapeLeft (0°)")
-            case .landscapeRight:
-                transform = CGAffineTransform(rotationAngle: .pi) // 180 degrees
-                print("📐 Applying transform for landscapeRight (180°)")
-            case .portraitUpsideDown:
-                transform = CGAffineTransform(rotationAngle: -.pi / 2) // 270 degrees
-                print("📐 Applying transform for portraitUpsideDown (270°)")
-            case .portrait, .faceUp, .faceDown, .unknown:
-                fallthrough // Treat faceUp/faceDown/unknown as portrait
-            default:
-                transform = CGAffineTransform(rotationAngle: .pi / 2) // 90 degrees (Portrait default)
-                print("📐 Applying transform for portrait/default (90°)")
-            }
-            assetWriterInput?.transform = transform
-            
+
             print("📝 Created asset writer input with settings: \(videoSettings)")
             
             // Log the video connection's rotation angle before starting
@@ -1170,6 +1149,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     private func updateVideoOrientation(for connection: AVCaptureConnection) {
+        // Add check here: If orientation is locked during recording, do nothing.
+        guard !recordingOrientationLocked else {
+            print("🔄 Orientation update skipped: Recording in progress.")
+            return
+        }
+
         let deviceOrientation = UIDevice.current.orientation
         let newAngle: CGFloat
 
