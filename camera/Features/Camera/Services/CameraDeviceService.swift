@@ -15,6 +15,7 @@ class CameraDeviceService {
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var device: AVCaptureDevice?
     private var lastZoomFactor: CGFloat = 1.0
+    private let cameraQueue = DispatchQueue(label: "com.camera.device-service")
     
     init(session: AVCaptureSession, delegate: CameraDeviceServiceDelegate) {
         self.session = session
@@ -23,78 +24,161 @@ class CameraDeviceService {
     
     func setDevice(_ device: AVCaptureDevice) {
         self.device = device
+        logger.info("📸 Set initial device: \(device.localizedName)")
     }
     
     func setVideoDeviceInput(_ input: AVCaptureDeviceInput) {
         self.videoDeviceInput = input
+        logger.info("📸 Set initial video input: \(input.device.localizedName)")
+    }
+    
+    private func configureSession(for newDevice: AVCaptureDevice, lens: CameraLens) throws {
+        // Remove existing inputs and outputs
+        session.inputs.forEach { session.removeInput($0) }
+        
+        // Add new input
+        let newInput = try AVCaptureDeviceInput(device: newDevice)
+        guard session.canAddInput(newInput) else {
+            logger.error("❌ Cannot add input for \(newDevice.localizedName)")
+            throw CameraError.invalidDeviceInput
+        }
+        
+        session.addInput(newInput)
+        videoDeviceInput = newInput
+        device = newDevice
+        
+        // Configure the new device
+        try newDevice.lockForConfiguration()
+        if newDevice.isExposureModeSupported(.continuousAutoExposure) {
+            newDevice.exposureMode = .continuousAutoExposure
+        }
+        if newDevice.isFocusModeSupported(.continuousAutoFocus) {
+            newDevice.focusMode = .continuousAutoFocus
+        }
+        newDevice.unlockForConfiguration()
+        
+        logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
     }
     
     func switchToLens(_ lens: CameraLens) {
-        logger.info("Switching to \(lens.rawValue)× lens")
-        
-        // For 2x zoom, we use digital zoom on the wide angle camera
-        if lens == .x2 {
-            guard let currentDevice = device,
-                  currentDevice.deviceType == .builtInWideAngleCamera else {
-                // Switch to wide angle first if we're not already on it
-                switchToLens(.wide)
+        cameraQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // For 2x zoom, use digital zoom on the wide angle camera
+            if lens == .x2 {
+                if let currentDevice = self.device,
+                   currentDevice.deviceType == .builtInWideAngleCamera {
+                    self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice)
+                } else {
+                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor)
+                }
                 return
             }
             
-            do {
-                try currentDevice.lockForConfiguration()
-                currentDevice.ramp(toVideoZoomFactor: lens.zoomFactor, withRate: 20.0)
-                currentDevice.unlockForConfiguration()
-                delegate?.didUpdateCurrentLens(lens)
-                delegate?.didUpdateZoomFactor(lens.zoomFactor)
-                logger.info("Set digital zoom to 2x")
-            } catch {
-                logger.error("Failed to set digital zoom: \(error.localizedDescription)")
-                delegate?.didEncounterError(.configurationFailed)
+            // For all other lenses, try to switch physical device
+            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0)
+        }
+    }
+    
+    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat) {
+        logger.info("🔄 Attempting to switch to \(lens.rawValue)× lens")
+        
+        // Get discovery session for all possible back cameras
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera],
+            mediaType: .video,
+            position: .back
+        )
+        
+        logger.info("📸 Available devices: \(discoverySession.devices.map { "\($0.localizedName) (\($0.deviceType))" })")
+        
+        // Find the device we want
+        guard let newDevice = discoverySession.devices.first(where: { $0.deviceType == lens.deviceType }) else {
+            logger.error("❌ Device not available for \(lens.rawValue)× lens")
+            DispatchQueue.main.async {
+                self.delegate?.didEncounterError(.deviceUnavailable)
             }
             return
         }
         
-        guard let newDevice = AVCaptureDevice.default(lens.deviceType, for: .video, position: .back) else {
-            logger.error("Failed to get device for \(lens.rawValue)× lens")
+        // Check if we're already on this device
+        if let currentDevice = device, currentDevice == newDevice {
+            setDigitalZoom(to: zoomFactor, on: currentDevice)
             return
+        }
+        
+        // Configure session with new device
+        let wasRunning = session.isRunning
+        if wasRunning {
+            session.stopRunning()
         }
         
         session.beginConfiguration()
         
-        // Remove existing input
-        if let currentInput = videoDeviceInput {
-            session.removeInput(currentInput)
+        do {
+            try configureSession(for: newDevice, lens: lens)
+            session.commitConfiguration()
+            
+            if wasRunning {
+                session.startRunning()
+            }
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.didUpdateCurrentLens(lens)
+                self.delegate?.didUpdateZoomFactor(zoomFactor)
+            }
+            
+            logger.info("✅ Successfully switched to \(lens.rawValue)× lens")
+            
+        } catch {
+            logger.error("❌ Failed to switch lens: \(error.localizedDescription)")
+            session.commitConfiguration()
+            
+            // Try to recover by returning to wide angle
+            if lens != .wide {
+                logger.info("🔄 Attempting to recover by switching to wide angle")
+                switchToLens(.wide)
+            } else {
+                // If we can't even switch to wide angle, notify delegate of error
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.didEncounterError(.configurationFailed)
+                }
+            }
+            
+            if wasRunning {
+                session.startRunning()
+            }
         }
+    }
+    
+    private func setDigitalZoom(to factor: CGFloat, on device: AVCaptureDevice) {
+        logger.info("📸 Setting digital zoom to \(factor)×")
         
         do {
-            let newInput = try AVCaptureDeviceInput(device: newDevice)
-            if session.canAddInput(newInput) {
-                session.addInput(newInput)
-                videoDeviceInput = newInput
-                device = newDevice
-                delegate?.didUpdateCurrentLens(lens)
-                delegate?.didUpdateZoomFactor(lens.zoomFactor)
-                
-                // Reset zoom factor when switching physical lenses
-                try newDevice.lockForConfiguration()
-                newDevice.videoZoomFactor = 1.0
-                newDevice.unlockForConfiguration()
-                
-                logger.info("Successfully switched to \(lens.rawValue)× lens")
-            } else {
-                logger.error("Cannot add input for \(lens.rawValue)× lens")
+            try device.lockForConfiguration()
+            
+            let zoomFactor = factor.clamped(to: device.minAvailableVideoZoomFactor...device.maxAvailableVideoZoomFactor)
+            device.ramp(toVideoZoomFactor: zoomFactor, withRate: 20.0)
+            
+            device.unlockForConfiguration()
+            
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.didUpdateZoomFactor(factor)
             }
+            
+            logger.info("✅ Set digital zoom to \(factor)×")
+            
         } catch {
-            logger.error("Error switching to \(lens.rawValue)× lens: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+            logger.error("❌ Failed to set zoom: \(error.localizedDescription)")
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.didEncounterError(.configurationFailed)
+            }
         }
-        
-        session.commitConfiguration()
     }
     
     func setZoomFactor(_ factor: CGFloat, currentLens: CameraLens, availableLenses: [CameraLens]) {
-        guard let currentDevice = device else {
+        guard let currentDevice = self.device else {
             logger.error("No camera device available")
             return
         }
@@ -122,18 +206,18 @@ class CameraDeviceService {
             // Apply zoom smoothly
             currentDevice.ramp(toVideoZoomFactor: zoomFactor, withRate: 20.0)
             
-            delegate?.didUpdateZoomFactor(factor)
-            lastZoomFactor = zoomFactor
+            self.delegate?.didUpdateZoomFactor(factor)
+            self.lastZoomFactor = zoomFactor
             
             currentDevice.unlockForConfiguration()
         } catch {
             logger.error("Failed to set zoom: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+            self.delegate?.didEncounterError(.configurationFailed)
         }
     }
     
     func optimizeVideoSettings() {
-        guard let device = device else {
+        guard let device = self.device else {
             logger.error("No camera device available")
             return
         }
@@ -142,7 +226,7 @@ class CameraDeviceService {
             try device.lockForConfiguration()
             
             if device.activeFormat.isVideoStabilizationModeSupported(.cinematic) {
-                if let connection = session.outputs.first?.connection(with: .video),
+                if let connection = self.session.outputs.first?.connection(with: .video),
                    connection.isVideoStabilizationSupported {
                     connection.preferredVideoStabilizationMode = .cinematic
                 }
@@ -160,7 +244,7 @@ class CameraDeviceService {
     
     // Helper method to update connections after switching lenses
     func updateVideoOrientation(for connection: AVCaptureConnection, orientation: UIInterfaceOrientation) {
-        guard !isRecordingOrientationLocked else {
+        guard !self.isRecordingOrientationLocked else {
             logger.info("Orientation update skipped: Recording in progress.")
             return
         }
@@ -198,7 +282,7 @@ class CameraDeviceService {
     private var isRecordingOrientationLocked = false
     
     func lockOrientationForRecording(_ locked: Bool) {
-        isRecordingOrientationLocked = locked
+        self.isRecordingOrientationLocked = locked
         logger.info("Orientation updates \(locked ? "locked" : "unlocked") for recording.")
     }
-} 
+}
