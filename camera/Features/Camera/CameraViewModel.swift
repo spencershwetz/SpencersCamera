@@ -904,6 +904,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
 
+            // Apply the correct transform based on current orientation
+            let transform = getVideoTransform(for: currentInterfaceOrientation)
+            assetWriterInput?.transform = transform
+            print("📐 Applied video transform for orientation: \(currentInterfaceOrientation.rawValue)")
+
             print("📝 Created asset writer input with settings: \(videoSettings)")
             
             // Log the video connection's rotation angle before starting
@@ -1161,27 +1166,29 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         switch deviceOrientation {
         case .portrait:
             newAngle = 90
+            currentInterfaceOrientation = .portrait
         case .landscapeLeft:
             newAngle = 0
+            currentInterfaceOrientation = .landscapeRight // Note: Device orientation is opposite to interface orientation
         case .landscapeRight:
             newAngle = 180
+            currentInterfaceOrientation = .landscapeLeft // Note: Device orientation is opposite to interface orientation
         case .portraitUpsideDown:
             newAngle = 270
+            currentInterfaceOrientation = .portraitUpsideDown
         case .faceUp, .faceDown, .unknown:
             // Don't change angle if orientation is ambiguous
-            // Keep the current angle
             print("DEBUG: Ambiguous orientation (\(deviceOrientation.rawValue)), maintaining current videoRotationAngle: \(connection.videoRotationAngle)°")
-            newAngle = connection.videoRotationAngle // Keep current angle
+            return
         @unknown default:
             print("DEBUG: Unknown device orientation (\(deviceOrientation.rawValue)), defaulting videoRotationAngle to 90°")
-            newAngle = 90 // Default to portrait
+            newAngle = 90
+            currentInterfaceOrientation = .portrait
         }
 
         // Check if the new angle is supported
         guard connection.isVideoRotationAngleSupported(newAngle) else {
              print("⚠️ Rotation angle \(newAngle)° not supported for connection.")
-             // Optionally, try a default like 90 if the calculated one isn't supported?
-             // For now, just return if not supported.
              return
         }
 
@@ -1189,9 +1196,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         if connection.videoRotationAngle != newAngle {
             connection.videoRotationAngle = newAngle
             print("🔄 Updated video connection rotation angle to \(newAngle)° based on device orientation \(deviceOrientation.rawValue)")
-        } else {
-             // Optional: Log that the angle is already correct
-             // print("DEBUG: Video connection rotation angle already \(newAngle)° for device orientation \(deviceOrientation.rawValue)")
         }
     }
     
@@ -1958,6 +1962,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         return sampleBuffer
+    }
+
+    private func getVideoTransform(for orientation: UIInterfaceOrientation) -> CGAffineTransform {
+        switch orientation {
+        case .portrait:
+            return CGAffineTransform(rotationAngle: .pi/2) // 90 degrees clockwise
+        case .portraitUpsideDown:
+            return CGAffineTransform(rotationAngle: -.pi/2) // 90 degrees counterclockwise
+        case .landscapeLeft: // USB on right
+            return CGAffineTransform(rotationAngle: .pi) // 180 degrees (was .identity)
+        case .landscapeRight: // USB on left
+            return .identity // No rotation (was .pi)
+        default:
+            return .identity
+        }
     }
 }
 
