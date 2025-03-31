@@ -107,6 +107,15 @@ class CameraDeviceService {
             return
         }
         
+        // Store current orientation settings to preserve during lens switch
+        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        var currentVideoAngle: CGFloat = 90 // Default to portrait
+        
+        // Get current video orientation from any existing connection
+        if let videoConnection = session.outputs.first?.connection(with: .video) {
+            currentVideoAngle = videoConnection.videoRotationAngle
+        }
+        
         // Configure session with new device
         let wasRunning = session.isRunning
         if wasRunning {
@@ -117,6 +126,16 @@ class CameraDeviceService {
         
         do {
             try configureSession(for: newDevice, lens: lens)
+            
+            // Immediately set orientation for all video connections BEFORE committing configuration
+            // This ensures we never display frames with incorrect orientation
+            for output in session.outputs {
+                if let connection = output.connection(with: .video),
+                   connection.isVideoRotationAngleSupported(currentVideoAngle) {
+                    connection.videoRotationAngle = currentVideoAngle
+                }
+            }
+            
             session.commitConfiguration()
             
             if wasRunning {
