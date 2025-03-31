@@ -21,16 +21,16 @@ extension UIDeviceOrientation {
     /// Returns the rotation angle in degrees (0, 90, 180, 270) for video rotation
     var videoRotationAngleValue: CGFloat {
         switch self {
-        case .landscapeRight:
-            return 180.0
+        case .portrait:
+            return 90.0  // Portrait mode: rotate 90° clockwise
+        case .landscapeRight:  // USB port on left
+            return 180.0  // Landscape with USB on left: rotate 180°
+        case .landscapeLeft:  // USB port on right
+            return 0.0  // Landscape with USB on right: no rotation
         case .portraitUpsideDown:
             return 270.0
-        case .landscapeLeft:
-            return 0.0
-        case .portrait:
-            return 90.0
         case .unknown, .faceUp, .faceDown:
-            return 90.0
+            return 90.0  // Default to portrait mode
         @unknown default:
             return 90.0
         }
@@ -38,20 +38,22 @@ extension UIDeviceOrientation {
     
     /// Transform to apply for video orientation based on device orientation
     var videoTransform: CGAffineTransform {
+        let angle: CGFloat
         switch self {
-        case .landscapeRight:
-            return CGAffineTransform(rotationAngle: CGFloat.pi)
-        case .portraitUpsideDown:
-            return CGAffineTransform(rotationAngle: -CGFloat.pi / 2)
-        case .landscapeLeft:
-            return .identity
         case .portrait:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+            angle = .pi / 2  // 90° clockwise
+        case .landscapeRight:  // USB port on left
+            angle = .pi  // 180°
+        case .landscapeLeft:  // USB port on right
+            angle = 0  // No rotation
+        case .portraitUpsideDown:
+            angle = -.pi / 2  // 270°
         case .unknown, .faceUp, .faceDown:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+            angle = .pi / 2  // Default to portrait mode
         @unknown default:
-            return CGAffineTransform(rotationAngle: CGFloat.pi / 2)
+            angle = .pi / 2
         }
+        return CGAffineTransform(rotationAngle: angle)
     }
 }
 

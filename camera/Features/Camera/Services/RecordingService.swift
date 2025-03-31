@@ -102,9 +102,45 @@ class RecordingService: NSObject {
     func startRecording(orientation: CGFloat) async {
         guard !isRecording else { return }
         
+        // Enhanced orientation logging
+        let deviceOrientation = UIDevice.current.orientation
+        let interfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation
+        
+        logger.info("📱 Starting recording with:")
+        logger.info("- Device orientation: \(deviceOrientation.rawValue)")
+        logger.info("- Interface orientation: \(interfaceOrientation?.rawValue ?? -1)")
+        logger.info("- Requested orientation angle: \(orientation)°")
+        
+        // Determine the correct orientation angle
+        let recordingAngle: CGFloat
+        if deviceOrientation.isValidInterfaceOrientation {
+            // Use device orientation if valid
+            recordingAngle = deviceOrientation.videoRotationAngleValue
+            logger.info("Using device orientation angle: \(recordingAngle)°")
+        } else if let interfaceOrientation = interfaceOrientation {
+            // Fallback to interface orientation
+            switch interfaceOrientation {
+            case .portrait:
+                recordingAngle = 90
+            case .landscapeLeft:
+                recordingAngle = 0
+            case .landscapeRight:
+                recordingAngle = 180
+            case .portraitUpsideDown:
+                recordingAngle = 270
+            @unknown default:
+                recordingAngle = 90
+            }
+            logger.info("Using interface orientation angle: \(recordingAngle)°")
+        } else {
+            // Default to portrait if no valid orientation
+            recordingAngle = 90
+            logger.info("Using default portrait orientation (90°)")
+        }
+        
         // Store the orientation when starting recording
-        recordingOrientation = orientation
-        logger.info("Stored recording orientation: \(orientation)°")
+        recordingOrientation = recordingAngle
+        logger.info("Stored recording orientation: \(recordingAngle)°")
         
         // Reset counters when starting a new recording
         videoFrameCount = 0
@@ -176,7 +212,7 @@ class RecordingService: NSObject {
             assetWriterInput?.expectsMediaDataInRealTime = true
             
             // Apply the correct transform based on current orientation
-            assetWriterInput?.transform = getVideoTransform(for: orientation)
+            assetWriterInput?.transform = getVideoTransform(for: recordingAngle)
             
             logger.info("Created asset writer input with settings: \(videoSettings)")
             
@@ -366,7 +402,31 @@ class RecordingService: NSObject {
     private func getVideoTransform(for rotationAngle: CGFloat) -> CGAffineTransform {
         // Convert rotation angle to radians
         let rotationInRadians = rotationAngle * .pi / 180.0
-        return CGAffineTransform(rotationAngle: rotationInRadians)
+        
+        // Handle specific orientations
+        let transform: CGAffineTransform
+        switch rotationAngle {
+        case 90.0:  // Portrait mode
+            transform = CGAffineTransform(rotationAngle: .pi / 2)  // 90° clockwise
+            logger.info("📱 Video Transform: Portrait mode (90°) -> π/2 radians")
+        case 180.0:  // Landscape with USB on left
+            transform = CGAffineTransform(rotationAngle: .pi)  // 180°
+            logger.info("📱 Video Transform: Landscape USB left (180°) -> π radians")
+        case 0.0:  // Landscape with USB on right
+            transform = .identity  // No rotation
+            logger.info("📱 Video Transform: Landscape USB right (0°) -> identity")
+        case 270.0:  // Portrait upside down
+            transform = CGAffineTransform(rotationAngle: -.pi / 2)  // 270°
+            logger.info("📱 Video Transform: Portrait upside down (270°) -> -π/2 radians")
+        default:
+            // For any other angles, use the standard calculation
+            transform = CGAffineTransform(rotationAngle: rotationInRadians)
+            logger.info("📱 Video Transform: Custom angle (\(rotationAngle)°) -> \(rotationInRadians) radians")
+        }
+        
+        // Log the actual transform values for debugging
+        logger.info("🔄 Transform Details - a: \(transform.a), b: \(transform.b), c: \(transform.c), d: \(transform.d)")
+        return transform
     }
     
     // Process image with LUT filter if available
