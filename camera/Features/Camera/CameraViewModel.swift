@@ -122,7 +122,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @Published private(set) var isAppleLogSupported = false
     
-    let session = AVCaptureSession()
+    private(set) var session: AVCaptureSession
     private var device: AVCaptureDevice?
     
     // Video recording properties
@@ -299,10 +299,31 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var cameraSetupService: CameraSetupService!
     private var exposureService: ExposureService!
     private var recordingService: RecordingService!
-    private var cameraDeviceService: CameraDeviceService!
+    private var cameraDeviceService: CameraDeviceServiceProtocol!
     private var videoFormatService: VideoFormatService!
     
+    // Add these properties near the top of the CameraViewModel class
+    
+    // Flag to indicate if running in UI testing mode
+    var isUITesting: Bool {
+        return ProcessInfo.processInfo.arguments.contains("--uitesting")
+    }
+    
+    // Flag to indicate if testing orientation specifically
+    var isOrientationTesting: Bool {
+        return ProcessInfo.processInfo.arguments.contains("--orientationTest")
+    }
+    
+    // Flag to indicate if a mock LUT should be used
+    var shouldUseMockLUT: Bool {
+        return ProcessInfo.processInfo.arguments.contains("--mockLUT")
+    }
+    
+    // Flag to indicate if running in a mock session
+    private var isMockSession = false
+    
     override init() {
+        self.session = AVCaptureSession()
         super.init()
         print("\n=== Camera Initialization ===")
         
@@ -388,12 +409,39 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         flashlightManager.cleanup()
     }
     
+    // MARK: - Test Initializer
+    convenience init(cameraDeviceService: CameraDeviceServiceProtocol, lutManager: LUTManager, session: Any) {
+        self.init()
+        print("Using test initializer for CameraViewModel")
+        self.cameraDeviceService = cameraDeviceService
+        self.lutManager = lutManager
+        
+        // Try to cast the session to AVCaptureSession or our mock
+        if let avSession = session as? AVCaptureSession {
+            self.session = avSession
+            print("CameraViewModel initialized with real AVCaptureSession for testing")
+        } else if session is CaptureSessionProtocol {
+            // For testing, use a real AVCaptureSession but don't configure it
+            // This allows the ViewModel to function without real camera hardware
+            self.session = AVCaptureSession()
+            self.isMockSession = true
+            print("CameraViewModel initialized with Mock session for testing")
+        } else {
+            // Default case, create a new session
+            self.session = AVCaptureSession()
+            print("CameraViewModel initialized with new AVCaptureSession because provided session was not recognized")
+        }
+        
+        // Test initializers are synchronous so we don't configure the camera here
+        // Tests should manually call configure if needed
+    }
+    
     private func setupServices() {
         // Initialize services with self as delegate
         cameraSetupService = CameraSetupService(session: session, delegate: self)
         exposureService = ExposureService(delegate: self)
         recordingService = RecordingService(session: session, delegate: self)
-        cameraDeviceService = CameraDeviceService(session: session, delegate: self)
+        cameraDeviceService = CameraDeviceService(session: session, delegate: self) as CameraDeviceServiceProtocol
         videoFormatService = VideoFormatService(session: session, delegate: self)
     }
     
@@ -438,6 +486,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func switchToLens(_ lens: CameraLens) {
+        print("📸 Switching lens to \(lens.rawValue)×")
+        print("📐 Current orientation before lens switch: \(extractCurrentVideoRotationAngle())°")
+        print("🎨 LUT active: \(lutManager.currentLUTFilter != nil)")
+        
         cameraDeviceService.switchToLens(lens)
         
         // Update orientation for all video connections after lens switch
@@ -445,13 +497,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
             
+            print("📐 Orientation after lens switch (before update): \(self.extractCurrentVideoRotationAngle())°")
+            
             // Update all video connections to maintain proper orientation
             for output in self.session.outputs {
                 if let connection = output.connection(with: .video) {
                     self.cameraDeviceService.updateVideoOrientation(for: connection, orientation: self.currentInterfaceOrientation)
                 }
             }
+            
+            print("📐 Orientation after update: \(self.extractCurrentVideoRotationAngle())°")
         }
+    }
+    
+    // Helper method to get the current video rotation angle
+    private func extractCurrentVideoRotationAngle() -> CGFloat {
+        if let videoConnection = session.outputs.first?.connection(with: .video) {
+            return videoConnection.videoRotationAngle
+        }
+        return -1.0 // Indicates no connection found
     }
     
     func setZoomFactor(_ factor: CGFloat) {

@@ -87,6 +87,18 @@ struct CameraView: View {
                 }
                 .ignoresSafeArea()
                 .zIndex(101)
+                
+                // Debug overlay for orientation testing (only shown during tests or in debug mode)
+                if viewModel.isUITesting || viewModel.isOrientationTesting || isDebugEnabled {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            OrientationDebugOverlayView(viewModel: viewModel)
+                                .frame(maxWidth: 300)
+                            Spacer()
+                        }
+                    }
+                }
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")

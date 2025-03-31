@@ -360,8 +360,9 @@ class LUTManager: ObservableObject {
     
     // MARK: - LUT Management
     
-    /// Clears the current LUT filter
+    /// Clears the current LUT filter (removing any applied LUT)
     func clearLUT() {
+        print("Clearing current LUT filter")
         currentLUTFilter = nil
         selectedLUTURL = nil
         print("✅ LUT filter cleared")
@@ -370,5 +371,30 @@ class LUTManager: ObservableObject {
     /// Alias for clearLUT() for more readable API
     func clearCurrentLUT() {
         clearLUT()
+    }
+    
+    /// Loads an identity LUT that doesn't modify colors (for testing)
+    func loadIdentityLUT() {
+        // Create a simple identity LUT with dimension 2
+        let dimension = 2
+        var lutData = [Float]()
+        
+        // Generate identity LUT data (output = input)
+        for b in 0..<dimension {
+            let bf = Float(b) / Float(dimension - 1)
+            for g in 0..<dimension {
+                let gf = Float(g) / Float(dimension - 1)
+                for r in 0..<dimension {
+                    let rf = Float(r) / Float(dimension - 1)
+                    lutData.append(rf)
+                    lutData.append(gf)
+                    lutData.append(bf)
+                }
+            }
+        }
+        
+        // Set up the LUT filter
+        setupLUTFilter(lutInfo: (dimension: dimension, data: lutData))
+        print("✅ Identity LUT loaded for testing")
     }
 }

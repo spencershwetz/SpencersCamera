@@ -8,14 +8,17 @@ protocol CameraDeviceServiceDelegate: AnyObject {
     func didEncounterError(_ error: CameraError)
 }
 
-class CameraDeviceService {
+class CameraDeviceService: CameraDeviceServiceProtocol {
     private let logger = Logger(subsystem: "com.camera", category: "CameraDeviceService")
-    private weak var delegate: CameraDeviceServiceDelegate?
+    weak var delegate: CameraDeviceServiceDelegate?
     private var session: AVCaptureSession
     private var videoDeviceInput: AVCaptureDeviceInput?
-    private var device: AVCaptureDevice?
+    var device: AVCaptureDevice?
     private var lastZoomFactor: CGFloat = 1.0
     private let cameraQueue = DispatchQueue(label: "com.camera.device-service")
+    
+    // Property to track orientation locking during recording
+    var isRecordingOrientationLocked: Bool = false
     
     init(session: AVCaptureSession, delegate: CameraDeviceServiceDelegate) {
         self.session = session
@@ -316,103 +319,41 @@ class CameraDeviceService {
     
     // Helper method to update connections after switching lenses
     func updateVideoOrientation(for connection: AVCaptureConnection, orientation: UIInterfaceOrientation) {
-        // Log the current state
-        logger.info("📱 Orientation Update Request:")
-        logger.info("- Interface Orientation: \(orientation.rawValue)")
-        logger.info("- Device Orientation: \(UIDevice.current.orientation.rawValue)")
-        logger.info("- Current Connection Angle: \(connection.videoRotationAngle)°")
-        logger.info("- Recording Lock State: \(self.isRecordingOrientationLocked)")
-        
-        guard !self.isRecordingOrientationLocked else {
-            logger.info("Orientation update skipped: Recording in progress.")
+        guard !isRecordingOrientationLocked else {
+            logger.info("📐 Ignoring orientation update - locked during recording")
             return
         }
         
-        let newAngle: CGFloat
-        let deviceOrientation = UIDevice.current.orientation
+        // Convert interface orientation to video orientation
+        let videoOrientation: AVCaptureVideoOrientation
         
-        // First check device orientation for more accurate rotation
-        if deviceOrientation.isValidInterfaceOrientation {
-            switch deviceOrientation {
-            case .portrait:
-                newAngle = 90  // Portrait mode: rotate 90° clockwise
-                logger.info("Setting portrait orientation from device (90°)")
-            case .landscapeLeft:  // USB port on right
-                newAngle = 0   // No rotation needed
-                logger.info("Setting landscape left from device - USB right (0°)")
-            case .landscapeRight:  // USB port on left
-                newAngle = 180 // Rotate 180°
-                logger.info("Setting landscape right from device - USB left (180°)")
-            case .portraitUpsideDown:
-                newAngle = 270
-                logger.info("Setting portrait upside down from device (270°)")
-            default:
-                // Fallback to interface orientation
-                switch orientation {
-                case .portrait:
-                    newAngle = 90
-                    logger.info("Setting portrait orientation from interface (90°)")
-                case .landscapeLeft:
-                    newAngle = 0
-                    logger.info("Setting landscape left from interface - USB right (0°)")
-                case .landscapeRight:
-                    newAngle = 180
-                    logger.info("Setting landscape right from interface - USB left (180°)")
-                case .portraitUpsideDown:
-                    newAngle = 270
-                    logger.info("Setting portrait upside down from interface (270°)")
-                default:
-                    logger.warning("Unknown orientation, defaulting to portrait (90°)")
-                    newAngle = 90
-                }
-            }
-        } else {
-            // Fallback to interface orientation if device orientation is not valid
-            switch orientation {
-            case .portrait:
-                newAngle = 90
-                logger.info("Setting portrait orientation from interface (90°)")
-            case .landscapeLeft:
-                newAngle = 0
-                logger.info("Setting landscape left from interface - USB right (0°)")
-            case .landscapeRight:
-                newAngle = 180
-                logger.info("Setting landscape right from interface - USB left (180°)")
-            case .portraitUpsideDown:
-                newAngle = 270
-                logger.info("Setting portrait upside down from interface (270°)")
-            default:
-                logger.warning("Unknown orientation, defaulting to portrait (90°)")
-                newAngle = 90
-            }
+        switch orientation {
+        case .portrait:
+            videoOrientation = .portrait
+        case .portraitUpsideDown:
+            videoOrientation = .portraitUpsideDown
+        case .landscapeLeft:
+            videoOrientation = .landscapeRight
+        case .landscapeRight:
+            videoOrientation = .landscapeLeft
+        default:
+            videoOrientation = .portrait
         }
         
-        // Check if the new angle is supported
-        guard connection.isVideoRotationAngleSupported(newAngle) else {
-            logger.warning("Rotation angle \(newAngle)° not supported for connection.")
-            return
-        }
-        
-        // Only update if the angle is actually different
-        if connection.videoRotationAngle != newAngle {
-            connection.videoRotationAngle = newAngle
-            logger.info("Updated video connection rotation angle to \(newAngle)°")
+        if connection.isVideoOrientationSupported,
+           connection.videoOrientation != videoOrientation {
+            connection.videoOrientation = videoOrientation
+            logger.info("📐 Updated video orientation to: \(videoOrientation.rawValue)")
         }
     }
     
-    // Flag to track orientation locking during recording
-    private var isRecordingOrientationLocked = false
-    
     func lockOrientationForRecording(_ locked: Bool) {
-        self.isRecordingOrientationLocked = locked
-        logger.info("Orientation updates \(locked ? "locked" : "unlocked") for recording.")
-        if locked {
-            logger.info("📱 Locking orientation state:")
-            logger.info("- Interface Orientation: \(UIApplication.shared.windows.first?.windowScene?.interfaceOrientation.rawValue ?? -1)")
-            logger.info("- Device Orientation: \(UIDevice.current.orientation.rawValue)")
-            if let connection = session.outputs.first?.connection(with: .video) {
-                logger.info("- Current Connection Angle: \(connection.videoRotationAngle)°")
-            }
-        }
+        isRecordingOrientationLocked = locked
+        logger.info("🔒 Recording orientation locked: \(locked)")
+    }
+
+    func configure() async throws {
+        // This method is required by the protocol
+        // Implementation would involve setting up the device and session
     }
 }
