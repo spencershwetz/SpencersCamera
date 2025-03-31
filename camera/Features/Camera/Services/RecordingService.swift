@@ -257,6 +257,7 @@ class RecordingService: NSObject {
                 logger.info("Added video input to asset writer")
             } else {
                 logger.error("Failed to add video input to asset writer")
+                throw CameraError.recordingFailed
             }
             
             if assetWriter!.canAdd(audioInput) {
@@ -264,6 +265,7 @@ class RecordingService: NSObject {
                 logger.info("Added audio input to asset writer")
             } else {
                 logger.error("Failed to add audio input to asset writer")
+                throw CameraError.recordingFailed
             }
             
             // Ensure video and audio outputs are configured
@@ -272,8 +274,27 @@ class RecordingService: NSObject {
             
             // Start writing
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
-            assetWriter!.startWriting()
-            assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
+            
+            // Ensure the asset writer is in the correct state before starting the session
+            guard self.assetWriter!.status == .unknown else {
+                logger.error("Asset writer in incorrect state: \(self.assetWriter!.status.rawValue)")
+                throw CameraError.recordingFailed
+            }
+            
+            // Start writing and session
+            self.assetWriter!.startWriting()
+            
+            // Ensure writing started successfully
+            guard self.assetWriter!.status == .writing else {
+                logger.error("Asset writer failed to start writing. Status: \(self.assetWriter!.status.rawValue)")
+                if let error = self.assetWriter!.error {
+                    logger.error("Asset writer error: \(error.localizedDescription)")
+                }
+                throw CameraError.recordingFailed
+            }
+            
+            // Start the session
+            self.assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
             
             logger.info("Started asset writer session at time: \(self.recordingStartTime!.seconds)")
             
@@ -284,6 +305,12 @@ class RecordingService: NSObject {
             logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC"), Frame Rate: \(self.selectedFrameRate)")
             
         } catch {
+            // Clean up resources in case of error
+            assetWriter = nil
+            assetWriterInput = nil
+            assetWriterPixelBufferAdaptor = nil
+            currentRecordingURL = nil
+            
             delegate?.didEncounterError(.recordingFailed)
             logger.error("Failed to start recording: \(error.localizedDescription)")
         }

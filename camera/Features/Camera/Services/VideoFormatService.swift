@@ -200,48 +200,92 @@ class VideoFormatService {
             throw CameraError.configurationFailed
         }
         
-        do {
+        let wasRunning = session.isRunning
+        if wasRunning {
             session.stopRunning()
-            
+        }
+        
+        do {
             try await Task.sleep(for: .milliseconds(100))
-            session.beginConfiguration()
             
+            // Lock device configuration
             do {
                 try device.lockForConfiguration()
             } catch {
+                if wasRunning {
+                    session.startRunning()
+                }
                 throw CameraError.configurationFailed
             }
             
             defer {
                 device.unlockForConfiguration()
-                session.commitConfiguration()
-                session.startRunning()
             }
             
-            // Find a format that supports Apple Log
+            // Log device information
+            logger.info("Configuring Apple Log for device: \(device.localizedName)")
+            logger.info("Current device type: \(device.deviceType.rawValue)")
+            
+            // Find formats that support Apple Log
             let formats = device.formats.filter { format in
                 let desc = format.formatDescription
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
                 let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
-                let resolution = CameraViewModel.Resolution.uhd.dimensions
-                let matchesResolution = dimensions.width >= resolution.width &&
-                                      dimensions.height >= resolution.height
-                return hasAppleLog && matchesResolution
+                
+                // Log format details for debugging
+                if hasAppleLog {
+                    logger.info("Found format with Apple Log support:")
+                    logger.info("- Dimensions: \(dimensions.width)x\(dimensions.height)")
+                    logger.info("- Color Spaces: \(format.supportedColorSpaces)")
+                    logger.info("- Media Subtype: \(CMFormatDescriptionGetMediaSubType(desc))")
+                }
+                
+                // For ultra-wide lens, we need to be more lenient with resolution requirements
+                let isUltraWide = device.deviceType == .builtInUltraWideCamera
+                let resolution = dimensions.width >= (isUltraWide ? 1280 : 1920) &&
+                               dimensions.height >= (isUltraWide ? 720 : 1080)
+                
+                return hasAppleLog && resolution
             }
             
-            guard let selectedFormat = formats.first else {
+            // Sort formats by resolution
+            let sortedFormats = formats.sorted { (format1: AVCaptureDevice.Format, format2: AVCaptureDevice.Format) -> Bool in
+                let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
+                let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
+                return dim1.width * dim1.height > dim2.width * dim2.height
+            }
+            
+            guard let selectedFormat = sortedFormats.first else {
                 logger.error("No suitable Apple Log format found")
+                logger.info("Total available formats: \(device.formats.count)")
+                device.formats.prefix(3).forEach { format in
+                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    logger.info("Available format: \(dim.width)x\(dim.height), Color spaces: \(format.supportedColorSpaces)")
+                }
+                if wasRunning {
+                    session.startRunning()
+                }
                 throw CameraError.configurationFailed
             }
             
-            logger.info("Found suitable Apple Log format")
+            session.beginConfiguration()
             
-            // Set the format first
+            // Set the format
             device.activeFormat = selectedFormat
             
-            // Verify the format supports Apple Log
-            guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
+            // Verify format supports Apple Log before setting
+            if selectedFormat.supportedColorSpaces.contains(.appleLog) {
+                device.activeColorSpace = .appleLog
+                logger.info("Successfully set Apple Log color space")
+                
+                let dimensions = CMVideoFormatDescriptionGetDimensions(selectedFormat.formatDescription)
+                logger.info("Active format: \(dimensions.width)x\(dimensions.height)")
+            } else {
                 logger.error("Selected format does not support Apple Log")
+                session.commitConfiguration()
+                if wasRunning {
+                    session.startRunning()
+                }
                 throw CameraError.configurationFailed
             }
             
@@ -255,21 +299,19 @@ class VideoFormatService {
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
             
-            // Configure HDR if supported
-            if selectedFormat.isVideoHDRSupported {
-                device.automaticallyAdjustsVideoHDREnabled = false
-                device.isVideoHDREnabled = true
-                logger.info("Enabled HDR support")
-            }
+            session.commitConfiguration()
             
-            // Set color space
-            device.activeColorSpace = .appleLog
-            logger.info("Set color space to Apple Log")
+            if wasRunning {
+                session.startRunning()
+            }
             
             logger.info("Successfully configured Apple Log format")
             
         } catch {
             logger.error("Error configuring Apple Log: \(error.localizedDescription)")
+            if wasRunning {
+                session.startRunning()
+            }
             throw error
         }
     }

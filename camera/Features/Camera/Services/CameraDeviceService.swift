@@ -52,17 +52,47 @@ class CameraDeviceService {
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
                 let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
                 let resolution = dimensions.width >= 1920 && dimensions.height >= 1080
+                
+                // Log format capabilities for debugging
+                if hasAppleLog {
+                    logger.info("Found format with Apple Log support: \(dimensions.width)x\(dimensions.height)")
+                    logger.info("Color spaces: \(format.supportedColorSpaces)")
+                }
+                
                 return hasAppleLog && resolution
             }
             
-            if let appleLogFormat = formats.first {
+            // Sort formats by resolution to get the highest quality one
+            let sortedFormats = formats.sorted { (format1: AVCaptureDevice.Format, format2: AVCaptureDevice.Format) -> Bool in
+                let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
+                let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
+                return dim1.width * dim1.height > dim2.width * dim2.height
+            }
+            
+            if let appleLogFormat = sortedFormats.first {
                 try newDevice.lockForConfiguration()
                 newDevice.activeFormat = appleLogFormat
-                newDevice.activeColorSpace = .appleLog
+                
+                // Ensure format supports Apple Log before setting
+                if appleLogFormat.supportedColorSpaces.contains(.appleLog) {
+                    newDevice.activeColorSpace = .appleLog
+                    logger.info("✅ Successfully configured Apple Log for \(lens.rawValue) lens")
+                    let dimensions = CMVideoFormatDescriptionGetDimensions(appleLogFormat.formatDescription)
+                    logger.info("Selected format: \(dimensions.width)x\(dimensions.height)")
+                } else {
+                    logger.warning("⚠️ Selected format does not support Apple Log")
+                    newDevice.activeColorSpace = .sRGB
+                }
+                
                 newDevice.unlockForConfiguration()
-                logger.info("✅ Maintained Apple Log settings for new lens")
             } else {
-                logger.warning("⚠️ New lens does not support Apple Log, reverting to sRGB")
+                logger.warning("⚠️ No suitable Apple Log format found for \(lens.rawValue) lens")
+                logger.info("Available formats: \(newDevice.formats.count)")
+                // Log the first few formats for debugging
+                newDevice.formats.prefix(3).forEach { format in
+                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    logger.info("Format: \(dim.width)x\(dim.height), Color spaces: \(format.supportedColorSpaces)")
+                }
             }
         }
         
