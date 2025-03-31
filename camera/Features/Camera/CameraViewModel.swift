@@ -325,6 +325,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         }
         
+        // Add observer for bake in LUT setting changes
+        NotificationCenter.default.addObserver(
+            forName: .bakeInLUTSettingChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let settings = SettingsModel()
+            self.recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        }
+        
         do {
             try cameraSetupService.setupSession()
             
@@ -451,10 +462,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func startRecording() async {
         guard !isRecording, status == .running, let device = self.device else { return }
         
+        // Get current settings
+        let settings = SettingsModel()
+        
         // Update configuration for recording
         recordingService.setDevice(device)
         recordingService.setLUTManager(lutManager)
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
+        recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         recordingService.setVideoConfiguration(
             frameRate: selectedFrameRate,
             resolution: selectedResolution,

@@ -20,6 +20,7 @@ class RecordingService: NSObject {
     private var device: AVCaptureDevice?
     private var lutManager: LUTManager?
     private var isAppleLogEnabled = false
+    private var isBakeInLUTEnabled = true // Default to true to maintain backward compatibility
     
     // Recording properties
     private var assetWriter: AVAssetWriter?
@@ -65,6 +66,11 @@ class RecordingService: NSObject {
     
     func setAppleLogEnabled(_ enabled: Bool) {
         self.isAppleLogEnabled = enabled
+    }
+    
+    func setBakeInLUTEnabled(_ enabled: Bool) {
+        self.isBakeInLUTEnabled = enabled
+        logger.info("Bake in LUT setting changed to: \(enabled)")
     }
     
     func setVideoConfiguration(frameRate: Double, resolution: CameraViewModel.Resolution, codec: CameraViewModel.VideoCodec) {
@@ -509,7 +515,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                if let lutManager = lutManager, lutManager.currentLUTFilter != nil {
+                if isBakeInLUTEnabled, let lutManager = lutManager, lutManager.currentLUTFilter != nil {
                     let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
                     if let processedImage = applyLUT(to: ciImage),
                        let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {

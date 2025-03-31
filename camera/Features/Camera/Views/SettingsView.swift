@@ -13,7 +13,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             List {
-                Section("Camera 🎥") {
+                Section {
                     // Resolution
                     Picker("Resolution", selection: $viewModel.selectedResolution) {
                         ForEach(CameraViewModel.Resolution.allCases, id: \.self) { resolution in
@@ -42,10 +42,12 @@ struct SettingsView: View {
                                 .tag(fps)
                         }
                     }
+                } header: {
+                    Text("Camera 🎥")
                 }
                 
                 // LUT Settings Section
-                Section("Color LUTs 🎨") {
+                Section {
                     Button(action: {
                         isShowingLUTDocumentPicker = true
                     }) {
@@ -63,6 +65,17 @@ struct SettingsView: View {
                             Text(lutManager.currentLUTName)
                                 .foregroundColor(.secondary)
                         }
+                        
+                        Toggle(isOn: $settingsModel.isBakeInLUTEnabled) {
+                            HStack {
+                                Text("Bake in LUT")
+                                if settingsModel.isBakeInLUTEnabled {
+                                    Image(systemName: "checkmark.square.fill")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                        .tint(.blue)
                         
                         Button(action: {
                             lutManager.clearLUT()
@@ -90,12 +103,18 @@ struct SettingsView: View {
                             }
                         }
                     }
+                } header: {
+                    Text("Color LUTs 🎨")
+                } footer: {
+                    if lutManager.currentLUTFilter != nil {
+                        Text("When 'Bake in LUT' is enabled, the LUT color profile will be permanently applied to your recorded video. When disabled, the preview will still show the LUT effect, but the original camera footage will be recorded.")
+                    }
                 }
                 
                 // Flashlight Settings
                 FlashlightSettingsView(settingsModel: settingsModel)
                 
-                Section("Display") {
+                Section {
                     Toggle(isOn: $isDebugEnabled) {
                         HStack {
                             Text("Show Debug Info")
@@ -105,10 +124,14 @@ struct SettingsView: View {
                             }
                         }
                     }
+                } header: {
+                    Text("Display")
                 }
                 
-                Section("Storage") {
+                Section {
                     Text("Storage settings will go here")
+                } header: {
+                    Text("Storage")
                 }
             }
             .navigationTitle("Settings")

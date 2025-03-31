@@ -24,6 +24,13 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var isBakeInLUTEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isBakeInLUTEnabled, forKey: "isBakeInLUTEnabled")
+            NotificationCenter.default.post(name: .bakeInLUTSettingChanged, object: nil)
+        }
+    }
+    
     var isAppleLogSupported: Bool {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
             return false
@@ -40,11 +47,18 @@ class SettingsModel: ObservableObject {
         self.isAppleLogEnabled = UserDefaults.standard.bool(forKey: "isAppleLogEnabled")
         self.isFlashlightEnabled = UserDefaults.standard.bool(forKey: "isFlashlightEnabled")
         self.flashlightIntensity = UserDefaults.standard.float(forKey: "flashlightIntensity")
+        self.isBakeInLUTEnabled = UserDefaults.standard.bool(forKey: "isBakeInLUTEnabled")
         
-        // Set default intensity if not set
+        // Set default values if not set
         if self.flashlightIntensity == 0 {
             self.flashlightIntensity = 1.0
             UserDefaults.standard.set(self.flashlightIntensity, forKey: "flashlightIntensity")
+        }
+        
+        // By default, bake in LUT is enabled (matches current behavior)
+        if UserDefaults.standard.object(forKey: "isBakeInLUTEnabled") == nil {
+            self.isBakeInLUTEnabled = true
+            UserDefaults.standard.set(self.isBakeInLUTEnabled, forKey: "isBakeInLUTEnabled")
         }
     }
 }
@@ -52,4 +66,5 @@ class SettingsModel: ObservableObject {
 extension Notification.Name {
     static let appleLogSettingChanged = Notification.Name("appleLogSettingChanged")
     static let flashlightSettingChanged = Notification.Name("flashlightSettingChanged")
+    static let bakeInLUTSettingChanged = Notification.Name("bakeInLUTSettingChanged")
 } 
