@@ -137,6 +137,19 @@ struct CameraView: View {
                     print("DEBUG: LUT filter removed")
                 }
             }
+            .onChange(of: viewModel.currentLens) { oldValue, newValue in
+                // When lens changes, ensure LUT overlay maintains correct orientation
+                if showLUTPreview && lutManager.currentLUTFilter != nil {
+                    // Access the preview view and update its LUT overlay orientation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if let container = viewModel.owningView,
+                           let preview = container.viewWithTag(100) as? CameraPreviewView.CustomPreviewView {
+                            preview.updateLUTOverlayOrientation()
+                            print("DEBUG: Updated LUT overlay orientation after lens change")
+                        }
+                    }
+                }
+            }
             .alert(item: $viewModel.error) { error in
                 Alert(
                     title: Text("Error"),

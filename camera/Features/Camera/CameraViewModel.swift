@@ -428,6 +428,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func switchToLens(_ lens: CameraLens) {
         cameraDeviceService.switchToLens(lens)
+        
+        // Update orientation for all video connections after lens switch
+        // This ensures LUT overlay orientation remains correct
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
+            
+            // Update all video connections to maintain proper orientation
+            for output in self.session.outputs {
+                if let connection = output.connection(with: .video) {
+                    self.cameraDeviceService.updateVideoOrientation(for: connection, orientation: self.currentInterfaceOrientation)
+                }
+            }
+        }
     }
     
     func setZoomFactor(_ factor: CGFloat) {

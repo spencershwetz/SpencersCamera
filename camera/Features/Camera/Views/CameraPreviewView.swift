@@ -298,6 +298,7 @@ struct CameraPreviewView: UIViewRepresentable {
             // Update LUT overlay if it exists
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                 overlay.frame = bounds
+                overlay.cornerRadius = cornerRadius
             }
             
             CATransaction.commit()
@@ -346,6 +347,32 @@ struct CameraPreviewView: UIViewRepresentable {
             CATransaction.commit()
         }
         
+        // Method to ensure LUT overlay has correct orientation
+        func updateLUTOverlayOrientation() {
+            // Force portrait orientation for preview layer
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+            }
+            
+            // Ensure data output connection has correct orientation
+            if let dataOutput = dataOutput, let connection = dataOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+            }
+            
+            // Update overlay to match preview layer orientation
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                    // No need to modify overlay properties, just ensure underlying connections are correct
+                    print("DEBUG: Ensured LUT overlay orientation is correct (90°)")
+                }
+            }
+        }
+        
         func updateLUT(_ filter: CIFilter?) {
             // Skip if same filter (reference equality)
             if (filter === currentLUTFilter) {
@@ -357,6 +384,17 @@ struct CameraPreviewView: UIViewRepresentable {
                 if filter != nil {
                     // New filter added when none existed
                     setupDataOutput()
+                    
+                    // Ensure proper orientation immediately when adding a filter
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        
+                        if let connection = self.previewLayer.connection,
+                           connection.isVideoRotationAngleSupported(90) {
+                            // Force orientation update when LUT is applied
+                            connection.videoRotationAngle = 90
+                        }
+                    }
                 } else {
                     // Filter removed - first clean up any existing overlay
                     DispatchQueue.main.async { [weak self] in
@@ -500,6 +538,14 @@ struct CameraPreviewView: UIViewRepresentable {
                     overlayLayer.cornerRadius = self.cornerRadius
                     overlayLayer.masksToBounds = true
                     self.previewLayer.addSublayer(overlayLayer)
+                    
+                    // Ensure the orientation is correct when overlay is first added
+                    if let connection = self.previewLayer.connection,
+                       connection.isVideoRotationAngleSupported(90) {
+                        // Force orientation update to the preview layer right after adding overlay
+                        connection.videoRotationAngle = 90
+                    }
+                    
                     print("DEBUG: Added LUT overlay layer with frame: \(screenBounds)")
                 }
                 
