@@ -43,6 +43,29 @@ class CameraDeviceService {
             throw CameraError.invalidDeviceInput
         }
         
+        // Check if format supports Apple Log before switching
+        if let currentDevice = device,
+           currentDevice.activeColorSpace == .appleLog {
+            // Find a format that supports Apple Log for the new device
+            let formats = newDevice.formats.filter { format in
+                let desc = format.formatDescription
+                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
+                let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
+                let resolution = dimensions.width >= 1920 && dimensions.height >= 1080
+                return hasAppleLog && resolution
+            }
+            
+            if let appleLogFormat = formats.first {
+                try newDevice.lockForConfiguration()
+                newDevice.activeFormat = appleLogFormat
+                newDevice.activeColorSpace = .appleLog
+                newDevice.unlockForConfiguration()
+                logger.info("✅ Maintained Apple Log settings for new lens")
+            } else {
+                logger.warning("⚠️ New lens does not support Apple Log, reverting to sRGB")
+            }
+        }
+        
         session.addInput(newInput)
         videoDeviceInput = newInput
         device = newDevice

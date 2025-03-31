@@ -726,6 +726,22 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         cameraDeviceService.setDevice(device)
         videoFormatService.setDevice(device)
         
+        // Check Apple Log support for initial device
+        isAppleLogSupported = device.formats.contains { format in
+            format.supportedColorSpaces.contains(.appleLog)
+        }
+        
+        // Initialize Apple Log if supported
+        if isAppleLogSupported && isAppleLogEnabled {
+            Task {
+                do {
+                    try await videoFormatService.configureAppleLog()
+                } catch {
+                    print("Failed to configure initial Apple Log: \(error)")
+                }
+            }
+        }
+        
         // Initialize available lenses
         availableLenses = CameraLens.availableLenses()
     }
