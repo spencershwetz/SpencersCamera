@@ -39,11 +39,9 @@ struct cameraApp: App {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
                 // Wrap CameraView in OrientationFixView for strict orientation control
-                OrientationFixView {
-                    CameraView()
-                }
+                CameraView()
             }
-            .disableSafeArea() // Use our custom modifier to completely disable safe areas
+            .ignoresSafeArea(.all) 
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Hide status bar at app level
             .hideStatusBar()

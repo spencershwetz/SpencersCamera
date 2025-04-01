@@ -4,6 +4,7 @@ import os.log
 import UIKit
 import CoreMedia
 import CoreImage
+import CoreVideo
 
 protocol RecordingServiceDelegate: AnyObject {
     func didStartRecording()
@@ -26,17 +27,14 @@ class RecordingService: NSObject {
     private var assetWriter: AVAssetWriter?
     private var assetWriterInput: AVAssetWriterInput?
     private var assetWriterPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
-    private var videoDataOutput: AVCaptureVideoDataOutput?
-    private var audioDataOutput: AVCaptureAudioDataOutput?
     private var currentRecordingURL: URL?
     private var recordingStartTime: CMTime?
-    private var recordingOrientation: CGFloat?
     private var isRecording = false
     private var selectedFrameRate: Double = 30.0
     private var selectedResolution: CameraViewModel.Resolution = .uhd
     private var selectedCodec: CameraViewModel.VideoCodec = .hevc
-    private var processingQueue: DispatchQueue
     private var ciContext = CIContext()
+    private var currentVideoTransform: CGAffineTransform = .identity // Store the transform used for recording
     
     // Statistics for debugging
     private var videoFrameCount = 0
@@ -47,12 +45,6 @@ class RecordingService: NSObject {
     init(session: AVCaptureSession, delegate: RecordingServiceDelegate) {
         self.session = session
         self.delegate = delegate
-        self.processingQueue = DispatchQueue(
-            label: "com.camera.recording",
-            qos: .userInitiated,
-            attributes: [],
-            autoreleaseFrequency: .workItem
-        )
         super.init()
     }
     
@@ -79,129 +71,77 @@ class RecordingService: NSObject {
         self.selectedCodec = codec
     }
     
-    func setupVideoDataOutput() {
-        if videoDataOutput == nil {
-            videoDataOutput = AVCaptureVideoDataOutput()
-            videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-            if session.canAddOutput(videoDataOutput!) {
-                session.addOutput(videoDataOutput!)
-                logger.info("Added video data output to session")
-            } else {
-                logger.error("Failed to add video data output to session")
-            }
+    func startRecording(transform: CGAffineTransform) async {
+        guard !isRecording else {
+            logger.warning("Attempted to start recording while already recording.")
+            return
         }
-    }
-    
-    func setupAudioDataOutput() {
-        if audioDataOutput == nil {
-            audioDataOutput = AVCaptureAudioDataOutput()
-            audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-            if session.canAddOutput(audioDataOutput!) {
-                session.addOutput(audioDataOutput!)
-                logger.info("Added audio data output to session")
-            } else {
-                logger.error("Failed to add audio data output to session")
-            }
-        }
-    }
-    
-    func startRecording(orientation: CGFloat) async {
-        guard !isRecording else { return }
-        
-        // Enhanced orientation logging
-        let deviceOrientation = UIDevice.current.orientation
-        let interfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation
-        
-        logger.info("📱 Starting recording with:")
-        logger.info("- Device orientation: \(deviceOrientation.rawValue)")
-        logger.info("- Interface orientation: \(interfaceOrientation?.rawValue ?? -1)")
-        logger.info("- Requested orientation angle: \(orientation)°")
-        
-        // Determine the correct orientation angle
-        let recordingAngle: CGFloat
-        if deviceOrientation.isValidInterfaceOrientation {
-            // Use device orientation if valid
-            recordingAngle = deviceOrientation.videoRotationAngleValue
-            logger.info("Using device orientation angle: \(recordingAngle)°")
-        } else if let interfaceOrientation = interfaceOrientation {
-            // Fallback to interface orientation
-            switch interfaceOrientation {
-            case .portrait:
-                recordingAngle = 90
-            case .landscapeLeft:
-                recordingAngle = 0
-            case .landscapeRight:
-                recordingAngle = 180
-            case .portraitUpsideDown:
-                recordingAngle = 270
-            @unknown default:
-                recordingAngle = 90
-            }
-            logger.info("Using interface orientation angle: \(recordingAngle)°")
-        } else {
-            // Default to portrait if no valid orientation
-            recordingAngle = 90
-            logger.info("Using default portrait orientation (90°)")
-        }
-        
-        // Store the orientation when starting recording
-        recordingOrientation = recordingAngle
-        logger.info("Stored recording orientation: \(recordingAngle)°")
-        
-        // Reset counters when starting a new recording
+
+        logger.info("📱 Starting recording...")
+        self.currentVideoTransform = transform
+        logger.info("Using recording transform: a=\(transform.a), b=\(transform.b), c=\(transform.c), d=\(transform.d), tx=\(transform.tx), ty=\(transform.ty)")
+
+        // Reset counters...
         videoFrameCount = 0
         audioFrameCount = 0
         successfulVideoFrames = 0
         failedVideoFrames = 0
-        
+
+        // --- Define local writer/input variables to handle potential nil state on error ---
+        var localAssetWriter: AVAssetWriter? = nil
+        var localAssetWriterInput: AVAssetWriterInput? = nil
+        var localAudioInput: AVAssetWriterInput? = nil
+        var localPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor? = nil
+        var localTempURL: URL? = nil
+        // -------------------------------------------------------------------------------
+
         do {
-            // Create temporary URL for recording
+            // Create temporary URL...
             let tempDir = FileManager.default.temporaryDirectory
             let fileName = "recording_\(Date().timeIntervalSince1970).mov"
-            let tempURL = tempDir.appendingPathComponent(fileName)
-            currentRecordingURL = tempURL
-            
+            localTempURL = tempDir.appendingPathComponent(fileName)
+            guard let tempURL = localTempURL else { // Safely unwrap
+                logger.error("Failed to create temporary URL.")
+                throw CameraError.recordingFailed // Or a more specific error
+            }
+            currentRecordingURL = tempURL // Keep track for cleanup/saving
+
             logger.info("Creating asset writer at \(tempURL.path)")
-            
-            // Create asset writer
-            assetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
-            
-            // Get dimensions from current format
+            localAssetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
+            guard let writer = localAssetWriter else { // Safely unwrap
+                 logger.error("Failed to initialize AVAssetWriter.")
+                 throw CameraError.recordingFailed
+            }
+            self.assetWriter = writer // Assign to instance variable
+
+            // Get dimensions...
             guard let device = device else {
                 logger.error("Camera device is nil in startRecording")
                 throw CameraError.configurationFailed
             }
-            
-            // Get active format
             let format = device.activeFormat
-            
-            // Now safely get dimensions
             guard let dimensions = format.dimensions else {
                 logger.error("Could not get dimensions from active format: \(format)")
                 throw CameraError.configurationFailed
             }
-            
-            // Set dimensions based on the native format dimensions
             let videoWidth = dimensions.width
             let videoHeight = dimensions.height
-            
-            // Configure video settings based on current configuration
+
+            // Configure video settings...
             var videoSettings: [String: Any] = [
                 AVVideoWidthKey: videoWidth,
                 AVVideoHeightKey: videoHeight
             ]
-            
+            // Codec settings... (keep existing logic)
             if selectedCodec == .proRes {
                 videoSettings[AVVideoCodecKey] = AVVideoCodecType.proRes422HQ
             } else {
                 videoSettings[AVVideoCodecKey] = AVVideoCodecType.hevc
-                
-                // Create a single dictionary for all compression properties
                 let compressionProperties: [String: Any] = [
                     AVVideoAverageBitRateKey: selectedCodec.bitrate,
                     AVVideoExpectedSourceFrameRateKey: NSNumber(value: selectedFrameRate),
-                    AVVideoMaxKeyFrameIntervalKey: Int(selectedFrameRate), // One keyframe per second
-                    AVVideoMaxKeyFrameIntervalDurationKey: 1.0, // Force keyframe every second
+                    AVVideoMaxKeyFrameIntervalKey: Int(selectedFrameRate),
+                    AVVideoMaxKeyFrameIntervalDurationKey: 1.0,
                     AVVideoAllowFrameReorderingKey: false,
                     AVVideoProfileLevelKey: "HEVC_Main42210_AutoLevel",
                     AVVideoColorPrimariesKey: isAppleLogEnabled ? "ITU_R_2020" : "ITU_R_709_2",
@@ -209,35 +149,43 @@ class RecordingService: NSObject {
                     "AllowOpenGOP": false,
                     "EncoderID": "com.apple.videotoolbox.videoencoder.hevc.422v2"
                 ]
-                
                 videoSettings[AVVideoCompressionPropertiesKey] = compressionProperties
             }
-            
-            // Create video input with better buffer handling
-            assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            assetWriterInput?.expectsMediaDataInRealTime = true
-            
-            // Apply the correct transform based on current orientation
-            assetWriterInput?.transform = getVideoTransform(for: recordingAngle)
-            
-            logger.info("Created asset writer input with settings: \(videoSettings)")
-            
-            // Configure audio settings
+
+            // Create video input...
+            localAssetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+            guard let videoInput = localAssetWriterInput else {
+                 logger.error("Failed to create AVAssetWriterInput for video.")
+                 throw CameraError.recordingFailed
+            }
+            videoInput.expectsMediaDataInRealTime = true
+            videoInput.transform = self.currentVideoTransform // Apply transform
+            self.assetWriterInput = videoInput // Assign to instance variable
+            logger.info("Created asset writer video input.") // Log success point
+
+            // Configure audio settings...
             let audioSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVLinearPCMBitDepthKey: 16,
+                AVSampleRateKey: 48000, // Standard sample rate
+                AVNumberOfChannelsKey: 2, // Stereo
+                AVLinearPCMBitDepthKey: 16, // Standard bit depth
+                AVLinearPCMIsNonInterleaved: false,
                 AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
+                AVLinearPCMIsBigEndianKey: false
             ]
-            
-            // Create audio input
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            localAudioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            guard let audioInput = localAudioInput else {
+                 logger.error("Failed to create AVAssetWriterInput for audio.")
+                 throw CameraError.recordingFailed
+            }
             audioInput.expectsMediaDataInRealTime = true
-            
-            // Create pixel buffer adaptor with appropriate format
+            logger.info("Created asset writer audio input.")
+
+            // Create pixel buffer adaptor...
+             guard let nonOptionalVideoInput = self.assetWriterInput else { // Ensure video input exists
+                  logger.error("Video Asset Writer Input is nil before creating adaptor.")
+                  throw CameraError.recordingFailed
+             }
             let sourcePixelBufferAttributes: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
                 kCVPixelBufferWidthKey as String: dimensions.width,
@@ -245,147 +193,140 @@ class RecordingService: NSObject {
                 kCVPixelBufferIOSurfacePropertiesKey as String: [:],
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ]
-            
-            assetWriterPixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: assetWriterInput!,
+            localPixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+                assetWriterInput: nonOptionalVideoInput,
                 sourcePixelBufferAttributes: sourcePixelBufferAttributes
             )
-            
-            // Add inputs to writer
-            if assetWriter!.canAdd(assetWriterInput!) {
-                assetWriter!.add(assetWriterInput!)
+             guard localPixelBufferAdaptor != nil else {
+                  logger.error("Failed to create Pixel Buffer Adaptor.")
+                  throw CameraError.recordingFailed
+             }
+            self.assetWriterPixelBufferAdaptor = localPixelBufferAdaptor // Assign to instance variable
+             logger.info("Created pixel buffer adaptor.")
+
+
+            // Add inputs to writer...
+            logger.info("Adding inputs to writer...")
+            if writer.canAdd(videoInput) {
+                writer.add(videoInput)
                 logger.info("Added video input to asset writer")
             } else {
-                logger.error("Failed to add video input to asset writer")
+                logger.error("Failed to add video input. Writer status: \(writer.status.rawValue). Error: \(writer.error?.localizedDescription ?? "None")")
                 throw CameraError.recordingFailed
             }
-            
-            if assetWriter!.canAdd(audioInput) {
-                assetWriter!.add(audioInput)
+            if writer.canAdd(audioInput) {
+                writer.add(audioInput)
                 logger.info("Added audio input to asset writer")
             } else {
-                logger.error("Failed to add audio input to asset writer")
+                // Maybe non-fatal, depends on requirements
+                logger.error("Failed to add audio input. Writer status: \(writer.status.rawValue). Error: \(writer.error?.localizedDescription ?? "None")")
+                // throw CameraError.recordingFailed // Optional: throw if audio is mandatory
+            }
+             logger.info("Finished adding inputs.") // Log success point
+
+
+            // Start writing...
+            logger.info("Attempting to start writing session...")
+            recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000) // Use seconds for logging clarity
+            guard let startTime = recordingStartTime else {
+                 logger.error("Failed to get recording start time.")
+                 throw CameraError.recordingFailed
+            }
+
+            let didStartWriting = writer.startWriting()
+            guard didStartWriting else {
+                logger.error("Asset writer startWriting() returned false. Status: \(writer.status.rawValue). Error: \(writer.error?.localizedDescription ?? "None")")
                 throw CameraError.recordingFailed
             }
-            
-            // Ensure video and audio outputs are configured
-            setupVideoDataOutput()
-            setupAudioDataOutput()
-            
-            // Start writing
-            recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
-            
-            // Ensure the asset writer is in the correct state before starting the session
-            guard self.assetWriter!.status == .unknown else {
-                logger.error("Asset writer in incorrect state: \(self.assetWriter!.status.rawValue)")
+             logger.info("Asset writer startWriting() successful. Status: \(writer.status.rawValue)") // Should be .writing
+
+            writer.startSession(atSourceTime: startTime)
+            // Check status *after* starting session, as it can fail here too
+            guard writer.status == .writing else {
+                logger.error("Asset writer failed to enter writing state after startSession. Status: \(writer.status.rawValue). Error: \(writer.error?.localizedDescription ?? "None")")
                 throw CameraError.recordingFailed
             }
-            
-            // Start writing and session
-            self.assetWriter!.startWriting()
-            
-            // Ensure writing started successfully
-            guard self.assetWriter!.status == .writing else {
-                logger.error("Asset writer failed to start writing. Status: \(self.assetWriter!.status.rawValue)")
-                if let error = self.assetWriter!.error {
-                    logger.error("Asset writer error: \(error.localizedDescription)")
-                }
-                throw CameraError.recordingFailed
-            }
-            
-            // Start the session
-            self.assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
-            
-            logger.info("Started asset writer session at time: \(self.recordingStartTime!.seconds)")
-            
-            isRecording = true
-            delegate?.didStartRecording()
-            
-            logger.info("Started recording to: \(tempURL.path)")
-            logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC"), Frame Rate: \(self.selectedFrameRate)")
-            
+             logger.info("Started asset writer session at time: \(startTime.seconds)")
+
+
+            // If all setup succeeds:
+            isRecording = true // Set internal state
+            delegate?.didStartRecording() // Notify delegate
+
+            logger.info("✅ Successfully started recording to: \(tempURL.path)")
+            logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec.rawValue), Frame Rate: \(self.selectedFrameRate)")
+
         } catch {
-            // Clean up resources in case of error
-            assetWriter = nil
-            assetWriterInput = nil
-            assetWriterPixelBufferAdaptor = nil
-            currentRecordingURL = nil
-            
-            delegate?.didEncounterError(.recordingFailed)
-            logger.error("Failed to start recording: \(error.localizedDescription)")
+            logger.error("❌ Failed during startRecording setup: \(error.localizedDescription)")
+            // Enhanced Cleanup: Ensure all potentially created objects are nilled out
+            self.assetWriter = nil
+            self.assetWriterInput = nil
+            self.assetWriterPixelBufferAdaptor = nil
+            self.recordingStartTime = nil
+            // Don't nil currentRecordingURL yet, might be needed if partial file exists? Or remove partial file?
+            // if let url = currentRecordingURL { try? FileManager.default.removeItem(at: url) }
+            self.currentRecordingURL = nil // Decide on cleanup strategy
+
+            isRecording = false // Ensure state is false on failure
+            // Pass the specific error if possible, otherwise generic .recordingFailed
+             if let cameraError = error as? CameraError {
+                 delegate?.didEncounterError(cameraError)
+             } else {
+                 delegate?.didEncounterError(.recordingFailed)
+             }
         }
     }
-    
+
     func stopRecording() async {
         guard isRecording else { return }
-        
-        // Clear stored recording orientation
-        recordingOrientation = nil
-        logger.info("Cleared recording orientation")
-        
+
         logger.info("Finalizing video with \(self.videoFrameCount) frames (\(self.successfulVideoFrames) successful, \(self.failedVideoFrames) failed)")
-        
+
         await MainActor.run {
             delegate?.didUpdateProcessingState(true)
         }
-        
-        // Mark all inputs as finished
+
+        // Mark all inputs as finished...
         assetWriterInput?.markAsFinished()
+        // Assuming audioInput is correctly retrieved or stored if needed for finishing
+        assetWriter?.inputs.first(where: { $0.mediaType == .audio })?.markAsFinished() // Finish audio input too
         logger.info("Marked asset writer inputs as finished")
-        
-        // Wait for asset writer to finish
+
+        // Wait for asset writer...
         if let assetWriter = assetWriter {
             logger.info("Waiting for asset writer to finish writing...")
             await assetWriter.finishWriting()
             logger.info("Asset writer finished with status: \(assetWriter.status.rawValue)")
-            
             if let error = assetWriter.error {
                 logger.error("Asset writer error: \(error.localizedDescription)")
             }
         }
-        
-        // Clean up recording resources
-        if let videoDataOutput = videoDataOutput {
-            session.removeOutput(videoDataOutput)
-            self.videoDataOutput = nil
-            logger.info("Removed video data output from session")
-        }
-        
-        if let audioDataOutput = audioDataOutput {
-            session.removeOutput(audioDataOutput)
-            self.audioDataOutput = nil
-            logger.info("Removed audio data output from session")
-        }
-        
-        // Reset recording state
+
+        // Reset recording state...
         isRecording = false
         delegate?.didStopRecording()
         recordingStartTime = nil
-        
-        // Save to photo library if we have a valid recording
+
+        // Save to photo library...
         if let outputURL = currentRecordingURL {
             logger.info("Saving video to photo library: \(outputURL.path)")
-            
-            // Generate thumbnail before saving
             let thumbnail = await generateThumbnail(from: outputURL)
-            
-            // Save the video
             await saveToPhotoLibrary(outputURL, thumbnail: thumbnail)
         }
-        
+
         // Clean up
         assetWriter = nil
         assetWriterInput = nil
         assetWriterPixelBufferAdaptor = nil
         currentRecordingURL = nil
-        
+
         await MainActor.run {
             delegate?.didUpdateProcessingState(false)
         }
-        
+
         logger.info("Recording session completed")
     }
-    
+
     private func saveToPhotoLibrary(_ outputURL: URL, thumbnail: UIImage?) async {
         do {
             let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
@@ -414,7 +355,7 @@ class RecordingService: NSObject {
             }
         }
     }
-    
+
     private func generateThumbnail(from videoURL: URL) async -> UIImage? {
         let asset = AVURLAsset(url: videoURL)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
@@ -431,37 +372,7 @@ class RecordingService: NSObject {
             return nil
         }
     }
-    
-    private func getVideoTransform(for rotationAngle: CGFloat) -> CGAffineTransform {
-        // Convert rotation angle to radians
-        let rotationInRadians = rotationAngle * .pi / 180.0
-        
-        // Handle specific orientations
-        let transform: CGAffineTransform
-        switch rotationAngle {
-        case 90.0:  // Portrait mode
-            transform = CGAffineTransform(rotationAngle: .pi / 2)  // 90° clockwise
-            logger.info("📱 Video Transform: Portrait mode (90°) -> π/2 radians")
-        case 180.0:  // Landscape with USB on left
-            transform = CGAffineTransform(rotationAngle: .pi)  // 180°
-            logger.info("📱 Video Transform: Landscape USB left (180°) -> π radians")
-        case 0.0:  // Landscape with USB on right
-            transform = .identity  // No rotation
-            logger.info("📱 Video Transform: Landscape USB right (0°) -> identity")
-        case 270.0:  // Portrait upside down
-            transform = CGAffineTransform(rotationAngle: -.pi / 2)  // 270°
-            logger.info("📱 Video Transform: Portrait upside down (270°) -> -π/2 radians")
-        default:
-            // For any other angles, use the standard calculation
-            transform = CGAffineTransform(rotationAngle: rotationInRadians)
-            logger.info("📱 Video Transform: Custom angle (\(rotationAngle)°) -> \(rotationInRadians) radians")
-        }
-        
-        // Log the actual transform values for debugging
-        logger.info("🔄 Transform Details - a: \(transform.a), b: \(transform.b), c: \(transform.c), d: \(transform.d)")
-        return transform
-    }
-    
+
     // Process image with LUT filter if available
     func applyLUT(to image: CIImage) -> CIImage? {
         guard let lutFilter = lutManager?.currentLUTFilter else {
@@ -471,7 +382,7 @@ class RecordingService: NSObject {
         lutFilter.setValue(image, forKey: kCIInputImageKey)
         return lutFilter.outputImage
     }
-    
+
     // Helper method for creating pixel buffers from CIImage
     private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
         var newPixelBuffer: CVPixelBuffer?
@@ -490,7 +401,7 @@ class RecordingService: NSObject {
         ciContext.render(ciImage, to: outputBuffer)
         return outputBuffer
     }
-    
+
     // Helper method for creating sample buffers
     private func createSampleBuffer(
         from pixelBuffer: CVPixelBuffer,
@@ -516,85 +427,131 @@ class RecordingService: NSObject {
         
         return sampleBuffer
     }
-}
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
-
-extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    // Public method for CameraViewModel to call with sample buffers
+    func processFrame(output: AVCaptureOutput, sampleBuffer: CMSampleBuffer, connection: AVCaptureConnection) {
         guard isRecording,
-              let assetWriter = assetWriter,
-              assetWriter.status == .writing else {
+              let assetWriter = assetWriter else {
             return
         }
-        
+
+        // Check writer status before attempting append
+        guard assetWriter.status == .writing else {
+            // Log writer status if it's not writing (e.g., failed, completed, cancelled)
+             if videoFrameCount % 30 == 0 { // Log periodically
+                 logger.error("Asset writer is not in writing state (\(assetWriter.status.rawValue)). Skipping frame #\(self.videoFrameCount). Error: \(assetWriter.error?.localizedDescription ?? "None")")
+             }
+            // Consider stopping recording or signaling an error if status is failed
+            return
+        }
+
         // Handle video data
-        if output == videoDataOutput,
-           let assetWriterInput = assetWriterInput,
-           assetWriterInput.isReadyForMoreMediaData {
-            
+        // Check if the output matches the expected video output type.
+        if let assetWriterInput = assetWriterInput, // Check if video input exists
+           assetWriterInput.isReadyForMoreMediaData,
+           output is AVCaptureVideoDataOutput { // Check if it's the video output
+
             videoFrameCount += 1
-            
-            // Log every 30 frames to avoid flooding
             let shouldLog = videoFrameCount % 30 == 0
-            if shouldLog {
-                logger.debug("Processing video frame #\(self.videoFrameCount), writer status: \(assetWriter.status.rawValue)")
-            }
-            
+
+            var appendSuccess = false
+            var bufferToAppend: CMSampleBuffer? = nil
+
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 if isBakeInLUTEnabled, let lutManager = lutManager, lutManager.currentLUTFilter != nil {
+                    // --- LUT Processing Logic ---
                     let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
                     if let processedImage = applyLUT(to: ciImage),
                        let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
-                        
-                        // Use original timing information
+
                         var timing = CMSampleTimingInfo()
                         CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
-                        
-                        // Create format description for processed buffer
+
                         var info: CMFormatDescription?
                         let status = CMVideoFormatDescriptionCreateForImageBuffer(
                             allocator: kCFAllocatorDefault,
                             imageBuffer: processedPixelBuffer,
                             formatDescriptionOut: &info
                         )
-                        
-                        if status == noErr, let info = info,
-                           let newSampleBuffer = createSampleBuffer(
-                            from: processedPixelBuffer,
-                            formatDescription: info,
-                            timing: &timing
-                           ) {
-                            assetWriterInput.append(newSampleBuffer)
-                            successfulVideoFrames += 1
-                            if shouldLog {
-                                logger.debug("Successfully appended processed frame #\(self.successfulVideoFrames)")
+
+                        if status == noErr, let info = info {
+                            bufferToAppend = createSampleBuffer(
+                                from: processedPixelBuffer,
+                                formatDescription: info,
+                                timing: &timing
+                            )
+                            if bufferToAppend == nil {
+                                logger.warning("Failed to create sample buffer for processed frame #\(self.videoFrameCount)")
                             }
                         } else {
-                            failedVideoFrames += 1
-                            logger.warning("Failed to create format description for processed frame #\(self.videoFrameCount)")
+                             logger.warning("Failed to create format description for processed frame #\(self.videoFrameCount)")
                         }
+                    } else {
+                         logger.warning("Failed to process or create pixel buffer for LUT frame #\(self.videoFrameCount)")
                     }
+                     // --- End LUT Processing ---
                 } else {
                     // No LUT processing needed - use original sample buffer directly
-                    assetWriterInput.append(sampleBuffer)
-                    successfulVideoFrames += 1
-                    if shouldLog {
-                        logger.debug("Successfully appended original frame #\(self.successfulVideoFrames)")
+                    bufferToAppend = sampleBuffer
+                }
+
+                // Attempt to append the buffer (either original or processed)
+                if let finalBuffer = bufferToAppend {
+                    // Make sure assetWriterInput is ready one last time before appending
+                    if assetWriterInput.isReadyForMoreMediaData {
+                        appendSuccess = assetWriterInput.append(finalBuffer)
+                    } else {
+                        appendSuccess = false // Not ready, so append fails
+                        if shouldLog {
+                            logger.warning("Video input not ready for frame #\(self.videoFrameCount)")
+                        }
                     }
                 }
+            } else {
+                 logger.warning("Could not get pixel buffer from sample buffer frame #\(self.videoFrameCount)")
             }
-        }
-        
+
+            // Update counters and log status
+            if appendSuccess {
+                successfulVideoFrames += 1
+                if shouldLog {
+                    logger.debug("Appended video frame #\(self.videoFrameCount) (Success: \(self.successfulVideoFrames))")
+                }
+            } else {
+                failedVideoFrames += 1
+                // Check writer status *after* a failed append
+                if assetWriter.status != .writing {
+                     logger.error("Asset writer status changed to \(assetWriter.status.rawValue) after failed append of frame #\(self.videoFrameCount). Error: \(assetWriter.error?.localizedDescription ?? "None")")
+                     // Optionally trigger stop/error handling here
+                } else if shouldLog || failedVideoFrames == 1 { // Log first failure and periodically after
+                    logger.warning("Failed to append video frame #\(self.videoFrameCount) (Failed: \(self.failedVideoFrames)). Writer status: \(assetWriter.status.rawValue)")
+                }
+            }
+        } // End Video Handling
+
         // Handle audio data
-        if output == audioDataOutput,
-           let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
-           audioInput.isReadyForMoreMediaData {
-            audioFrameCount += 1
-            audioInput.append(sampleBuffer)
-            if audioFrameCount % 100 == 0 {
-                logger.debug("Processed audio frame #\(self.audioFrameCount)")
-            }
-        }
-    }
-} 
+        // Check if the output matches the expected audio output type
+        if let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
+           audioInput.isReadyForMoreMediaData,
+           output is AVCaptureAudioDataOutput { // Check if it's the audio output
+
+            // Check writer status before appending audio too
+             guard assetWriter.status == .writing else { return }
+
+            let appendSuccess = audioInput.append(sampleBuffer)
+             if appendSuccess {
+                audioFrameCount += 1
+                if audioFrameCount % 100 == 0 { // Log periodically
+                    logger.debug("Appended audio frame #\(self.audioFrameCount)")
+                }
+             } else {
+                 if assetWriter.status != .writing {
+                     logger.error("Asset writer status changed to \(assetWriter.status.rawValue) after failed audio append. Error: \(assetWriter.error?.localizedDescription ?? "None")")
+                 } else if audioFrameCount % 100 == 0 { // Log periodically on failure too
+                     logger.warning("Failed to append audio frame #\(self.audioFrameCount). Writer status: \(assetWriter.status.rawValue)")
+                 }
+             }
+        } // End Audio Handling
+    } // End processFrame method
+
+} // End RecordingService class

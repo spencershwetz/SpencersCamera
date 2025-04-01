@@ -114,6 +114,9 @@ class CameraDeviceService {
     }
     
     func switchToLens(_ lens: CameraLens) {
+        // CAPTURE orientation on main thread *before* going to background
+        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        
         cameraQueue.async { [weak self] in
             guard let self = self else { return }
             
@@ -123,17 +126,20 @@ class CameraDeviceService {
                    currentDevice.deviceType == .builtInWideAngleCamera {
                     self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice)
                 } else {
-                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor)
+                    // Pass the captured orientation
+                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor, currentInterfaceOrientation: currentInterfaceOrientation)
                 }
                 return
             }
             
             // For all other lenses, try to switch physical device
-            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0)
+            // Pass the captured orientation
+            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0, currentInterfaceOrientation: currentInterfaceOrientation)
         }
     }
     
-    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat) {
+    // CHANGE: Add currentInterfaceOrientation parameter
+    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat, currentInterfaceOrientation: UIInterfaceOrientation) {
         logger.info("🔄 Attempting to switch to \(lens.rawValue)× lens")
         
         // Get discovery session for all possible back cameras
@@ -156,17 +162,31 @@ class CameraDeviceService {
         
         // Check if we're already on this device
         if let currentDevice = device, currentDevice == newDevice {
+            // No need to pass orientation here as we aren't reconfiguring the session
             setDigitalZoom(to: zoomFactor, on: currentDevice)
             return
         }
         
-        // Store current orientation settings to preserve during lens switch
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        // REMOVE: Reading orientation from UI on background thread
+        // let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        
+        // Store current video angle to preserve during lens switch
         var currentVideoAngle: CGFloat = 90 // Default to portrait
         
         // Get current video orientation from any existing connection
+        // Note: Accessing session outputs might be okay, but keep UI reads off this thread.
         if let videoConnection = session.outputs.first?.connection(with: .video) {
             currentVideoAngle = videoConnection.videoRotationAngle
+        } else {
+            // If no connection yet, determine angle from the captured interface orientation
+             switch currentInterfaceOrientation {
+                 case .portrait: currentVideoAngle = 90
+                 case .landscapeLeft: currentVideoAngle = 0 // USB right
+                 case .landscapeRight: currentVideoAngle = 180 // USB left
+                 case .portraitUpsideDown: currentVideoAngle = 270
+                 default: currentVideoAngle = 90
+             }
+             logger.info("Setting initial video angle based on captured interface orientation: \(currentVideoAngle)°")
         }
         
         // Configure session with new device
@@ -186,6 +206,9 @@ class CameraDeviceService {
                 if let connection = output.connection(with: .video),
                    connection.isVideoRotationAngleSupported(currentVideoAngle) {
                     connection.videoRotationAngle = currentVideoAngle
+                    logger.info("Applied initial video angle \(currentVideoAngle)° to connection for output: \(output.description)")
+                } else if let connection = output.connection(with: .video) {
+                     logger.warning("Video angle \(currentVideoAngle)° not supported for connection: \(connection.description)")
                 }
             }
             
@@ -205,12 +228,17 @@ class CameraDeviceService {
             
         } catch {
             logger.error("❌ Failed to switch lens: \(error.localizedDescription)")
-            session.commitConfiguration()
+            session.commitConfiguration() // Ensure commit even on failure
             
             // Try to recover by returning to wide angle
             if lens != .wide {
                 logger.info("🔄 Attempting to recover by switching to wide angle")
-                switchToLens(.wide)
+                // We need the orientation again for the recovery switch
+                DispatchQueue.main.async { [weak self] in // Get orientation on main thread
+                    guard let self else { return }
+                    let recoveryOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+                    self.switchToLens(.wide) // Let switchToLens handle dispatching again
+                }
             } else {
                 // If we can't even switch to wide angle, notify delegate of error
                 DispatchQueue.main.async { [weak self] in
@@ -218,6 +246,7 @@ class CameraDeviceService {
                 }
             }
             
+            // Restart session if it was running before the attempt
             if wasRunning {
                 session.startRunning()
             }
