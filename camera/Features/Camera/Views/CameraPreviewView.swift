@@ -3,376 +3,237 @@ import AVFoundation
 import CoreImage
 import AVKit
 
+// CHANGE: Add extension for UIInterfaceOrientation description (can be moved later)
+extension UIInterfaceOrientation {
+    var description: String {
+        switch self {
+        case .unknown: return "unknown"
+        case .portrait: return "portrait"
+        case .portraitUpsideDown: return "portraitUpsideDown"
+        case .landscapeLeft: return "landscapeLeft"
+        case .landscapeRight: return "landscapeRight"
+        @unknown default: return "unknown_\(rawValue)"
+        }
+    }
+}
+
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
     let viewModel: CameraViewModel
-    
-    func makeUIView(context: Context) -> RotationLockedContainer {
-        print("DEBUG: Creating CameraPreviewView")
-        
-        // Create container with explicit bounds
-        let screen = UIScreen.main.bounds
-        let container = RotationLockedContainer(contentView: CustomPreviewView(frame: screen, 
-                                                                              session: session, 
-                                                                              lutManager: lutManager,
-                                                                              viewModel: viewModel))
-        
-        // Store reference to this container in the view model for LUT processing
-        viewModel.owningView = container
-        
-        // Force layout
-        container.setNeedsLayout()
-        container.layoutIfNeeded()
-        
-        return container
+    private let viewInstanceId = UUID() // Add for logging
+
+    func makeUIView(context: Context) -> CustomPreviewView {
+        print("DEBUG: [\(viewInstanceId)] Creating CustomPreviewView")
+        let preview = CustomPreviewView(
+            session: session,
+            lutManager: lutManager,
+            viewModel: viewModel
+        )
+        // Store reference directly to the preview view
+        viewModel.owningView = preview
+        print("DEBUG: [\(viewInstanceId)] Stored reference to CustomPreviewView in viewModel")
+        return preview
     }
-    
-    func updateUIView(_ uiView: RotationLockedContainer, context: Context) {
-        print("DEBUG: updateUIView - Container frame: \(uiView.frame)")
-        if let preview = uiView.viewWithTag(100) as? CustomPreviewView {
-            print("DEBUG: updateUIView - Preview frame: \(preview.frame)")
-            // Update LUT if needed - just pass the reference, don't modify
-            preview.updateLUT(lutManager.currentLUTFilter)
+
+    func updateUIView(_ uiView: CustomPreviewView, context: Context) {
+        // Update LUT if needed
+        // Check reference equality first to avoid unnecessary updates/warnings
+        if uiView.currentLUTFilter !== lutManager.currentLUTFilter {
+            print("DEBUG: [\(viewInstanceId)] updateUIView - Updating LUT filter.")
+            uiView.updateLUT(lutManager.currentLUTFilter)
+        } else {
+            // print("DEBUG: [\(viewInstanceId)] updateUIView - LUT filter unchanged.")
+        }
+
+        // Update the reference in viewModel if it somehow changed (less likely now)
+        if viewModel.owningView !== uiView {
+            viewModel.owningView = uiView
+            print("DEBUG: [\(viewInstanceId)] updateUIView - Updated owningView reference.")
         }
     }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-    
-    class Coordinator: NSObject {
-        let parent: CameraPreviewView
-        
-        init(parent: CameraPreviewView) {
-            self.parent = parent
-            super.init()
-        }
-    }
-    
-    // MARK: - Custom Views
-    
-    // A container view that actively resists rotation changes
-    class RotationLockedContainer: UIView {
-        private let contentView: UIView
-        private var borderLayer: CALayer?
+
+    class CustomPreviewView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
+        let previewLayer: AVCaptureVideoPreviewLayer
+        private var dataOutput: AVCaptureVideoDataOutput?
+        let session: AVCaptureSession
+        // CHANGE: Make lutManager private if only updated via updateLUT
+        private var lutManager: LUTManager
+        // CHANGE: Make viewModel weak to prevent potential retain cycles
+        weak var viewModel: CameraViewModel?
+        private var ciContext = CIContext(options: [.useSoftwareRenderer: false])
+        // CHANGE: Make processingQueue serial for safety
+        private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
+        // CHANGE: Make currentLUTFilter private
+        private(set) var currentLUTFilter: CIFilter? // Keep track internally
         private let cornerRadius: CGFloat = 20.0
-        private let borderWidth: CGFloat = 4.0
-        private var volumeButtonHandler: VolumeButtonHandler?
-        
-        init(contentView: UIView) {
-            self.contentView = contentView
-            super.init(frame: .zero)
+        private let instanceId = UUID() // Add for logging
+        private var volumeButtonHandler: VolumeButtonHandler? // Move handler here
+
+        // Keep track of the current interface orientation
+        private var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
+
+        init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
+            self.session = session
+            self.lutManager = lutManager
+            self.viewModel = viewModel
+            self.previewLayer = AVCaptureVideoPreviewLayer(session: session) // Init directly with session
+            super.init(frame: .zero) // Start with zero frame, let layout handle it
+            print("DEBUG: [\(instanceId)] CustomPreviewView.init")
             setupView()
-            setupBorderLayer()
-            setupVolumeButtonHandler()
-            
+            setupVolumeButtonHandler() // Setup volume handler here
+
+            // Observe orientation changes
+            NotificationCenter.default.addObserver(self,
+                                                 selector: #selector(handleOrientationChange),
+                                                 name: UIDevice.orientationDidChangeNotification,
+                                                 object: nil)
             // Observe recording state changes
             NotificationCenter.default.addObserver(self,
                                                  selector: #selector(handleRecordingStateChange),
                                                  name: NSNotification.Name("RecordingStateChanged"),
                                                  object: nil)
+
+            // Set initial orientation
+            handleOrientationChange()
         }
-        
+
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
         }
-        
-        private func setupView() {
-            // Set background to black
-            backgroundColor = .black
-            
-            // Add content view to fill the container but with space only for border
-            addSubview(contentView)
-            contentView.translatesAutoresizingMaskIntoConstraints = false
-            
-            // Create constraints with slightly lower priority
-            let topConstraint = contentView.topAnchor.constraint(equalTo: topAnchor, constant: borderWidth)
-            let bottomConstraint = contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -borderWidth)
-            let leadingConstraint = contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: borderWidth)
-            let trailingConstraint = contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -borderWidth)
-            
-            // Set priority to just below required
-            topConstraint.priority = .required - 1
-            bottomConstraint.priority = .required - 1
-            leadingConstraint.priority = .required - 1
-            trailingConstraint.priority = .required - 1
-            
-            // Activate the constraints
-            NSLayoutConstraint.activate([
-                topConstraint,
-                bottomConstraint,
-                leadingConstraint,
-                trailingConstraint
-            ])
-            
-            // Disable safe area insets
-            contentView.insetsLayoutMarginsFromSafeArea = false
-            
-            // Set black background for all parent views
-            setBlackBackgroundForParentViews()
-        }
-        
-        private func setupBorderLayer() {
-            let border = CALayer()
-            border.borderWidth = borderWidth
-            border.borderColor = UIColor.clear.cgColor
-            border.cornerRadius = cornerRadius  // Use the same corner radius as the preview
-            layer.addSublayer(border)
-            borderLayer = border
-        }
-        
-        private func setupVolumeButtonHandler() {
-            if #available(iOS 17.2, *) {
-                if let previewView = contentView as? CustomPreviewView {
-                    volumeButtonHandler = VolumeButtonHandler(viewModel: previewView.viewModel)
-                    volumeButtonHandler?.attachToView(self)
-                    print("✅ Volume button handler initialized and attached")
-                }
-            } else {
-                print("⚠️ Volume button recording requires iOS 17.2 or later")
-            }
-        }
-        
+
         deinit {
+            print("DEBUG: [\(instanceId)] CustomPreviewView.deinit")
+            // Remove observers
+            NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RecordingStateChanged"), object: nil)
+
+            // Detach volume handler
             if #available(iOS 17.2, *) {
-                // Store a weak reference to volumeButtonHandler before deinit
                 let handler = volumeButtonHandler
-                let view = self
-                Task { @MainActor in
-                    handler?.detachFromView(view)
+                Task { @MainActor [weak self] in // Capture self weakly
+                    guard let self else { return }
+                    handler?.detachFromView(self)
                 }
-                // Clear the reference
-                volumeButtonHandler = nil
+                volumeButtonHandler = nil // Clear reference
             }
         }
-        
-        @objc private func handleRecordingStateChange() {
-            if let viewModel = (contentView as? CustomPreviewView)?.viewModel {
-                if viewModel.isRecording {
-                    animateBorderIn()
-                } else {
-                    animateBorderOut()
-                }
-            }
-        }
-        
-        private func animateBorderIn() {
-            let animation = CABasicAnimation(keyPath: "borderColor")
-            animation.fromValue = UIColor.clear.cgColor
-            animation.toValue = UIColor.red.cgColor
-            animation.duration = 0.3
-            animation.fillMode = .forwards
-            animation.isRemovedOnCompletion = false
-            borderLayer?.add(animation, forKey: "borderColorAnimation")
-        }
-        
-        private func animateBorderOut() {
-            let animation = CABasicAnimation(keyPath: "borderColor")
-            animation.fromValue = UIColor.red.cgColor
-            animation.toValue = UIColor.clear.cgColor
-            animation.duration = 0.3
-            animation.fillMode = .forwards
-            animation.isRemovedOnCompletion = false
-            borderLayer?.add(animation, forKey: "borderColorAnimation")
-        }
-        
-        override func layoutSubviews() {
-            super.layoutSubviews()
-            
-            // Update border frame to match view bounds
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            borderLayer?.frame = bounds
-            CATransaction.commit()
-            
-            // Keep background color black during layout changes
-            backgroundColor = .black
-            
-            // Check for changes in safe area insets
-            if safeAreaInsets != .zero {
-                // Force content to fill entire view with just border width
-                // contentView.frame = bounds.inset(by: UIEdgeInsets(top: borderWidth,
-                //                                                 left: borderWidth,
-                //                                                 bottom: borderWidth,
-                //                                                 right: borderWidth))
-            }
-            
-            // Set black background for parent views
-            setBlackBackgroundForParentViews()
-        }
-        
-        private func setBlackBackgroundForParentViews() {
-            // Recursively set black background color on all parent views
-            var currentView: UIView? = self
-            while let view = currentView {
-                view.backgroundColor = .black
-                
-                // Also set any CALayer backgrounds to black
-                view.layer.backgroundColor = UIColor.black.cgColor
-                
-                currentView = view.superview
-            }
-            
-            print("DEBUG: RotationLockedContainer set black background for all parent views")
-        }
-        
-        // Make safe area insets zero to prevent any white bars
-        override var safeAreaInsets: UIEdgeInsets {
-            return .zero
-        }
-        
-        override func safeAreaInsetsDidChange() {
-            super.safeAreaInsetsDidChange()
-            // Force black background when safe area changes
-            setBlackBackgroundForParentViews()
-        }
-    }
-    
-    // Custom preview view that handles LUT processing
-    class CustomPreviewView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
-        private let previewLayer: AVCaptureVideoPreviewLayer
-        private var dataOutput: AVCaptureVideoDataOutput?
-        private let session: AVCaptureSession
-        private var lutManager: LUTManager
-        var viewModel: CameraViewModel
-        private var ciContext = CIContext(options: [.useSoftwareRenderer: false])
-        private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
-        private var currentLUTFilter: CIFilter?
-        private let cornerRadius: CGFloat = 20.0
-        
-        init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
-            self.session = session
-            self.lutManager = lutManager
-            self.viewModel = viewModel
-            self.previewLayer = AVCaptureVideoPreviewLayer()
-            super.init(frame: frame)
-            setupView()
-        }
-        
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
-        
+
         private func setupView() {
-            // Set up preview layer
-            previewLayer.session = session
+            print("DEBUG: [\(instanceId)] setupView")
+            backgroundColor = .black // Set background color here
+            layer.addSublayer(previewLayer)
             previewLayer.videoGravity = .resizeAspectFill
             previewLayer.cornerRadius = cornerRadius
             previewLayer.masksToBounds = true
-            layer.addSublayer(previewLayer)
-            
-            // Tag this view for easy lookup
+
+            // Tag this view for potential lookup (though direct reference is better)
             tag = 100
-            
-            // Ensure preview layer fills the entire view
-            previewLayer.frame = bounds
-            
-            // Disable autoresizing mask to use constraints
-            translatesAutoresizingMaskIntoConstraints = false
-            
-            // Set background color
-            backgroundColor = .black
-            
-            // Force portrait orientation for the preview layer
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-            
-            // Initial frame update
-            updateFrameSize()
+
+            // Use autoresizing mask for simplicity within the UIViewRepresentable context
+            autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            previewLayer.frame = bounds // Initial frame setup
         }
-        
+
+        private func setupVolumeButtonHandler() {
+             guard let viewModel else { return } // Ensure viewModel exists
+             if #available(iOS 17.2, *) {
+                 volumeButtonHandler = VolumeButtonHandler(viewModel: viewModel)
+                 volumeButtonHandler?.attachToView(self)
+                 print("✅ [\(instanceId)] Volume button handler initialized and attached")
+             } else {
+                 print("⚠️ [\(instanceId)] Volume button recording requires iOS 17.2 or later")
+             }
+         }
+
+        @objc private func handleRecordingStateChange() {
+             // Update border based on viewModel state
+             guard let viewModel else { return }
+             let isRecording = viewModel.isRecording
+             // Animate border on the main layer of this view
+             let animation = CABasicAnimation(keyPath: "borderColor")
+             animation.fromValue = isRecording ? UIColor.clear.cgColor : UIColor.red.cgColor
+             animation.toValue = isRecording ? UIColor.red.cgColor : UIColor.clear.cgColor
+             animation.duration = 0.3
+             animation.fillMode = .forwards
+             animation.isRemovedOnCompletion = false
+             layer.borderWidth = isRecording ? 4.0 : 0.0 // Set border width
+             layer.cornerRadius = cornerRadius // Ensure corner radius is consistent
+             layer.add(animation, forKey: "borderColorAnimation")
+
+             if isRecording {
+                 layer.borderColor = UIColor.red.cgColor // Ensure final state
+             } else {
+                 // Remove border color explicitly after animation if needed,
+                 // but setting width to 0 should suffice.
+             }
+        }
+
+        @objc private func handleOrientationChange() {
+             // Get current interface orientation (safer than device orientation)
+             let newOrientation = window?.windowScene?.interfaceOrientation ?? .portrait
+             guard newOrientation.isPortrait || newOrientation.isLandscape else { return } // Ignore faceup/down
+
+             // Only update if orientation actually changed
+             guard newOrientation != currentInterfaceOrientation else { return }
+             currentInterfaceOrientation = newOrientation
+
+             // CHANGE: Use the new description property for logging
+             print("DEBUG: [\(instanceId)] handleOrientationChange - New Interface Orientation: \(currentInterfaceOrientation.description)")
+
+             // Update preview layer orientation
+             updateConnectionOrientation(for: previewLayer.connection)
+
+             // Update data output orientation if it exists
+             if let dataOutput = dataOutput {
+                 updateConnectionOrientation(for: dataOutput.connection(with: .video))
+             }
+         }
+
+        // Helper to set connection orientation based on currentInterfaceOrientation
+         private func updateConnectionOrientation(for connection: AVCaptureConnection?) {
+             guard let connection else { return }
+
+             // CHANGE: Set rotation based on interface orientation
+             let rotationAngle: CGFloat
+             switch currentInterfaceOrientation {
+             case .portrait:
+                 rotationAngle = 90
+             case .landscapeLeft:
+                 rotationAngle = 180 // Corrected from previous thought, was landscapeRight
+             case .landscapeRight:
+                 rotationAngle = 0   // Corrected from previous thought, was landscapeLeft
+             case .portraitUpsideDown:
+                 rotationAngle = 270
+             default:
+                 rotationAngle = 90 // Default to portrait
+             }
+
+             if connection.isVideoRotationAngleSupported(rotationAngle) {
+                 connection.videoRotationAngle = rotationAngle
+                 // Use the new description property for logging
+                 print("DEBUG: [\(instanceId)] Updated connection (\(connection.description.suffix(10))) angle to: \(rotationAngle) for \(currentInterfaceOrientation.description)")
+             } else {
+                 // Use the new description property for logging
+                 print("WARN: [\(instanceId)] Rotation angle \(rotationAngle) not supported for connection (\(connection.description.suffix(10))) for \(currentInterfaceOrientation.description)")
+             }
+         }
+
         override func layoutSubviews() {
             super.layoutSubviews()
-            
-            // Ensure preview layer and LUT overlay fill the entire view
+            // Ensure preview layer frame matches bounds
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            
-            // Update preview layer frame
             previewLayer.frame = bounds
-            
-            // Update LUT overlay if it exists
+            // Update LUT overlay frame if it exists
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                 overlay.frame = bounds
                 overlay.cornerRadius = cornerRadius
+
             }
-            
-            CATransaction.commit()
-            
-            // Force portrait orientation
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-        }
-        
-        // MARK: - Frame Management
-        
-        func updateFrameSize() {
-            // Use animation to prevent abrupt changes
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            
-            // Calculate the frame that covers the entire screen
-            let screenBounds = UIScreen.main.bounds
-            let frame = CGRect(x: 0, y: 0, width: screenBounds.width, height: screenBounds.height)
-            
-            // Update view frame
-            self.frame = frame
-            
-            // Update preview layer frame
-            previewLayer.frame = bounds
-            
-            // Ensure corners stay rounded
-            previewLayer.cornerRadius = cornerRadius
-            
-            // Force portrait orientation
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-            
-            // Update LUT overlay layer if it exists
-            if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                overlay.frame = bounds
-                overlay.cornerRadius = cornerRadius
-            }
-            
             CATransaction.commit()
         }
-        
-        // Method to ensure LUT overlay has correct orientation
-        func updateLUTOverlayOrientation() {
-            // Force portrait orientation for preview layer
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-            
-            // Ensure data output connection has correct orientation
-            if let dataOutput = dataOutput, let connection = dataOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
-            
-            // Update overlay to match preview layer orientation
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                    // No need to modify overlay properties, just ensure underlying connections are correct
-                    print("DEBUG: Ensured LUT overlay orientation is correct (90°)")
-                }
-            }
-        }
-        
+
         func updateLUT(_ filter: CIFilter?) {
             // Skip if same filter (reference equality)
             if (filter === currentLUTFilter) {

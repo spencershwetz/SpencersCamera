@@ -140,27 +140,15 @@ struct CameraView: View {
              startSession()
          }
          .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-             let deviceOrientation = UIDevice.current.orientation
-             if deviceOrientation.isValidInterfaceOrientation {
-                 // Update video output orientation if needed (handled by services now)
-             }
+             // Orientation is handled within CustomPreviewView now
          }
          .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
              if newValue != nil {
                  print("DEBUG: LUT filter updated to: \(lutManager.currentLUTName)")
-                 showLUTPreview = true
+                 showLUTPreview = true // This state variable might be redundant now
              } else {
                  print("DEBUG: LUT filter removed")
-             }
-         }
-         .onChange(of: viewModel.currentLens) { oldValue, newValue in
-             if showLUTPreview && lutManager.currentLUTFilter != nil {
-                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                     if let container = viewModel.owningView,
-                        let preview = container.viewWithTag(100) as? CameraPreviewView.CustomPreviewView {
-                         preview.updateLUTOverlayOrientation()
-                     }
-                 }
+                 showLUTPreview = false // This state variable might be redundant now
              }
          }
          .alert(item: $viewModel.error) { error in
