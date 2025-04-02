@@ -77,11 +77,24 @@ struct CameraPreviewView: UIViewRepresentable {
             self.session = session
             self.lutManager = lutManager
             self.viewModel = viewModel
-            self.previewLayer = AVCaptureVideoPreviewLayer(session: session) // Init directly with session
-            super.init(frame: .zero) // Start with zero frame, let layout handle it
+            
+            // Initialize preview layer with session
+            self.previewLayer = AVCaptureVideoPreviewLayer(session: session)
+            
+            // Initialize with zero frame first
+            super.init(frame: .zero)
+            
             print("DEBUG: [\(instanceId)] CustomPreviewView.init")
+            
+            // Configure preview layer after init
+            previewLayer.videoGravity = .resizeAspectFill
+            previewLayer.frame = UIScreen.main.bounds
+            previewLayer.connection?.automaticallyAdjustsVideoMirroring = false
+            previewLayer.connection?.isVideoMirrored = false
+            
+            // Set up the view
             setupView()
-            setupVolumeButtonHandler() // Setup volume handler here
+            setupVolumeButtonHandler()
 
             // Observe orientation changes
             NotificationCenter.default.addObserver(self,
@@ -96,6 +109,10 @@ struct CameraPreviewView: UIViewRepresentable {
 
             // Set initial orientation
             handleOrientationChange()
+            
+            // Force initial layout
+            setNeedsLayout()
+            layoutIfNeeded()
         }
 
         required init?(coder: NSCoder) {
@@ -121,18 +138,43 @@ struct CameraPreviewView: UIViewRepresentable {
 
         private func setupView() {
             print("DEBUG: [\(instanceId)] setupView")
-            backgroundColor = .black // Set background color here
-            layer.addSublayer(previewLayer)
-            previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.cornerRadius = cornerRadius
+            
+            // Set background color
+            backgroundColor = .black
+            
+            // Remove any existing layers
+            layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+            
+            // Configure preview layer
+            previewLayer.frame = bounds
             previewLayer.masksToBounds = true
-
-            // Tag this view for potential lookup (though direct reference is better)
+            previewLayer.cornerRadius = cornerRadius
+            previewLayer.isHidden = false
+            
+            // Add preview layer as the first sublayer
+            layer.insertSublayer(previewLayer, at: 0)
+            
+            // Tag this view for potential lookup
             tag = 100
-
-            // Use autoresizing mask for simplicity within the UIViewRepresentable context
-            autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            previewLayer.frame = bounds // Initial frame setup
+            
+            // Ensure proper orientation
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    print("DEBUG: Set initial preview layer rotation to 90°")
+                }
+            }
+            
+            // Set up video data output if needed
+            if currentLUTFilter != nil {
+                setupDataOutput()
+            }
+            
+            // Update frame to screen bounds
+            frame = UIScreen.main.bounds
+            
+            print("DEBUG: Preview layer frame after setup: \(previewLayer.frame)")
+            print("DEBUG: View frame after setup: \(frame)")
         }
 
         private func setupVolumeButtonHandler() {
@@ -221,17 +263,34 @@ struct CameraPreviewView: UIViewRepresentable {
 
         override func layoutSubviews() {
             super.layoutSubviews()
-            // Ensure preview layer frame matches bounds
+            
+            print("DEBUG: layoutSubviews called - bounds: \(bounds)")
+            
+            // Update layer frames
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            
+            // Update preview layer frame
             previewLayer.frame = bounds
-            // Update LUT overlay frame if it exists
+            previewLayer.isHidden = false
+            
+            // Update LUT overlay if it exists
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                 overlay.frame = bounds
                 overlay.cornerRadius = cornerRadius
-
             }
+            
+            // Ensure proper orientation
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+            }
+            
             CATransaction.commit()
+            
+            print("DEBUG: Preview layer frame after layout: \(previewLayer.frame)")
+            print("DEBUG: View frame after layout: \(frame)")
         }
 
         func updateLUT(_ filter: CIFilter?) {

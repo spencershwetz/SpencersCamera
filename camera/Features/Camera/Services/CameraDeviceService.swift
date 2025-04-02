@@ -33,82 +33,97 @@ class CameraDeviceService {
     }
     
     private func configureSession(for newDevice: AVCaptureDevice, lens: CameraLens) throws {
-        // Remove existing inputs and outputs
+        // Begin configuration
+        session.beginConfiguration()
+        
+        // Store existing outputs before removing inputs
+        let existingOutputs = session.outputs
+        
+        // Remove existing inputs
         session.inputs.forEach { session.removeInput($0) }
         
         // Add new input
         let newInput = try AVCaptureDeviceInput(device: newDevice)
         guard session.canAddInput(newInput) else {
             logger.error("❌ Cannot add input for \(newDevice.localizedName)")
+            session.commitConfiguration()
             throw CameraError.invalidDeviceInput
         }
         
-        // Check if format supports Apple Log before switching
+        // Add input and update device references
+        session.addInput(newInput)
+        videoDeviceInput = newInput
+        device = newDevice
+        
+        // Re-add all outputs that were removed
+        for output in existingOutputs {
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+                
+                // Configure video connection for the output
+                if let connection = output.connection(with: .video) {
+                    // Force portrait orientation (90 degrees)
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                        logger.info("Set video rotation angle to 90° for output: \(output)")
+                    }
+                    
+                    // Enable video stabilization if supported
+                    if connection.isVideoStabilizationSupported {
+                        connection.preferredVideoStabilizationMode = .cinematic
+                        logger.info("Enabled video stabilization for output: \(output)")
+                    }
+                    
+                    // Ensure proper mirroring settings
+                    connection.automaticallyAdjustsVideoMirroring = false
+                    connection.isVideoMirrored = false
+                }
+            }
+        }
+        
+        // Configure the new device
+        try newDevice.lockForConfiguration()
+        
+        // Configure format and color space
         if let currentDevice = device,
            currentDevice.activeColorSpace == .appleLog {
-            // Find a format that supports Apple Log for the new device
+            // Find formats that support Apple Log
             let formats = newDevice.formats.filter { format in
                 let desc = format.formatDescription
                 let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
                 let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
                 let resolution = dimensions.width >= 1920 && dimensions.height >= 1080
-                
-                // Log format capabilities for debugging
-                if hasAppleLog {
-                    logger.info("Found format with Apple Log support: \(dimensions.width)x\(dimensions.height)")
-                    logger.info("Color spaces: \(format.supportedColorSpaces)")
-                }
-                
                 return hasAppleLog && resolution
-            }
-            
-            // Sort formats by resolution to get the highest quality one
-            let sortedFormats = formats.sorted { (format1: AVCaptureDevice.Format, format2: AVCaptureDevice.Format) -> Bool in
+            }.sorted { (format1, format2) -> Bool in
                 let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
                 let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
                 return dim1.width * dim1.height > dim2.width * dim2.height
             }
             
-            if let appleLogFormat = sortedFormats.first {
-                try newDevice.lockForConfiguration()
+            if let appleLogFormat = formats.first {
                 newDevice.activeFormat = appleLogFormat
-                
-                // Ensure format supports Apple Log before setting
                 if appleLogFormat.supportedColorSpaces.contains(.appleLog) {
                     newDevice.activeColorSpace = .appleLog
                     logger.info("✅ Successfully configured Apple Log for \(lens.rawValue) lens")
-                    let dimensions = CMVideoFormatDescriptionGetDimensions(appleLogFormat.formatDescription)
-                    logger.info("Selected format: \(dimensions.width)x\(dimensions.height)")
                 } else {
                     logger.warning("⚠️ Selected format does not support Apple Log")
                     newDevice.activeColorSpace = .sRGB
                 }
-                
-                newDevice.unlockForConfiguration()
-            } else {
-                logger.warning("⚠️ No suitable Apple Log format found for \(lens.rawValue) lens")
-                logger.info("Available formats: \(newDevice.formats.count)")
-                // Log the first few formats for debugging
-                newDevice.formats.prefix(3).forEach { format in
-                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    logger.info("Format: \(dim.width)x\(dim.height), Color spaces: \(format.supportedColorSpaces)")
-                }
             }
         }
         
-        session.addInput(newInput)
-        videoDeviceInput = newInput
-        device = newDevice
-        
-        // Configure the new device
-        try newDevice.lockForConfiguration()
+        // Configure focus and exposure
         if newDevice.isExposureModeSupported(.continuousAutoExposure) {
             newDevice.exposureMode = .continuousAutoExposure
         }
         if newDevice.isFocusModeSupported(.continuousAutoFocus) {
             newDevice.focusMode = .continuousAutoFocus
         }
+        
         newDevice.unlockForConfiguration()
+        
+        // Commit the configuration
+        session.commitConfiguration()
         
         logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
     }
@@ -166,9 +181,6 @@ class CameraDeviceService {
             setDigitalZoom(to: zoomFactor, on: currentDevice)
             return
         }
-        
-        // REMOVE: Reading orientation from UI on background thread
-        // let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
         
         // Store current video angle to preserve during lens switch
         var currentVideoAngle: CGFloat = 90 // Default to portrait
