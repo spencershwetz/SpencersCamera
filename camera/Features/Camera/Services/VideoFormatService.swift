@@ -88,9 +88,45 @@ class VideoFormatService {
             if isAppleLogEnabled && selectedFormat.supportedColorSpaces.contains(.appleLog) {
                 device.activeColorSpace = .appleLog
                 logger.info("Applied Apple Log color space")
+                
+                // Post notification for color space change with specific info
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ColorSpaceChanged"),
+                        object: nil,
+                        userInfo: ["colorSpace": "appleLog"]
+                    )
+                    
+                    // Post a second notification after a short delay to ensure views can respond
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ColorSpaceChanged"),
+                            object: nil,
+                            userInfo: ["colorSpace": "appleLog"]
+                        )
+                    }
+                }
             } else {
                 device.activeColorSpace = .sRGB
                 logger.info("Applied sRGB color space")
+                
+                // Post notification for color space change with specific info
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ColorSpaceChanged"),
+                        object: nil,
+                        userInfo: ["colorSpace": "sRGB"]
+                    )
+                    
+                    // Post a second notification after a short delay to ensure views can respond
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ColorSpaceChanged"),
+                            object: nil,
+                            userInfo: ["colorSpace": "sRGB"]
+                        )
+                    }
+                }
             }
             
             // Commit the configuration
@@ -299,6 +335,28 @@ class VideoFormatService {
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
             
+            // Set color space
+            device.activeColorSpace = .appleLog
+            logger.info("Set color space to Apple Log")
+            
+            // Post notification for color space change with specific info
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("ColorSpaceChanged"),
+                    object: nil,
+                    userInfo: ["colorSpace": "appleLog"]
+                )
+                
+                // Post a second notification after a short delay to ensure views can respond
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ColorSpaceChanged"),
+                        object: nil,
+                        userInfo: ["colorSpace": "appleLog"]
+                    )
+                }
+            }
+            
             session.commitConfiguration()
             
             if wasRunning {
@@ -377,6 +435,24 @@ class VideoFormatService {
             // Reset color space
             device.activeColorSpace = .sRGB
             logger.info("Reset color space to sRGB")
+            
+            // Post notification for color space change with specific info
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("ColorSpaceChanged"),
+                    object: nil,
+                    userInfo: ["colorSpace": "sRGB"]
+                )
+                
+                // Post a second notification after a short delay to ensure views can respond
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ColorSpaceChanged"),
+                        object: nil,
+                        userInfo: ["colorSpace": "sRGB"]
+                    )
+                }
+            }
             
             logger.info("Successfully reset Apple Log format")
             

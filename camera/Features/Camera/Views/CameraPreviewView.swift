@@ -95,6 +95,15 @@ struct CameraPreviewView: UIViewRepresentable {
             // Set up the view
             setupView()
             setupVolumeButtonHandler()
+            
+            // Configure preview layer color space for Apple Log immediately
+            configurePreviewLayerColorSpace()
+            
+            // Also schedule another configuration after a slight delay to handle race conditions
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                print("DEBUG: Performing delayed Apple Log configuration check")
+                self?.configurePreviewLayerColorSpace()
+            }
 
             // Observe orientation changes
             NotificationCenter.default.addObserver(self,
@@ -105,6 +114,12 @@ struct CameraPreviewView: UIViewRepresentable {
             NotificationCenter.default.addObserver(self,
                                                  selector: #selector(handleRecordingStateChange),
                                                  name: NSNotification.Name("RecordingStateChanged"),
+                                                 object: nil)
+            
+            // Add observer for color space changes
+            NotificationCenter.default.addObserver(self,
+                                                 selector: #selector(handleColorSpaceChange),
+                                                 name: NSNotification.Name("ColorSpaceChanged"),
                                                  object: nil)
 
             // Set initial orientation
@@ -124,6 +139,7 @@ struct CameraPreviewView: UIViewRepresentable {
             // Remove observers
             NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
             NotificationCenter.default.removeObserver(self, name: NSNotification.Name("RecordingStateChanged"), object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("ColorSpaceChanged"), object: nil)
 
             // Detach volume handler
             if #available(iOS 17.2, *) {
@@ -188,6 +204,37 @@ struct CameraPreviewView: UIViewRepresentable {
              }
          }
 
+        private func configurePreviewLayerColorSpace() {
+            guard let connection = previewLayer.connection else { return }
+            
+            // Get device from session
+            let deviceInput = session.inputs.first(where: { $0 is AVCaptureDeviceInput }) as? AVCaptureDeviceInput
+            guard let device = deviceInput?.device else {
+                print("DEBUG: No camera device found for preview layer color space configuration")
+                return
+            }
+            
+            // Configure color space based on device settings
+            if device.activeColorSpace == .appleLog {
+                print("DEBUG: Configuring preview layer for Apple Log color space")
+                
+                // Apple Log needs special handling - force a reset of the preview
+                previewLayer.removeFromSuperlayer()
+                layer.insertSublayer(previewLayer, at: 0)
+                
+                // Use Metal for rendering if available (better Apple Log support)
+                if let _ = MTLCreateSystemDefaultDevice() {
+                    // Toggle the session connection to refresh the preview
+                    let originalSession = previewLayer.session
+                    previewLayer.session = nil
+                    previewLayer.session = originalSession
+                    print("DEBUG: Reset preview layer for Apple Log display")
+                }
+            } else {
+                print("DEBUG: Using standard sRGB color space for preview")
+            }
+        }
+        
         @objc private func handleRecordingStateChange() {
              // Update border based on viewModel state
              guard let viewModel else { return }
@@ -413,6 +460,48 @@ struct CameraPreviewView: UIViewRepresentable {
                 
                 print("DEBUG: Removed video data output for LUT processing")
             }
+        }
+        
+        @objc private func handleColorSpaceChange(_ notification: Notification) {
+            // When color space changes, update the preview layer configuration
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                
+                // Check if we have specific color space info
+                if let colorSpaceInfo = notification.userInfo?["colorSpace"] as? String {
+                    print("DEBUG: Received color space change notification: \(colorSpaceInfo)")
+                    
+                    if colorSpaceInfo == "appleLog" {
+                        // Force a more aggressive reset for Apple Log
+                        self.resetPreviewLayerForAppleLog()
+                    } else {
+                        // Regular configuration for sRGB
+                        self.configurePreviewLayerColorSpace()
+                    }
+                } else {
+                    // Fallback to standard configuration
+                    self.configurePreviewLayerColorSpace()
+                }
+            }
+        }
+        
+        private func resetPreviewLayerForAppleLog() {
+            print("DEBUG: Performing aggressive reset for Apple Log display")
+            
+            // Remove and re-add the preview layer
+            previewLayer.removeFromSuperlayer()
+            layer.insertSublayer(previewLayer, at: 0)
+            
+            // Reset the session connection
+            let originalSession = previewLayer.session
+            previewLayer.session = nil
+            previewLayer.session = originalSession
+            
+            // Force a layout update
+            setNeedsLayout()
+            layoutIfNeeded()
+            
+            print("DEBUG: Completed aggressive reset for Apple Log display")
         }
         
         // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
