@@ -5,21 +5,19 @@ import UIKit
 import AVFoundation
 
 struct CameraView: View {
-    // Add a unique ID for logging
-    private let viewInstanceId = UUID()
-
     @StateObject private var viewModel = CameraViewModel()
     @StateObject private var lutManager = LUTManager()
     @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
-    @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
     @State private var isDebugEnabled = false
+    @State private var isShowingAlert = false
+    @State private var alertMessage = ""
+    private let viewInstanceId = UUID()
 
     init() {
-        // Log creation with unique ID
         print("🟣 CameraView.init() - Instance ID: \(viewInstanceId)")
         setupOrientationNotifications()
     }
@@ -75,37 +73,6 @@ struct CameraView: View {
                         .frame(width: 75, height: 75)
 
                     HStack {
-                        videoLibraryButton
-                            .frame(width: 60, height: 60)
-                            .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-                                print("DEBUG: [LibraryButton] Dismissed - Setting isVideoLibraryPresented = false")
-                                // **Crucial:** Reset the flag *after* dismissing
-                                AppDelegate.isVideoLibraryPresented = false
-
-                                // Force orientation back to portrait
-                                DispatchQueue.main.async { // Ensure UI updates on main thread
-                                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                                        print("DEBUG: Forcing portrait after video library dismissal")
-                                        let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-                                        windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                                            if error != nil {
-                                                print("DEBUG: Portrait reset error: \(error.localizedDescription)")
-                                            } else {
-                                                print("DEBUG: Portrait reset successful")
-                                            }
-                                            // Force update orientation on root controller AFTER the geometry update attempt
-                                            windowScene.windows.forEach { window in
-                                                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                                            }
-                                        }
-                                    }
-                                }
-                            }) {
-                                // Wrap VideoLibraryView in OrientationFixView to allow landscape
-                                OrientationFixView(allowsLandscapeMode: true) {
-                                    VideoLibraryView()
-                                }
-                            }
                         Spacer()
                         settingsButton
                             .frame(width: 60, height: 60)
@@ -118,8 +85,8 @@ struct CameraView: View {
             .zIndex(101)
 
         }
-        // Apply OrientationFixView as a background... (Keep existing)
-        .background( // This ensures the CameraView itself respects portrait-only
+        // Apply OrientationFixView as a background
+        .background(
             OrientationFixView(allowsLandscapeMode: false) {
                 EmptyView()
             }
@@ -255,37 +222,6 @@ struct CameraView: View {
         .padding(6)
         .background(Color.black.opacity(0.5))
         .cornerRadius(6)
-    }
-
-    private var videoLibraryButton: some View {
-        RotatingView(orientationViewModel: orientationViewModel) {
-            Button(action: {
-                print("DEBUG: [LibraryButton] Tapped - Setting isVideoLibraryPresented = true")
-                // **Crucial:** Set the flag *before* presenting
-                AppDelegate.isVideoLibraryPresented = true
-                isShowingVideoLibrary = true
-            }) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.6))
-                        .frame(width: 60, height: 60)
-
-                    if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
-                        Image(uiImage: thumbnailImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 54, height: 54)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        Image(systemName: "film")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-        .frame(width: 60, height: 60)
     }
 
     private var settingsButton: some View {

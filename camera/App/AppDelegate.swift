@@ -18,6 +18,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Track if the video library is currently being presented
     static var isVideoLibraryPresented: Bool = false
 
+    static let allowedViews = [
+        "CameraView",
+        "SettingsView",
+        "OrientationFixView",
+        "RotatingView"
+    ]
+    
+    // App-wide state
+    static var isDebugEnabled: Bool = false
+
     // MARK: - Application Lifecycle
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
@@ -150,20 +160,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     /// Handle orientation lock dynamically based on the current view controller
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        // **Crucial Change:** Prioritize the flag.
-        if AppDelegate.isVideoLibraryPresented {
-            print("AppDelegate: Allowing landscape (isVideoLibraryPresented = true)")
-            // Allow landscape but not upside down for a better experience
-            return [.portrait, .landscapeLeft, .landscapeRight]
-        }
-
-        // If the flag is false, default to portrait only for the main camera view.
-        print("AppDelegate: Enforcing portrait (isVideoLibraryPresented = false)")
+        // Always enforce portrait orientation
+        print("DEBUG: Enforcing portrait orientation")
         return .portrait
-
-        // **Removed complex view controller checking logic**
-        // It's less reliable than the flag, especially with SwiftUI presentations.
-        // The flag should be managed correctly by the presenting/dismissing views.
     }
 }
 

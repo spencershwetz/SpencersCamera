@@ -148,9 +148,6 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
         self.content = content()
         self.allowsLandscapeMode = allowsLandscapeMode
         print("🟧 OrientationFixView.init() - Representable ID: \(representableInstanceId)")
-        if allowsLandscapeMode {
-            AppDelegate.isVideoLibraryPresented = true
-        }
     }
 
     func makeUIViewController(context: Context) -> OrientationFixViewController {
@@ -165,7 +162,6 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: OrientationFixViewController, context: Context) {
         print("🟧 OrientationFixView.updateUIViewController - Representable ID: \(representableInstanceId), VC ID: \(uiViewController.instanceId)")
         if allowsLandscapeMode {
-            AppDelegate.isVideoLibraryPresented = true
             uiViewController.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
     }
