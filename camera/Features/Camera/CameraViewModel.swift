@@ -349,7 +349,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     private func getCurrentVideoTransform() -> CGAffineTransform {
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        // Updated to use connectedScenes for iOS 15+ compatibility
+        let currentInterfaceOrientation = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .interfaceOrientation ?? .portrait
+        
         let deviceOrientation = UIDevice.current.orientation
         let recordingAngle: CGFloat
 

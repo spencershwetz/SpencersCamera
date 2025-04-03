@@ -115,7 +115,10 @@ class CameraDeviceService {
     
     func switchToLens(_ lens: CameraLens) {
         // CAPTURE orientation on main thread *before* going to background
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        let currentInterfaceOrientation = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .interfaceOrientation ?? .portrait
         
         cameraQueue.async { [weak self] in
             guard let self = self else { return }
@@ -166,9 +169,6 @@ class CameraDeviceService {
             setDigitalZoom(to: zoomFactor, on: currentDevice)
             return
         }
-        
-        // REMOVE: Reading orientation from UI on background thread
-        // let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
         
         // Store current video angle to preserve during lens switch
         var currentVideoAngle: CGFloat = 90 // Default to portrait
@@ -236,7 +236,11 @@ class CameraDeviceService {
                 // We need the orientation again for the recovery switch
                 DispatchQueue.main.async { [weak self] in // Get orientation on main thread
                     guard let self else { return }
-                    let recoveryOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+                    // Get orientation again for the recovery switch using modern API
+                    _ = UIApplication.shared.connectedScenes
+                        .compactMap { $0 as? UIWindowScene }
+                        .first?
+                        .interfaceOrientation ?? .portrait
                     self.switchToLens(.wide) // Let switchToLens handle dispatching again
                 }
             } else {
@@ -437,7 +441,7 @@ class CameraDeviceService {
         logger.info("Orientation updates \(locked ? "locked" : "unlocked") for recording.")
         if locked {
             logger.info("📱 Locking orientation state:")
-            logger.info("- Interface Orientation: \(UIApplication.shared.windows.first?.windowScene?.interfaceOrientation.rawValue ?? -1)")
+            logger.info("- Interface Orientation: \(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.interfaceOrientation.rawValue ?? -1)")
             logger.info("- Device Orientation: \(UIDevice.current.orientation.rawValue)")
             if let connection = session.outputs.first?.connection(with: .video) {
                 logger.info("- Current Connection Angle: \(connection.videoRotationAngle)°")
