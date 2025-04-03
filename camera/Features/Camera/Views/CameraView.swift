@@ -40,9 +40,18 @@ struct CameraView: View {
             // Background...
             Color.black.edgesIgnoringSafeArea(.all)
 
-            // REVERT: Place cameraPreview directly in ZStack without VStack/frame
-            cameraPreview()
-                .edgesIgnoringSafeArea(.all) // Let the preview itself handle safe area for now
+            // Wrap cameraPreview in GeometryReader to apply the 90% frame
+            GeometryReader { geometry in
+                cameraPreview()
+                    // Frame that starts below safe area and takes up 90% of the original size
+                    .frame(
+                        width: geometry.size.width * 0.9,
+                        height: geometry.size.height * 0.75 * 0.9 // 90% of the available 75% vertical space
+                    )
+                    .padding(.top, geometry.safeAreaInsets.top + 60) // Keep the same vertical position
+                    .clipped() // Ensure the preview stays within bounds
+                    .frame(maxWidth: .infinity) // Center the preview horizontally
+            }
 
             // Overlays... (Keep existing FunctionButtonsView)
             FunctionButtonsView()
