@@ -494,10 +494,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Helper function to apply initial format after session starts
     private func applyInitialVideoFormat() {
         print("Applying initial video format settings...")
-        // Ensure this runs after a brief delay to let preview layer attach if necessary
+        // Removed Task.sleep as didStartRunning should be sufficient confirmation
         Task {
-             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay
-             
              if self.isAppleLogEnabled {
                  print("🎥 Configuring initial Apple Log format...")
                  do {
