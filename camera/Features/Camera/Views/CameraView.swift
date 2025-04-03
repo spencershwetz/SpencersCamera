@@ -15,6 +15,7 @@ struct CameraView: View {
     @State private var isDebugEnabled = false
     @State private var isShowingAlert = false
     @State private var alertMessage = ""
+    @State private var isShowingLibrary = false
     private let viewInstanceId = UUID()
 
     init() {
@@ -82,6 +83,8 @@ struct CameraView: View {
                         .frame(width: 75, height: 75)
 
                     HStack {
+                        libraryButton
+                            .frame(width: 60, height: 60)
                         Spacer()
                         settingsButton
                             .frame(width: 60, height: 60)
@@ -146,9 +149,30 @@ struct CameraView: View {
                  }
              }
          }
+         .sheet(isPresented: $isShowingLibrary) {
+             VideoLibraryView()
+         }
          .statusBar(hidden: statusBarHidden)
          .preferredColorScheme(.dark) // Ensure dark mode
          .ignoresSafeArea(.all) // Try ignoring safe area at the top level
+    }
+
+    // Add the new library button definition
+    private var libraryButton: some View {
+        Button(action: {
+            isShowingLibrary = true
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: "photo.on.rectangle") // Or play.rectangle.on.rectangle
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
+            }
+        }
+        .buttonStyle(PlainButtonStyle()) // Use plain style to avoid default button appearance interference
     }
 
     // cameraPreview() function definition remains the same
