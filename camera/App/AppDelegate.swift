@@ -33,20 +33,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         print("DEBUG: AppDelegate - Application launching")
 
-        // Create window (necessary for SceneDelegate-less apps)
-        window = UIWindow(frame: UIScreen.main.bounds)
-        
-        // Configure root view controller
-        let contentView = CameraView() // Changed back to CameraView
-        let hostingController = UIHostingController(rootView: contentView)
-
-        // Set modal presentation style
-        hostingController.modalPresentationStyle = .overFullScreen
-
-        // Set window properties
-        window?.rootViewController = hostingController
-        window?.makeKeyAndVisible()
-
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
 
@@ -65,7 +51,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     /// Handle orientation lock dynamically based on the current view controller
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         // Always enforce portrait orientation
-        print("DEBUG: Enforcing portrait orientation")
+        // print("DEBUG: Enforcing portrait orientation") // Commented out to reduce log noise
         return .portrait
     }
 }

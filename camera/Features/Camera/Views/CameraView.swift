@@ -10,7 +10,6 @@ struct CameraView: View {
     @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
-    @State private var showLUTPreview = true
     @State private var statusBarHidden = true
     @State private var isDebugEnabled = false
     @State private var isShowingAlert = false
@@ -99,15 +98,6 @@ struct CameraView: View {
          }
          .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
              startSession()
-         }
-         .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
-             if newValue != nil {
-                 print("DEBUG: LUT filter updated to: \(lutManager.currentLUTName)")
-                 showLUTPreview = true // This state variable might be redundant now
-             } else {
-                 print("DEBUG: LUT filter removed")
-                 showLUTPreview = false // This state variable might be redundant now
-             }
          }
          .alert(item: $viewModel.error) { error in
              Alert(
@@ -294,21 +284,13 @@ struct CameraView: View {
     }
 
     private func handleLUTImport(url: URL) {
-        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-        print("LUT file size: \(fileSize) bytes")
-
-        lutManager.importLUT(from: url) { success in
-            if success {
-                print("DEBUG: LUT import successful, enabling preview")
-
-                // **Important:** Update the viewModel's lutManager reference
-                // This ensures the preview and recording service use the new LUT
-                self.viewModel.lutManager = self.lutManager
-                self.showLUTPreview = true
-                print("DEBUG: LUT filter set in viewModel")
-
-            } else {
-                print("DEBUG: LUT import failed")
+        Task {
+            do {
+                try await lutManager.loadLUT(from: url)
+                viewModel.selectedLUTURL = url // Assign the loaded URL to the ViewModel property
+                print("✅ Successfully loaded LUT: \(lutManager.currentLUTName ?? "Unknown")")
+            } catch {
+                print("❌ Failed to load LUT: \(error.localizedDescription)")
             }
         }
     }
@@ -327,35 +309,12 @@ struct CameraView: View {
             // Optionally prompt user to go to settings
             return
         }
+        
+        // REMOVED: Redundant session start logic (ViewModel handles this)
+        print("DEBUG: CameraView.startSession - Verified permissions.")
 
-
-        if !viewModel.session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.viewModel.session.startRunning()
-                DispatchQueue.main.async {
-                    self.viewModel.isSessionRunning = self.viewModel.session.isRunning
-                    // Update status based on session running state ONLY if not unauthorized
-                    if self.viewModel.status != .unauthorized {
-                         self.viewModel.status = self.viewModel.session.isRunning ? .running : .failed
-                    }
-                    self.viewModel.error = self.viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
-                    print("DEBUG: Camera session running: \(self.viewModel.isSessionRunning)")
-                }
-            }
-        } else {
-             print("DEBUG: Camera session already running.")
-             // Ensure state reflects reality
-             DispatchQueue.main.async {
-                 self.viewModel.isSessionRunning = true
-                 if self.viewModel.status != .unauthorized {
-                     self.viewModel.status = .running
-                 }
-             }
-        }
-
-        // **Important:** Ensure viewModel has the latest lutManager reference on appear
+        // Ensure viewModel has the latest lutManager reference on appear
         viewModel.lutManager = lutManager
-        showLUTPreview = true
     }
 
     private func stopSession() {
