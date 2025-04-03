@@ -64,36 +64,19 @@ class FlashlightManager: ObservableObject {
         // Store the user's preferred intensity
         let userIntensity = intensity
         
-        // Flash sequence: 3-2-1 (faster)
-        for count in (1...3).reversed() {
-            // Calculate flash intensity based on count (3=30%, 2=60%, 1=90% of user's setting)
-            let countIntensity = userIntensity * Float(count) / 3.0
-            await flash(count: count, flashIntensity: countIntensity)
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second delay between flashes
-        }
-        
-        // Set to normal recording state with user's preferred intensity
+        // Set directly to normal recording state with user's preferred intensity
         await MainActor.run {
             self.intensity = userIntensity
             self.isEnabled = true
-        }
-    }
-    
-    private func flash(count: Int, flashIntensity: Float) async {
-        await MainActor.run {
-            self.intensity = flashIntensity
-            self.isEnabled = true
-        }
-        
-        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 second flash
-        
-        await MainActor.run {
-            self.isEnabled = false
+            // Log the action
+            print("🔦 FlashlightManager: Enabled directly for recording start.")
         }
     }
     
     func cleanup() {
         isEnabled = false
+        // Log the action
+        print("🔦 FlashlightManager: Cleanup called. Flashlight turned off.")
     }
     
     func turnOffForSettingsExit() {

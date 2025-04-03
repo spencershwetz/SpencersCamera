@@ -85,12 +85,6 @@ struct CameraView: View {
             .zIndex(101)
 
         }
-        // Apply OrientationFixView as a background
-        .background(
-            OrientationFixView(allowsLandscapeMode: false) {
-                EmptyView()
-            }
-        )
         // Keep other existing modifiers (.onAppear, .onChange, etc.)...
          .onAppear {
              print("🟢 CameraView.onAppear - Instance ID: \(viewInstanceId)")
@@ -105,9 +99,6 @@ struct CameraView: View {
          }
          .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
              startSession()
-         }
-         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-             // Orientation is handled within CustomPreviewView now
          }
          .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
              if newValue != nil {

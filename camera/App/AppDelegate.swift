@@ -33,64 +33,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         print("DEBUG: AppDelegate - Application launching")
 
-        // Force dark mode at UIApplication level
-        window?.enforceDarkMode()
-
-        // Update to use UIWindowScene.windows
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            windowScene.windows.forEach { window in
-                window.enforceDarkMode()
-
-                // Disable safe area insets for all windows
-                // window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0) // Let views manage this if needed
-            }
-        }
-
-        // Create and configure window
+        // Create window (necessary for SceneDelegate-less apps)
         window = UIWindow(frame: UIScreen.main.bounds)
-        window?.backgroundColor = .black
-
+        
         // Configure root view controller
         let contentView = CameraView() // Changed back to CameraView
         let hostingController = UIHostingController(rootView: contentView)
-        hostingController.view.backgroundColor = .black
-
-        // Force dark mode for view controller
-        hostingController.overrideUserInterfaceStyle = .dark
 
         // Set modal presentation style
         hostingController.modalPresentationStyle = .overFullScreen
-
-        // Disable safe area insets completely - moved to CameraView/ContentView if needed
-        // hostingController.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
-        // hostingController.view.frame = UIScreen.main.bounds
 
         // Set window properties
         window?.rootViewController = hostingController
         window?.makeKeyAndVisible()
 
-        // Disable safe area insets at window level again - moved to views if needed
-        // window?.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
-
-        // Force dark mode again after window is visible
-        window?.enforceDarkMode()
-
-        // Force black backgrounds
-        if let rootView = window?.rootViewController?.view {
-            forceBlackBackgrounds(rootView)
-        }
-
-        // Inspect view hierarchy colors
-        // inspectViewHierarchyBackgroundColors(hostingController.view) // Commented out for cleaner logs
-
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-
-        // Setup orientation lock observer
-        // UIWindowScene.setupOrientationLockSupport() // Let AppDelegate handle it directly
-
-        // Remove debug observer for orientation
-        // NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil) // Let AppDelegate handle it
 
         return true
     }
@@ -101,60 +59,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     // MARK: - Debug Helpers
-
-    private func inspectViewHierarchyBackgroundColors(_ view: UIView, level: Int = 0) {
-        let indent = String(repeating: "  ", count: level)
-        print("\(indent)DEBUG: View \(type(of: view)) - backgroundColor: \(view.backgroundColor?.debugDescription ?? "nil")")
-
-        // Get superview chain
-        if level == 0 {
-            var currentView: UIView? = view
-            var superviewLevel = 0
-            while let superview = currentView?.superview {
-                print("\(indent)DEBUG: Superview \(superviewLevel) - Type: \(type(of: superview)) - backgroundColor: \(superview.backgroundColor?.debugDescription ?? "nil")")
-                currentView = superview
-                superviewLevel += 1
-            }
-        }
-
-        for subview in view.subviews {
-            inspectViewHierarchyBackgroundColors(subview, level: level + 1)
-        }
-    }
-
-    // MARK: - Helper to force black backgrounds
-
-    private func forceBlackBackgrounds(_ view: UIView) {
-        // Force black background on the view itself
-        view.backgroundColor = .black
-
-        // Special handling for system views
-        let systemViewClasses = [
-            "UIDropShadowView",
-            "UITransitionView",
-            "UINavigationTransitionView",
-            "_UIInteractiveHighlightEffectWindow"
-        ]
-
-        for className in systemViewClasses {
-            if let viewClass = NSClassFromString(className),
-               view.isKind(of: viewClass) {
-                view.backgroundColor = .black
-                view.layer.backgroundColor = UIColor.black.cgColor
-            }
-        }
-
-        // Handle status bar background
-        if view.bounds.height <= 50 && view.bounds.minY == 0 {
-            view.backgroundColor = .black
-            view.layer.backgroundColor = UIColor.black.cgColor
-        }
-
-        // Recursively process subviews
-        for subview in view.subviews {
-            forceBlackBackgrounds(subview)
-        }
-    }
 
     // MARK: - Orientation Support
 
@@ -195,16 +99,5 @@ extension UIViewController {
 
         // Base case: the view controller itself
         return self
-    }
-}
-
-
-// MARK: - UIWindow Extension
-extension UIWindow {
-    /// Enforce dark mode for the window
-    func enforceDarkMode() {
-        if #available(iOS 13.0, *) {
-            self.overrideUserInterfaceStyle = .dark
-        }
     }
 }
