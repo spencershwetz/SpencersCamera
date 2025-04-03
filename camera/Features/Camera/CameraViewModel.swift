@@ -329,11 +329,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func switchToLens(_ lens: CameraLens) {
-        cameraDeviceService.switchToLens(lens)
+        cameraDeviceService.switchToLens(
+            lens,
+            currentZoomFactor: self.currentZoomFactor,
+            availableLenses: self.availableLenses,
+            isAppleLogEnabled: self.isAppleLogEnabled
+        )
     }
     
     func setZoomFactor(_ factor: CGFloat) {
-        cameraDeviceService.setZoomFactor(factor, currentLens: currentLens, availableLenses: availableLenses)
+        cameraDeviceService.setZoomFactor(
+            factor,
+            currentLens: currentLens,
+            availableLenses: availableLenses,
+            isAppleLogEnabled: self.isAppleLogEnabled
+        )
     }
     
     private func getCurrentVideoTransform() -> CGAffineTransform {

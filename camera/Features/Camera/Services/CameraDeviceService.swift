@@ -79,88 +79,115 @@ class CameraDeviceService {
         logger.info("📸 Set initial video input: \(input.device.localizedName)")
     }
     
-    private func configureSession(for newDevice: AVCaptureDevice, lens: CameraLens) throws {
-        // Remove existing inputs and outputs
+    private func configureSession(for newDevice: AVCaptureDevice, lens: CameraLens, isAppleLogEnabled: Bool) throws {
+        logger.info("⚙️ Configuring session for \(newDevice.localizedName) (\(lens.rawValue)x), User Apple Log Preference: \(isAppleLogEnabled)")
+        // Remove existing inputs and outputs (ensure this is safe if outputs are needed for orientation later)
+        // Consider if removing outputs here is correct or should happen later. Assuming it's okay for now.
         session.inputs.forEach { session.removeInput($0) }
-        
+
         // Add new input
         let newInput = try AVCaptureDeviceInput(device: newDevice)
         guard session.canAddInput(newInput) else {
             logger.error("❌ Cannot add input for \(newDevice.localizedName)")
+            session.commitConfiguration() // Commit before throwing
             throw CameraError.invalidDeviceInput
         }
-        
-        // Check if format supports Apple Log before switching
-        if let currentDevice = device,
-           currentDevice.activeColorSpace == .appleLog {
-            // Find a format that supports Apple Log for the new device
-            let formats = newDevice.formats.filter { format in
-                let desc = format.formatDescription
-                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-                let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
-                let resolution = dimensions.width >= 1920 && dimensions.height >= 1080
-                
-                // Log format capabilities for debugging
-                if hasAppleLog {
-                    logger.info("Found format with Apple Log support: \(dimensions.width)x\(dimensions.height)")
-                    logger.info("Color spaces: \(format.supportedColorSpaces)")
-                }
-                
-                return hasAppleLog && resolution
-            }
-            
-            // Sort formats by resolution to get the highest quality one
-            let sortedFormats = formats.sorted { (format1: AVCaptureDevice.Format, format2: AVCaptureDevice.Format) -> Bool in
-                let dim1 = CMVideoFormatDescriptionGetDimensions(format1.formatDescription)
-                let dim2 = CMVideoFormatDescriptionGetDimensions(format2.formatDescription)
-                return dim1.width * dim1.height > dim2.width * dim2.height
-            }
-            
-            if let appleLogFormat = sortedFormats.first {
-                try newDevice.lockForConfiguration()
-                newDevice.activeFormat = appleLogFormat
-                
-                // Ensure format supports Apple Log before setting
-                if appleLogFormat.supportedColorSpaces.contains(.appleLog) {
-                    newDevice.activeColorSpace = .appleLog
-                    logger.info("✅ Successfully configured Apple Log for \(lens.rawValue) lens")
-                    let dimensions = CMVideoFormatDescriptionGetDimensions(appleLogFormat.formatDescription)
-                    logger.info("Selected format: \(dimensions.width)x\(dimensions.height)")
-                } else {
-                    logger.warning("⚠️ Selected format does not support Apple Log")
-                    newDevice.activeColorSpace = .sRGB
-                }
-                
-                newDevice.unlockForConfiguration()
-            } else {
-                logger.warning("⚠️ No suitable Apple Log format found for \(lens.rawValue) lens")
-                logger.info("Available formats: \(newDevice.formats.count)")
-                // Log the first few formats for debugging
-                newDevice.formats.prefix(3).forEach { format in
-                    let dim = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    logger.info("Format: \(dim.width)x\(dim.height), Color spaces: \(format.supportedColorSpaces)")
-                }
-            }
-        }
-        
         session.addInput(newInput)
         videoDeviceInput = newInput
-        device = newDevice
-        
-        // Configure the new device
-        try newDevice.lockForConfiguration()
-        if newDevice.isExposureModeSupported(.continuousAutoExposure) {
-            newDevice.exposureMode = .continuousAutoExposure
+        device = newDevice // Update the active device reference *after* adding input
+
+        // --- Refactored Color Space Logic ---
+        var appliedColorSpace: AVCaptureColorSpace = .sRGB // Default to sRGB
+        var appliedFormat: AVCaptureDevice.Format? = newDevice.activeFormat // Start with default active format
+
+        if isAppleLogEnabled {
+            logger.info("  🔎 User wants Apple Log. Checking support for \(lens.rawValue)x lens...")
+            // Find formats supporting Apple Log (consider resolution/frame rate later if needed)
+            // Let's simplify the check first: just look for *any* format supporting Apple Log.
+            // We might need a more sophisticated format selection later.
+            let appleLogFormats = newDevice.formats.filter { (format: AVCaptureDevice.Format) -> Bool in // Explicit type annotation
+                format.supportedColorSpaces.contains(.appleLog)
+                // Optional: Add resolution/FPS checks here if necessary
+                // let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            }
+
+            if let bestFormat = appleLogFormats.first { // Or choose based on resolution/FPS
+                logger.info("    ✅ \(lens.rawValue)x lens supports Apple Log. Found suitable format.")
+                appliedFormat = bestFormat
+                appliedColorSpace = .appleLog
+            } else {
+                logger.warning("    ⚠️ \(lens.rawValue)x lens does not support Apple Log or no suitable format found. Reverting to sRGB.")
+                // Log available color spaces for debugging
+                let allColorSpaces = newDevice.formats.flatMap { $0.supportedColorSpaces }
+                let uniqueSpaces = Set(allColorSpaces).map { $0.rawValue }
+                logger.info("      Available color spaces for \(newDevice.localizedName): \(uniqueSpaces)")
+            }
+        } else {
+            logger.info("  ℹ️ User has Apple Log disabled. Using sRGB.")
         }
-        if newDevice.isFocusModeSupported(.continuousAutoFocus) {
-            newDevice.focusMode = .continuousAutoFocus
+
+        // Lock device for configuration to set format and color space
+        do {
+            try newDevice.lockForConfiguration()
+
+            // Set format first (if changed)
+            if let formatToSet = appliedFormat, newDevice.activeFormat != formatToSet {
+                newDevice.activeFormat = formatToSet
+                let dims = CMVideoFormatDescriptionGetDimensions(formatToSet.formatDescription)
+                logger.info("  💾 Set activeFormat: \(dims.width)x\(dims.height)")
+            } else {
+                 logger.info("  💾 Kept existing activeFormat.")
+            }
+
+
+            // Then set color space
+            if newDevice.activeColorSpace != appliedColorSpace {
+                // Double-check the *chosen format* actually supports the color space (should be guaranteed by logic above)
+                 if newDevice.activeFormat.supportedColorSpaces.contains(appliedColorSpace) {
+                    newDevice.activeColorSpace = appliedColorSpace
+                    let colorSpaceDescription = (appliedColorSpace == .appleLog) ? "Apple Log" : "sRGB"
+                    logger.info("  🎨 Set activeColorSpace: \(colorSpaceDescription)")
+                 } else {
+                     let colorSpaceDesc = appliedColorSpace.rawValue // Get the raw value for logging
+                     logger.error("  ❌ Internal Error: Chosen format does not support the target color space (\(colorSpaceDesc)). Falling back to sRGB.")
+                     newDevice.activeColorSpace = .sRGB // Fallback safely
+                 }
+            } else {
+                 let colorSpaceDescription = (appliedColorSpace == .appleLog) ? "Apple Log" : "sRGB"
+                 logger.info("  🎨 Kept existing activeColorSpace: \(colorSpaceDescription)")
+            }
+
+            // Configure other device settings (exposure, focus)
+            if newDevice.isExposureModeSupported(.continuousAutoExposure) {
+                newDevice.exposureMode = .continuousAutoExposure
+            }
+            if newDevice.isFocusModeSupported(.continuousAutoFocus) {
+                newDevice.focusMode = .continuousAutoFocus
+            }
+
+            newDevice.unlockForConfiguration()
+            logger.info("  ✅ Device configuration locked and updated.")
+
+        } catch {
+            logger.error("❌ Failed to lock device for configuration: \(error.localizedDescription)")
+            newDevice.unlockForConfiguration() // Ensure unlock on error
+            // Rollback? Commit configuration might happen outside this function.
+            // For now, rethrow the error.
+             throw error // Rethrow the lock error
         }
-        newDevice.unlockForConfiguration()
-        
-        logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
+         logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
+
+        // Note: Session configuration (begin/commit) and start/stop are handled in the calling function (`switchToLens`)
     }
     
-    func switchToLens(_ lens: CameraLens) {
+    func switchToLens(
+        _ lens: CameraLens,
+        currentZoomFactor: CGFloat,
+        availableLenses: [CameraLens],
+        isAppleLogEnabled: Bool
+    ) {
+        logger.info("🔄 Attempting to switch lens to: \(lens.rawValue)x")
+        
         // CAPTURE orientation on main thread *before* going to background
         let currentInterfaceOrientation = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -174,22 +201,23 @@ class CameraDeviceService {
             if lens == .x2 {
                 if let currentDevice = self.device,
                    currentDevice.deviceType == .builtInWideAngleCamera {
-                    self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice)
+                    self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice, availableLenses: availableLenses)
                 } else {
                     // Pass the captured orientation
-                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor, currentInterfaceOrientation: currentInterfaceOrientation)
+                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor, currentInterfaceOrientation: currentInterfaceOrientation, isAppleLogEnabled: isAppleLogEnabled, availableLenses: availableLenses)
                 }
                 return
             }
             
             // For all other lenses, try to switch physical device
             // Pass the captured orientation
-            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0, currentInterfaceOrientation: currentInterfaceOrientation)
+            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0, currentInterfaceOrientation: currentInterfaceOrientation, isAppleLogEnabled: isAppleLogEnabled, availableLenses: availableLenses)
         }
     }
     
     // CHANGE: Add currentInterfaceOrientation parameter
-    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat, currentInterfaceOrientation: UIInterfaceOrientation) {
+    // CHANGE: Add availableLenses parameter
+    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat, currentInterfaceOrientation: UIInterfaceOrientation, isAppleLogEnabled: Bool, availableLenses: [CameraLens]) {
         logger.info("🔄 Attempting to switch to \(lens.rawValue)× lens")
         
         // Get discovery session for all possible back cameras
@@ -213,28 +241,23 @@ class CameraDeviceService {
         // Check if we're already on this device
         if let currentDevice = device, currentDevice == newDevice {
             // No need to pass orientation here as we aren't reconfiguring the session
-            setDigitalZoom(to: zoomFactor, on: currentDevice)
+            setDigitalZoom(to: zoomFactor, on: currentDevice, availableLenses: availableLenses)
             return
         }
         
-        // Store current video angle to preserve during lens switch
-        var currentVideoAngle: CGFloat = 90 // Default to portrait
-        
-        // Get current video orientation from any existing connection
-        // Note: Accessing session outputs might be okay, but keep UI reads off this thread.
-        if let videoConnection = session.outputs.first?.connection(with: .video) {
-            currentVideoAngle = videoConnection.videoRotationAngle
-        } else {
-            // If no connection yet, determine angle from the captured interface orientation
-             switch currentInterfaceOrientation {
-                 case .portrait: currentVideoAngle = 90
-                 case .landscapeLeft: currentVideoAngle = 0 // USB right
-                 case .landscapeRight: currentVideoAngle = 180 // USB left
-                 case .portraitUpsideDown: currentVideoAngle = 270
-                 default: currentVideoAngle = 90
-             }
-             logger.info("Setting initial video angle based on captured interface orientation: \(currentVideoAngle)°")
+        // --- Orientation Logic --- 
+        // Determine the target rotation angle based *only* on the current interface orientation
+        // captured *before* this background task started.
+        let targetVideoAngle: CGFloat
+        switch currentInterfaceOrientation {
+            case .portrait: targetVideoAngle = 90
+            case .landscapeLeft: targetVideoAngle = 0    // USB right
+            case .landscapeRight: targetVideoAngle = 180 // USB left
+            case .portraitUpsideDown: targetVideoAngle = 270
+            default: targetVideoAngle = 90 // Default to portrait
         }
+        logger.info("Target video angle based on captured interface orientation: \(targetVideoAngle)°")
+        // --- End Orientation Logic ---
         
         // Configure session with new device
         let wasRunning = session.isRunning
@@ -245,17 +268,18 @@ class CameraDeviceService {
         session.beginConfiguration()
         
         do {
-            try configureSession(for: newDevice, lens: lens)
+            // Pass the isAppleLogEnabled flag to configureSession
+            try configureSession(for: newDevice, lens: lens, isAppleLogEnabled: isAppleLogEnabled)
             
             // Immediately set orientation for all video connections BEFORE committing configuration
             // This ensures we never display frames with incorrect orientation
             for output in session.outputs {
                 if let connection = output.connection(with: .video),
-                   connection.isVideoRotationAngleSupported(currentVideoAngle) {
-                    connection.videoRotationAngle = currentVideoAngle
-                    logger.info("Applied initial video angle \(currentVideoAngle)° to connection for output: \(output.description)")
+                   connection.isVideoRotationAngleSupported(targetVideoAngle) { // Use the calculated targetVideoAngle
+                    connection.videoRotationAngle = targetVideoAngle // Apply the correct angle
+                    logger.info("Applied initial video angle \(targetVideoAngle)° to connection for output: \(output.description)")
                 } else if let connection = output.connection(with: .video) {
-                     logger.warning("Video angle \(currentVideoAngle)° not supported for connection: \(connection.description)")
+                     logger.warning("Video angle \(targetVideoAngle)° not supported for connection: \(connection.description)")
                 }
             }
             
@@ -284,11 +308,12 @@ class CameraDeviceService {
                 DispatchQueue.main.async { [weak self] in // Get orientation on main thread
                     guard let self else { return }
                     // Get orientation again for the recovery switch using modern API
-                    _ = UIApplication.shared.connectedScenes
+                    let recoveryOrientation = UIApplication.shared.connectedScenes
                         .compactMap { $0 as? UIWindowScene }
                         .first?
                         .interfaceOrientation ?? .portrait
-                    self.switchToLens(.wide) // Let switchToLens handle dispatching again
+                    // Pass availableLenses here too during recovery
+                    self.switchToLens(.wide, currentZoomFactor: 1.0, availableLenses: self.getAvailableCameraLenses(), isAppleLogEnabled: false) // Let switchToLens handle dispatching again
                 }
             } else {
                 // If we can't even switch to wide angle, notify delegate of error
@@ -304,7 +329,7 @@ class CameraDeviceService {
         }
     }
     
-    private func setDigitalZoom(to factor: CGFloat, on device: AVCaptureDevice) {
+    private func setDigitalZoom(to factor: CGFloat, on device: AVCaptureDevice, availableLenses: [CameraLens]) {
         logger.info("📸 Setting digital zoom to \(factor)×")
         
         do {
@@ -329,7 +354,7 @@ class CameraDeviceService {
         }
     }
     
-    func setZoomFactor(_ factor: CGFloat, currentLens: CameraLens, availableLenses: [CameraLens]) {
+    func setZoomFactor(_ factor: CGFloat, currentLens: CameraLens, availableLenses: [CameraLens], isAppleLogEnabled: Bool) {
         guard let currentDevice = self.device else {
             logger.error("No camera device available")
             return
@@ -342,7 +367,8 @@ class CameraDeviceService {
         
         // If we need to switch lenses
         if targetLens != currentLens && abs(targetLens.zoomFactor - factor) < 0.5 {
-            switchToLens(targetLens)
+            // Pass the received isAppleLogEnabled state
+            switchToLens(targetLens, currentZoomFactor: factor, availableLenses: availableLenses, isAppleLogEnabled: isAppleLogEnabled)
             return
         }
         
