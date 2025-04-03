@@ -261,31 +261,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             let settings = SettingsModel()
             self.recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         }
-        
-        do {
-            try cameraSetupService.setupSession()
-            
-            if let device = device {
-                print("📊 Device Capabilities:")
-                print("- Name: \(device.localizedName)")
-                print("- Model ID: \(device.modelID)")
-                
-                isAppleLogSupported = device.formats.contains { format in
-                    format.supportedColorSpaces.contains(.appleLog)
-                }
-                print("\n✅ Apple Log Support: \(isAppleLogSupported)")
-            }
-            print("=== End Initialization ===\n")
-            
-            updateShutterAngle(180.0)
-            print("📱 LUT Loading: No default LUTs will be loaded")
-        } catch {
-            self.error = .setupFailed
-            print("Failed to setup session: \(error)")
-        }
-        
-        updateShutterAngle(180.0)
-        print("📱 LUT Loading: No default LUTs will be loaded")
     }
     
     deinit {
@@ -308,6 +283,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         recordingService = RecordingService(session: session, delegate: self)
         cameraDeviceService = CameraDeviceService(session: session, delegate: self)
         videoFormatService = VideoFormatService(session: session, delegate: self)
+        
+        // Trigger the setup process after services are initialized
+        do {
+            try cameraSetupService.setupSession()
+        } catch {
+            // Handle potential immediate setup errors (e.g., delegate not set - unlikely here)
+            // Update status and error property accordingly
+            DispatchQueue.main.async {
+                self.error = .setupFailed // Or map the specific error
+                self.status = .failed
+            }
+            logger.error("Initial setupSession call failed: \(error.localizedDescription)")
+        }
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -468,6 +456,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 
     func didInitializeCamera(device: AVCaptureDevice) {
+        print("🟢🟢🟢 CameraViewModel.didInitializeCamera called! Device: \(device.localizedName)") // Add entry log
         self.device = device
         exposureService.setDevice(device)
         recordingService.setDevice(device)
@@ -475,6 +464,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Check Apple Log support here if needed
         self.isAppleLogSupported = videoFormatService.isAppleLogSupported(on: device)
         print("✅ Apple Log Support: \(self.isAppleLogSupported)")
+
+        // Ensure cameraDeviceService is not nil before calling
+        guard let camDeviceService = self.cameraDeviceService else {
+            print("❌❌❌ ERROR: cameraDeviceService is nil inside didInitializeCamera!")
+            return
+        }
+        
+        // Call getAvailableLenses and log result
+        let lenses = camDeviceService.getAvailableCameraLenses()
+        print("📸 Querying available lenses...")
+        self.availableLenses = lenses
+        print("📸 Available Lenses Populated: \(self.availableLenses.map { $0.rawValue })") // Change log message slightly
+
+        self.currentLens = camDeviceService.getCameraLens(for: device) ?? .wide
+        print("✅ Initialized with lens: \(currentLens.rawValue)")
     }
 
     func didStartRunning(_ isRunning: Bool) {

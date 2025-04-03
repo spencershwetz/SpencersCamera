@@ -22,6 +22,53 @@ class CameraDeviceService {
         self.delegate = delegate
     }
     
+    // New method to get available lenses based on discovery
+    func getAvailableCameraLenses() -> [CameraLens] {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera],
+            mediaType: .video,
+            position: .back
+        )
+        
+        var availableLenses: [CameraLens] = []
+        var hasWide = false
+        
+        for device in discoverySession.devices {
+            if let lens = getCameraLens(for: device) {
+                if !availableLenses.contains(lens) { // Avoid duplicates if discovery returns same type multiple times
+                    availableLenses.append(lens)
+                    if lens == .wide { hasWide = true }
+                }
+            }
+        }
+        
+        // If wide lens exists, add the .x2 digital zoom option
+        if hasWide && !availableLenses.contains(.x2) {
+            availableLenses.append(.x2)
+        }
+        
+        // Sort the lenses logically (e.g., ultra-wide, wide, x2, telephoto)
+        availableLenses.sort { $0.zoomFactor < $1.zoomFactor }
+        
+        logger.info("📸 Determined available lenses: \(availableLenses.map { $0.rawValue })")
+        return availableLenses
+    }
+
+    // New method to map AVCaptureDevice to CameraLens enum
+    func getCameraLens(for device: AVCaptureDevice) -> CameraLens? {
+        switch device.deviceType {
+        case .builtInUltraWideCamera:
+            return .ultraWide
+        case .builtInWideAngleCamera:
+            return .wide
+        case .builtInTelephotoCamera:
+            // Differentiate telephoto based on zoom factor if necessary in the future
+            return .telephoto
+        default:
+            return nil // Or handle other specific types if needed
+        }
+    }
+    
     func setDevice(_ device: AVCaptureDevice) {
         self.device = device
         logger.info("📸 Set initial device: \(device.localizedName)")

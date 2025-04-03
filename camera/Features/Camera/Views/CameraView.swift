@@ -60,25 +60,17 @@ struct CameraView: View {
                 .allowsHitTesting(true)
                 .ignoresSafeArea()
 
-            // Zoom Slider VStack (Keep existing)
+            // Bottom Controls VStack - Now includes ZoomSliderView
             VStack {
-                 Spacer()
-                     .frame(height: UIScreen.main.bounds.height * 0.65) // Keep adjustment
+                Spacer() // Pushes everything down
 
-                 if !viewModel.availableLenses.isEmpty {
-                     ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
-                         .padding(.bottom, 20)
-                 }
+                // Add ZoomSliderView here if lenses are available
+                if !viewModel.availableLenses.isEmpty {
+                    ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                        .padding(.bottom, 20) // Space between slider and record button area
+                }
 
-                 Spacer()
-             }
-             .zIndex(99)
-
-
-            // Bottom Controls VStack (Keep existing)
-            VStack {
-                Spacer()
-                ZStack {
+                ZStack { // This ZStack holds the record/library/settings buttons
                     recordButton
                         .frame(width: 75, height: 75)
 
