@@ -109,22 +109,38 @@ struct ZoomSliderView: View {
             // Lens buttons
             HStack(spacing: 14) {
                 ForEach(availableLenses, id: \.self) { lens in
+                    // Use the helper function to determine highlighting
+                    let highlight = self.shouldHighlight(lens: lens)
+                    
                     Button(action: {
                         viewModel.switchToLens(lens)
                     }) {
                         Text(lens.rawValue + "×")
-                            .font(.system(size: viewModel.currentLens == lens ? 17 : 15, weight: .medium))
-                            .foregroundColor(viewModel.currentLens == lens ? .yellow : .white)
-                            .frame(width: viewModel.currentLens == lens ? 42 : 36, height: viewModel.currentLens == lens ? 42 : 36)
+                            .font(.system(size: highlight ? 17 : 15, weight: .medium))
+                            .foregroundColor(highlight ? .yellow : .white)
+                            .frame(width: highlight ? 42 : 36, height: highlight ? 42 : 36)
                             .background(
                                 Circle()
                                     .fill(Color.black.opacity(0.65))
                             )
                     }
                     .transition(.scale)
-                    .animation(.spring(response: 0.3), value: viewModel.currentLens == lens)
                 }
             }
+        }
+    }
+    
+    // Helper function to determine if a lens button should be highlighted
+    private func shouldHighlight(lens: CameraLens) -> Bool {
+        if lens == .x2 {
+            // Highlight 2x only if zoom factor is near 2.0
+            return abs(viewModel.currentZoomFactor - 2.0) < 0.01
+        } else if lens == .wide {
+            // Highlight 1x only if it's the current lens AND zoom is NOT near 2.0
+            return viewModel.currentLens == .wide && abs(viewModel.currentZoomFactor - 2.0) >= 0.01
+        } else {
+            // Highlight other physical lenses only if they are the current lens
+            return viewModel.currentLens == lens
         }
     }
     
