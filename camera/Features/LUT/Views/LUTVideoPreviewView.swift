@@ -8,9 +8,6 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     let viewModel: CameraViewModel
     
     func makeUIView(context: Context) -> LUTPreviewView {
-        // Lock the orientation to portrait
-        CameraOrientationLock.lockToPortrait()
-        
         // Create the preview view
         let previewView = LUTPreviewView()
         
@@ -75,9 +72,6 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     static func dismantleUIView(_ uiView: LUTPreviewView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
         NotificationCenter.default.removeObserver(uiView)
-        
-        // Maintain portrait orientation when view is dismantled
-        CameraOrientationLock.lockToPortrait()
     }
     
     func makeCoordinator() -> Coordinator {
@@ -112,9 +106,6 @@ struct LUTVideoPreviewView: UIViewRepresentable {
             
             // Ensure the preview stays fixed in portrait
             DispatchQueue.main.async { [weak self] in
-                // Re-lock to portrait orientation
-                CameraOrientationLock.lockToPortrait()
-                
                 // Ensure connections are using the correct rotation angle
                 if let connection = self?.session?.outputs.first as? AVCaptureVideoDataOutput,
                    let videoConnection = connection.connection(with: .video),

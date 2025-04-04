@@ -30,8 +30,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
-        // Setup orientation lock observer
-        UIWindowScene.setupOrientationLockSupport() // Assuming this is a necessary custom setup
+        // REMOVED: Setup orientation lock observer (using custom CameraOrientationLock)
+        // UIWindowScene.setupOrientationLockSupport()
         
         // Remove debug observer for orientation (if this was specific to the old setup)
         // NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)

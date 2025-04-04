@@ -14,8 +14,6 @@ struct CameraPreview: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> PreviewView {
-        // Lock the orientation to portrait
-        CameraOrientationLock.lockToPortrait()
         let preview = PreviewView()
         source.connect(to: preview)
         return preview
@@ -27,7 +25,6 @@ struct CameraPreview: UIViewRepresentable {
     
     static func dismantleUIView(_ uiView: PreviewView, coordinator: ()) {
         // Maintain portrait orientation when view is dismantled
-        CameraOrientationLock.lockToPortrait()
     }
 
     /// A UIView whose backing layer is AVCaptureVideoPreviewLayer.
