@@ -3,12 +3,12 @@ import AVFoundation
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject var lutManager: LUTManager
     @ObservedObject var viewModel: CameraViewModel
     @StateObject private var settingsModel = SettingsModel()
     @Binding var isDebugEnabled: Bool
     @State private var isShowingLUTDocumentPicker = false
+    var dismissAction: () -> Void
     
     var body: some View {
         NavigationView {
@@ -139,7 +139,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        dismiss()
+                        dismissAction()
                     }
                 }
             }
@@ -176,6 +176,7 @@ struct SettingsView: View {
     SettingsView(
         lutManager: LUTManager(),
         viewModel: CameraViewModel(),
-        isDebugEnabled: .constant(false)
+        isDebugEnabled: .constant(false),
+        dismissAction: {}
     )
 } 

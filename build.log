@@ -37,7 +37,7 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/momc --dry-run --action generate --swift-version 5.0 --sdkroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk --iphoneos-deployment-target 18.2 --module camera /Users/spencer/Documents/GitHub/camera/camera/camera.xcdatamodeld /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera
 
-ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/spencer/Documents/GitHub/camera/camera/Preview Content/Preview Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview Content/Preview Assets.xcassets
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
 
@@ -45,8 +45,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: d60df27ae9586b8c5586281e1194dd47
-Build description path: /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/XCBuildData/d60df27ae9586b8c5586281e1194dd47.xcbuilddata
+Build description signature: d176f22ad158d4c448dfd7d407d785fd
+Build description path: /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/XCBuildData/d176f22ad158d4c448dfd7d407d785fd.xcbuilddata
 ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk /Users/spencer/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos18.4-22E235-a09501eccf75f892bc376f81961b27ba.sdkstatcache
     cd /Users/spencer/Documents/GitHub/camera/camera.xcodeproj
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk -o /Users/spencer/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos18.4-22E235-a09501eccf75f892bc376f81961b27ba.sdkstatcache
@@ -71,13 +71,37 @@ WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-ekl
     cd /Users/spencer/Documents/GitHub/camera/camera.xcodeproj
     write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera-856b5b0132085a202d9453808c8add35-VFS-iphoneos/all-product-headers.yaml
 
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.hmap (in target 'camera' from project 'camera')
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.hmap
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibPath-normal-arm64.txt (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibPath-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-non-framework-target-headers.hmap (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-non-framework-target-headers.hmap
 
 WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-generated-files.hmap (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-generated-files.hmap
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.hmap (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.hmap
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibInstallName-normal-arm64.txt (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibInstallName-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap
 
 WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyStaticMetadataFileList (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -86,46 +110,6 @@ WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-ekl
 WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyMetadataFileList (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyMetadataFileList
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-non-framework-target-headers.hmap (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-non-framework-target-headers.hmap
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibPath-normal-arm64.txt (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibPath-normal-arm64.txt
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibInstallName-normal-arm64.txt (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-DebugDylibInstallName-normal-arm64.txt
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftConstValuesFileList (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftConstValuesFileList
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/Entitlements.plist (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/Entitlements.plist
-
-MkDir /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    /bin/mkdir -p /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app
-
-WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList
 
 WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.LinkFileList (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -138,6 +122,22 @@ WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-ekl
 WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_const_extract_protocols.json (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftConstValuesFileList (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftConstValuesFileList
+
+MkDir /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    /bin/mkdir -p /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app
+
+WriteAuxiliaryFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/Entitlements.plist (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    write-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/Entitlements.plist
 
 ValidateDevelopmentAssets /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -169,22 +169,14 @@ DataModelCompile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwf
     /Applications/Xcode.app/Contents/Developer/usr/bin/momc --sdkroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk --iphoneos-deployment-target 18.2 --module camera /Users/spencer/Documents/GitHub/camera/camera/camera.xcdatamodeld /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/
 camera.xcdatamodel: note: Model camera version checksum: VNIRJOjhqmU35OF02buOyYQnU/0ToUzUMpGW5jvR3Ic=
 
-GenerateAssetSymbols /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets (in target 'camera' from project 'camera')
+GenerateAssetSymbols /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
-    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets --compile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --output-format human-readable-text --notices --warnings --export-dependency-info /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies --output-partial-info-plist /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.2 --platform iphoneos --bundle-identifier com.spencershwetz.camera --generate-swift-asset-symbols /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets --compile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --output-format human-readable-text --notices --warnings --export-dependency-info /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies --output-partial-info-plist /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.2 --platform iphoneos --bundle-identifier com.spencershwetz.camera --generate-swift-asset-symbols /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols-Index.plist
 /* com.apple.actool.compilation-results */
 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols-Index.plist
 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.h
 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift
 
-
-MkDir /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    /bin/mkdir -p /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned
-
-CpResource /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/CameraViewModel.swift.old /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift.old (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift.old /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app
 
 MkDir /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/thinned (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -194,23 +186,52 @@ Ld /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzu
     cd /Users/spencer/Documents/GitHub/camera
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios18.2 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk -O0 -L/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -F/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -install_name @rpath/camera.debug.dylib -dead_strip -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_dependency_info.dat -Xlinker -no_adhoc_codesign -o /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/__preview.dylib
 
+MkDir /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    /bin/mkdir -p /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned
+
+CpResource /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/CameraViewModel.swift.old /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift.old (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift.old /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app
+
 DataModelCodegen /Users/spencer/Documents/GitHub/camera/camera/camera.xcdatamodeld (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     /Applications/Xcode.app/Contents/Developer/usr/bin/momc --action generate --swift-version 5.0 --sdkroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk --iphoneos-deployment-target 18.2 --module camera /Users/spencer/Documents/GitHub/camera/camera/camera.xcdatamodeld /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera
 
-CompileAssetCatalogVariant thinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets (in target 'camera' from project 'camera')
+CompileAssetCatalogVariant thinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
-    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets --compile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.2 --platform iphoneos
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets --compile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.2 --platform iphoneos
 /* com.apple.actool.compilation-results */
 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_thinned
 
+
+LinkAssetCatalog /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    builtin-linkAssetCatalog --thinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/thinned --thinned-dependencies /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_unthinned --output /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --plist-output /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist
+
+ProcessInfoPlistFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Info.plist /Users/spencer/Documents/GitHub/camera/camera/Info.plist (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    builtin-infoPlistUtility /Users/spencer/Documents/GitHub/camera/camera/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -additionalcontentfile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist -requiredArchitecture arm64 -o /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Info.plist
 
 SwiftDriver camera normal arm64 com.apple.xcode.tools.swift.compiler (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name camera -Onone -enforce-exclusivity\=checked @/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk -target arm64-apple-ios18.2 -g -module-cache-path /Users/spencer/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Index.noindex/DataStore -swift-version 5 -I /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -F /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -emit-localized-strings -emit-localized-strings-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos18.4-22E235-a09501eccf75f892bc376f81961b27ba.sdkstatcache -output-file-map /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/spencer/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_const_extract_protocols.json -Xcc -iquote -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-generated-files.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap -Xcc -iquote -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/include -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources-normal/arm64 -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/arm64 -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera-Swift.h -working-directory /Users/spencer/Documents/GitHub/camera -experimental-emit-module-separately -disable-cmo
 
-SwiftCompile normal arm64 Compiling\ VideoLibraryViewModel.swift,\ TestDynamicIslandOverlayView.swift,\ cameraApp.swift,\ CubeLUTLoader.swift,\ RecordingService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/TestDynamicIslandOverlayView.swift /Users/spencer/Documents/GitHub/camera/camera/cameraApp.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/RecordingService.swift (in target 'camera' from project 'camera')
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryViewModel.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 Compiling\ LUTManager.swift,\ SettingsView.swift,\ DeviceRotationViewModifier.swift,\ FunctionButtonsView.swift,\ TestDynamicIslandOverlayView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/SettingsView.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceRotationViewModifier.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/FunctionButtonsView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/TestDynamicIslandOverlayView.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/SettingsView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceRotationViewModifier.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/FunctionButtonsView.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
@@ -218,11 +239,115 @@ SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features
     cd /Users/spencer/Documents/GitHub/camera
     
 
+SwiftCompile normal arm64 Compiling\ CameraDeviceService.swift,\ CIContext+Shared.swift,\ VideoLibraryViewModel.swift,\ DeviceOrientationViewModel.swift,\ AppDelegate.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceOrientationViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/App/AppDelegate.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift:87:64: warning: 'windows' was deprecated in iOS 15.0: Use UIWindowScene.windows on a relevant window scene instead
+        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+                                                               ^
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryViewModel.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceOrientationViewModel.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/App/AppDelegate.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ FlashlightSettingsView.swift,\ VideoLibraryView.swift,\ RotatingView.swift,\ UIDeviceOrientation+Extensions.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/FlashlightSettingsView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryView.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/RotatingView.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/UIDeviceOrientation+Extensions.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/FlashlightSettingsView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/RotatingView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/UIDeviceOrientation+Extensions.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ ShutterAngle.swift,\ CameraViewModel.swift,\ AVFoundationExtensions.swift,\ FlashlightManager.swift,\ cameraApp.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Extensions/AVFoundationExtensions.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/FlashlightManager.swift /Users/spencer/Documents/GitHub/camera/camera/cameraApp.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Extensions/AVFoundationExtensions.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/FlashlightManager.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
 SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/cameraApp.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift (in target 'camera' from project 'camera')
+SwiftEmitModule normal arm64 Emitting\ module\ for\ camera (in target 'camera' from project 'camera')
+
+EmitSwiftModule normal arm64 (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ LUTProcessor.swift,\ CameraLens.swift,\ View+Extensions.swift,\ SettingsModel.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraLens.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/View+Extensions.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsModel.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraLens.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/View+Extensions.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsModel.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ Item+CoreDataClass.swift,\ Item+CoreDataProperties.swift,\ camera+CoreDataModel.swift,\ GeneratedAssetSymbols.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ CameraSetupService.swift,\ RecordingService.swift,\ CameraPreviewView.swift,\ VolumeButtonHandler.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraSetupService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/RecordingService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VolumeButtonHandler.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraSetupService.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
@@ -265,162 +390,6 @@ SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features
         let interfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation
                                    ^
 
-SwiftCompile normal arm64 Compiling\ DeviceRotationViewModifier.swift,\ VolumeButtonHandler.swift,\ RotatingView.swift,\ CameraPreviewImplementation.swift,\ View+Extensions.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceRotationViewModifier.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VolumeButtonHandler.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/RotatingView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/View+Extensions.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceRotationViewModifier.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VolumeButtonHandler.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/RotatingView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/View+Extensions.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ AVFoundationExtensions.swift,\ UIDeviceOrientation+Extensions.swift,\ SettingsModel.swift,\ CameraDeviceService.swift,\ CameraView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Extensions/AVFoundationExtensions.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/UIDeviceOrientation+Extensions.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsModel.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift (in target 'camera' from project 'camera')
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Extensions/AVFoundationExtensions.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/UIDeviceOrientation+Extensions.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/SettingsModel.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-/Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraDeviceService.swift:87:64: warning: 'windows' was deprecated in iOS 15.0: Use UIWindowScene.windows on a relevant window scene instead
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
-                                                               ^
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ FlashlightSettingsView.swift,\ LensSelectionView.swift,\ ExposureService.swift,\ CameraLens.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/FlashlightSettingsView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/LensSelectionView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/ExposureService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraLens.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Settings/FlashlightSettingsView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/LensSelectionView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/ExposureService.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraLens.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ LUTManager.swift,\ FunctionButtonsView.swift,\ CameraSetupService.swift,\ LUTVideoPreviewView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/FunctionButtonsView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraSetupService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/LUTManager.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/FunctionButtonsView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/CameraSetupService.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ LUTProcessor.swift,\ VideoLibraryView.swift,\ CameraViewModel.swift,\ Persistence.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/Persistence.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Utils/LUTProcessor.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/VideoLibrary/VideoLibraryView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/CameraViewModel.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Persistence.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ ShutterAngle.swift,\ DeviceOrientationViewModel.swift,\ DocumentPicker.swift,\ ZoomSliderView.swift,\ OrientationFixView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceOrientationViewModel.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/ZoomSliderView.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/OrientationFixView.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/ShutterAngle.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/DeviceOrientationViewModel.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/ZoomSliderView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/OrientationFixView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ CIContext+Shared.swift,\ VideoOutputDelegate.swift,\ AppDelegate.swift,\ SettingsView.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift /Users/spencer/Documents/GitHub/camera/camera/App/AppDelegate.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/SettingsView.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Extensions/CIContext+Shared.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/App/AppDelegate.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/SettingsView.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftEmitModule normal arm64 Emitting\ module\ for\ camera (in target 'camera' from project 'camera')
-
-EmitSwiftModule normal arm64 (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 Compiling\ FlashlightManager.swift,\ CameraError.swift,\ CameraPreviewView.swift,\ VideoFormatService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/FlashlightManager.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoFormatService.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/FlashlightManager.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
-SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    
-
 SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewView.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
@@ -429,39 +398,76 @@ SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features
                    ~~~~^~~~~~~~~~
                    (                                                                                        ) != nil
 
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VolumeButtonHandler.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ LUTVideoPreviewView.swift,\ LensSelectionView.swift,\ ZoomSliderView.swift,\ VideoFormatService.swift,\ CameraPreviewImplementation.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/LensSelectionView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/ZoomSliderView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoFormatService.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/Views/LUTVideoPreviewView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/LensSelectionView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/ZoomSliderView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
 SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoFormatService.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
-SwiftDriverJobDiscovery normal arm64 Compiling DeviceRotationViewModifier.swift, VolumeButtonHandler.swift, RotatingView.swift, CameraPreviewImplementation.swift, View+Extensions.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 Compiling\ Item+CoreDataClass.swift,\ Item+CoreDataProperties.swift,\ camera+CoreDataModel.swift,\ GeneratedAssetSymbols.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
-
-SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraPreviewImplementation.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
-SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 Compiling\ CubeLUTLoader.swift,\ DocumentPicker.swift,\ OrientationFixView.swift,\ VideoOutputDelegate.swift /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/OrientationFixView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/LUT/CubeLUTLoader.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
-SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Utilities/DocumentPicker.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
 
-SwiftCompile normal arm64 /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Core/Orientation/OrientationFixView.swift (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/VideoOutputDelegate.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 Compiling\ ExposureService.swift,\ Persistence.swift,\ CameraError.swift,\ CameraView.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/ExposureService.swift /Users/spencer/Documents/GitHub/camera/camera/Persistence.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift (in target 'camera' from project 'camera')
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Services/ExposureService.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Persistence.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Models/CameraError.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftCompile normal arm64 /Users/spencer/Documents/GitHub/camera/camera/Features/Camera/Views/CameraView.swift (in target 'camera' from project 'camera')
+    cd /Users/spencer/Documents/GitHub/camera
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling Item+CoreDataClass.swift, Item+CoreDataProperties.swift, camera+CoreDataModel.swift, GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
+
+SwiftDriverJobDiscovery normal arm64 Compiling LUTProcessor.swift, CameraLens.swift, View+Extensions.swift, SettingsModel.swift (in target 'camera' from project 'camera')
 
 SwiftDriverJobDiscovery normal arm64 Emitting module for camera (in target 'camera' from project 'camera')
 
 SwiftDriver\ Compilation\ Requirements camera normal arm64 com.apple.xcode.tools.swift.compiler (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name camera -Onone -enforce-exclusivity\=checked @/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList -DDEBUG -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk -target arm64-apple-ios18.2 -g -module-cache-path /Users/spencer/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Index.noindex/DataStore -swift-version 5 -I /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -F /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos -emit-localized-strings -emit-localized-strings-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos18.4-22E235-a09501eccf75f892bc376f81961b27ba.sdkstatcache -output-file-map /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/spencer/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_const_extract_protocols.json -Xcc -iquote -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-generated-files.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-own-target-headers.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-all-target-headers.hmap -Xcc -iquote -Xcc /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera-project-headers.hmap -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/include -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources-normal/arm64 -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/arm64 -Xcc -I/Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera-Swift.h -working-directory /Users/spencer/Documents/GitHub/camera -experimental-emit-module-separately -disable-cmo
-
-LinkAssetCatalog /Users/spencer/Documents/GitHub/camera/camera/Preview\ Content/Preview\ Assets.xcassets /Users/spencer/Documents/GitHub/camera/camera/Assets.xcassets (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    builtin-linkAssetCatalog --thinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/thinned --thinned-dependencies /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist_unthinned --output /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --plist-output /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist
 
 SwiftMergeGeneratedHeaders /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/DerivedSources/camera-Swift.h /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera-Swift.h (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -483,27 +489,21 @@ Copy /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudgg
     cd /Users/spencer/Documents/GitHub/camera
     builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.swiftsourceinfo /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.swiftmodule/Project/arm64-apple-ios.swiftsourceinfo
 
-ProcessInfoPlistFile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Info.plist /Users/spencer/Documents/GitHub/camera/camera/Info.plist (in target 'camera' from project 'camera')
-    cd /Users/spencer/Documents/GitHub/camera
-    builtin-infoPlistUtility /Users/spencer/Documents/GitHub/camera/camera/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -additionalcontentfile /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/assetcatalog_generated_info.plist -requiredArchitecture arm64 -o /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Info.plist
+SwiftDriverJobDiscovery normal arm64 Compiling CubeLUTLoader.swift, DocumentPicker.swift, OrientationFixView.swift, VideoOutputDelegate.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling Item+CoreDataClass.swift, Item+CoreDataProperties.swift, camera+CoreDataModel.swift, GeneratedAssetSymbols.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling FlashlightSettingsView.swift, VideoLibraryView.swift, RotatingView.swift, UIDeviceOrientation+Extensions.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling ShutterAngle.swift, DeviceOrientationViewModel.swift, DocumentPicker.swift, ZoomSliderView.swift, OrientationFixView.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling CameraDeviceService.swift, CIContext+Shared.swift, VideoLibraryViewModel.swift, DeviceOrientationViewModel.swift, AppDelegate.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling CIContext+Shared.swift, VideoOutputDelegate.swift, AppDelegate.swift, SettingsView.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling ShutterAngle.swift, CameraViewModel.swift, AVFoundationExtensions.swift, FlashlightManager.swift, cameraApp.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling LUTManager.swift, FunctionButtonsView.swift, CameraSetupService.swift, LUTVideoPreviewView.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling LUTManager.swift, SettingsView.swift, DeviceRotationViewModifier.swift, FunctionButtonsView.swift, TestDynamicIslandOverlayView.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling FlashlightSettingsView.swift, LensSelectionView.swift, ExposureService.swift, CameraLens.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling CameraSetupService.swift, RecordingService.swift, CameraPreviewView.swift, VolumeButtonHandler.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling LUTProcessor.swift, VideoLibraryView.swift, CameraViewModel.swift, Persistence.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling ExposureService.swift, Persistence.swift, CameraError.swift, CameraView.swift (in target 'camera' from project 'camera')
 
-SwiftDriverJobDiscovery normal arm64 Compiling VideoLibraryViewModel.swift, TestDynamicIslandOverlayView.swift, cameraApp.swift, CubeLUTLoader.swift, RecordingService.swift (in target 'camera' from project 'camera')
-
-SwiftDriverJobDiscovery normal arm64 Compiling FlashlightManager.swift, CameraError.swift, CameraPreviewView.swift, VideoFormatService.swift (in target 'camera' from project 'camera')
-
-SwiftDriverJobDiscovery normal arm64 Compiling AVFoundationExtensions.swift, UIDeviceOrientation+Extensions.swift, SettingsModel.swift, CameraDeviceService.swift, CameraView.swift (in target 'camera' from project 'camera')
+SwiftDriverJobDiscovery normal arm64 Compiling LUTVideoPreviewView.swift, LensSelectionView.swift, ZoomSliderView.swift, VideoFormatService.swift, CameraPreviewImplementation.swift (in target 'camera' from project 'camera')
 
 SwiftDriver\ Compilation camera normal arm64 com.apple.xcode.tools.swift.compiler (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
@@ -529,14 +529,14 @@ CopySwiftLibs /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyj
 ExtractAppIntentsMetadata (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name camera --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.4.sdk --xcode-version 16E140 --platform-family iOS --deployment-target 18.2 --bundle-identifier com.spencershwetz.camera --output /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --target-triple arm64-apple-ios18.2 --binary-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/camera --dependency-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera_dependency_info.dat --stringsdata-file /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftFileList --metadata-file-list /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyMetadataFileList --static-metadata-file-list /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyStaticMetadataFileList --swift-const-vals-list /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/Objects-normal/arm64/camera.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
-2025-04-04 10:31:56.594 appintentsmetadataprocessor[86858:2097250] Starting appintentsmetadataprocessor export
-2025-04-04 10:31:56.596 appintentsmetadataprocessor[86858:2097250] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+2025-04-04 10:37:42.207 appintentsmetadataprocessor[87562:2104465] Starting appintentsmetadataprocessor export
+2025-04-04 10:37:42.210 appintentsmetadataprocessor[87562:2104465] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
 
 AppIntentsSSUTraining (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera
     /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Info.plist --temp-dir-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/ssu --bundle-id com.spencershwetz.camera --product-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app --extracted-metadata-path /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/Metadata.appintents --metadata-file-list /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Intermediates.noindex/camera.build/Debug-iphoneos/camera.build/camera.DependencyMetadataFileList --archive-ssu-assets
-2025-04-04 10:31:56.612 appintentsnltrainingprocessor[86859:2097256] Parsing options for appintentsnltrainingprocessor
-2025-04-04 10:31:56.614 appintentsnltrainingprocessor[86859:2097256] No AppShortcuts found - Skipping.
+2025-04-04 10:37:42.226 appintentsnltrainingprocessor[87563:2104470] Parsing options for appintentsnltrainingprocessor
+2025-04-04 10:37:42.227 appintentsnltrainingprocessor[87563:2104470] No AppShortcuts found - Skipping.
 
 CodeSign /Users/spencer/Library/Developer/Xcode/DerivedData/camera-eklwftyjucygrudggzuvlhaahgla/Build/Products/Debug-iphoneos/camera.app/camera.debug.dylib (in target 'camera' from project 'camera')
     cd /Users/spencer/Documents/GitHub/camera

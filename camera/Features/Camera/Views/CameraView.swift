@@ -157,12 +157,33 @@ struct CameraView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .sheet(isPresented: $isShowingSettings) {
-                SettingsView(
-                    lutManager: lutManager,
-                    viewModel: viewModel,
-                    isDebugEnabled: $isDebugEnabled
-                )
+            .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
+                // Reset orientation lock when settings is dismissed
+                print("DEBUG: [ORIENTATION-DEBUG] settings fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
+                AppDelegate.isVideoLibraryPresented = false
+                
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                    let orientations: UIInterfaceOrientationMask = [.portrait]
+                    let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
+                    
+                    print("DEBUG: Returning to portrait after settings")
+                    windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                        print("DEBUG: Portrait return result: \(error.localizedDescription)")
+                    }
+                    
+                    for window in windowScene.windows {
+                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                    }
+                }
+            }) {
+                OrientationFixView(allowsLandscapeMode: true) {
+                    SettingsView(
+                        lutManager: lutManager,
+                        viewModel: viewModel,
+                        isDebugEnabled: $isDebugEnabled,
+                        dismissAction: { isShowingSettings = false }
+                    )
+                }
             }
             .sheet(isPresented: $isShowingDocumentPicker) {
                 DocumentPicker(types: LUTManager.supportedTypes) { url in
@@ -282,7 +303,6 @@ struct CameraView: View {
                 print("DEBUG: Returning to portrait after video library")
                 windowScene.requestGeometryUpdate(geometryPreferences) { error in
                     print("DEBUG: Portrait return result: \(error.localizedDescription)")
-                    print("DEBUG: [ORIENTATION-DEBUG] Device orientation after portrait reset: \(UIDevice.current.orientation.rawValue)")
                 }
                 
                 for window in windowScene.windows {
@@ -295,7 +315,10 @@ struct CameraView: View {
                 }
             }
         }) {
-            VideoLibraryView()
+            // Wrap VideoLibraryView in OrientationFixView to allow landscape
+            OrientationFixView(allowsLandscapeMode: true) {
+                VideoLibraryView()
+            }
         }
     }
     

@@ -366,10 +366,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
             queue: .main) { [weak self] _ in
-                guard let self = self,
-                      let videoConnection = self.session.outputs.first?.connection(with: .video) else { return }
-
-                self.cameraDeviceService.updateVideoOrientation(for: videoConnection, orientation: self.currentInterfaceOrientation)
+                guard let self = self else { return }
+                self.applyCurrentOrientationToConnections()
         }
         
         // Set initial shutter angle
@@ -432,9 +430,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func updateOrientation(_ orientation: UIInterfaceOrientation) {
         self.currentInterfaceOrientation = orientation
         
-        if let videoConnection = session.outputs.first?.connection(with: .video) {
-            cameraDeviceService.updateVideoOrientation(for: videoConnection, orientation: orientation)
-        }
+        applyCurrentOrientationToConnections()
         
         print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
     }
@@ -443,16 +439,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         cameraDeviceService.switchToLens(lens)
         
         // Update orientation for all video connections after lens switch
-        // This ensures LUT overlay orientation remains correct
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
-            
-            // Update all video connections to maintain proper orientation
-            for output in self.session.outputs {
-                if let connection = output.connection(with: .video) {
-                    self.cameraDeviceService.updateVideoOrientation(for: connection, orientation: self.currentInterfaceOrientation)
-                }
-            }
+            self.applyCurrentOrientationToConnections()
         }
         
         lastLensSwitchTimestamp = Date()
@@ -689,6 +678,32 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Process the frame if needed, or handle any frame-level logic
         // For now, just returning the pixel buffer from the sample buffer
         return CMSampleBufferGetImageBuffer(sampleBuffer)
+    }
+    
+    // MARK: - Orientation Handling (NEW)
+    
+    private func applyCurrentOrientationToConnections() {
+        // Always lock the preview connection angle to portrait (90 degrees)
+        // The actual recording orientation is handled by the Asset Writer's transform.
+        let targetAngle: CGFloat = 90
+        let source = "Locked Preview"
+        logger.info("📱 Applying fixed portrait angle (90°) to connections")
+
+        for output in session.outputs {
+            if let connection = output.connection(with: .video) {
+                guard connection.isVideoRotationAngleSupported(targetAngle) else {
+                    logger.warning("Rotation angle \(targetAngle)° not supported for connection: \(connection.description)")
+                    continue
+                }
+
+                if connection.videoRotationAngle != targetAngle {
+                    connection.videoRotationAngle = targetAngle
+                    logger.info("Updated video connection \(connection.description) rotation angle to \(targetAngle)° (Source: \(source))")
+                } else {
+                     logger.debug("📱 Angle \(targetAngle)° already set for connection \(connection.description). No change needed.")
+                }
+            }
+        }
     }
 }
 
