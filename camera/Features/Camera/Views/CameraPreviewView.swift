@@ -32,8 +32,8 @@ struct CameraPreviewView: UIViewRepresentable {
         print("DEBUG: updateUIView - Container frame: \(uiView.frame)")
         if let preview = uiView.viewWithTag(100) as? CustomPreviewView {
             print("DEBUG: updateUIView - Preview frame: \(preview.frame)")
-            // Update LUT if needed - just pass the reference, don't modify
-            preview.updateLUT(lutManager.currentLUTFilter)
+            // Use the new updateState method
+            preview.updateState(newTimestamp: viewModel.lastLensSwitchTimestamp, newFilter: lutManager.currentLUTFilter)
         }
     }
     
@@ -240,6 +240,7 @@ struct CameraPreviewView: UIViewRepresentable {
         private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
         private var currentLUTFilter: CIFilter?
         private let cornerRadius: CGFloat = 20.0
+        private var lastProcessedLensSwitchTimestamp: Date?
         
         init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
             self.session = session
@@ -248,6 +249,8 @@ struct CameraPreviewView: UIViewRepresentable {
             self.previewLayer = AVCaptureVideoPreviewLayer()
             super.init(frame: frame)
             setupView()
+            setupPreviewLayer()
+            setupVideoDataOutput()
         }
         
         required init?(coder: NSCoder) {
@@ -255,60 +258,62 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         private func setupView() {
-            // Set up preview layer
-            previewLayer.session = session
-            previewLayer.videoGravity = .resizeAspectFill
-            previewLayer.cornerRadius = cornerRadius
-            previewLayer.masksToBounds = true
-            layer.addSublayer(previewLayer)
-            
-            // Tag this view for easy lookup
+            // Set tag for lookup in updateUIView
             tag = 100
             
-            // Ensure preview layer fills the entire view
-            previewLayer.frame = bounds
+            // Apply corner radius
+            layer.cornerRadius = cornerRadius
+            layer.masksToBounds = true
             
-            // Disable autoresizing mask to use constraints
-            translatesAutoresizingMaskIntoConstraints = false
-            
-            // Set background color
+            // Set background color to black
             backgroundColor = .black
-            
-            // Force portrait orientation for the preview layer
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
+        }
+        
+        private func setupPreviewLayer() {
+            previewLayer.session = session
+            previewLayer.videoGravity = .resizeAspectFill
+            layer.addSublayer(previewLayer)
+        }
+        
+        private func setupVideoDataOutput() {
+            // Remove any existing outputs
+            if let existingOutput = dataOutput {
+                session.removeOutput(existingOutput)
             }
             
-            // Initial frame update
-            updateFrameSize()
+            session.beginConfiguration()
+            
+            // Create new video data output
+            let output = AVCaptureVideoDataOutput()
+            output.setSampleBufferDelegate(self, queue: processingQueue)
+            output.alwaysDiscardsLateVideoFrames = true
+            
+            // Set video settings for compatibility with CoreImage
+            let settings: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+            output.videoSettings = settings
+            
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+                dataOutput = output
+                
+                // Ensure proper orientation - force portrait
+                if let connection = output.connection(with: .video) {
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                    }
+                }
+                
+                print("DEBUG: Added video data output for LUT processing")
+            }
+            
+            session.commitConfiguration()
         }
         
         override func layoutSubviews() {
             super.layoutSubviews()
-            
-            // Ensure preview layer and LUT overlay fill the entire view
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            
-            // Update preview layer frame
-            previewLayer.frame = bounds
-            
-            // Update LUT overlay if it exists
-            if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                overlay.frame = bounds
-                overlay.cornerRadius = cornerRadius
-            }
-            
-            CATransaction.commit()
-            
-            // Force portrait orientation
-            if let connection = previewLayer.connection {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                }
-            }
+            previewLayer.frame = bounds // Ensure preview layer fills the view
         }
         
         // MARK: - Frame Management
@@ -373,126 +378,22 @@ struct CameraPreviewView: UIViewRepresentable {
             }
         }
         
-        func updateLUT(_ filter: CIFilter?) {
-            // Skip if same filter (reference equality)
-            if (filter === currentLUTFilter) {
-                return
-            }
+        func updateState(newTimestamp: Date, newFilter: CIFilter?) {
+            // Update LUT filter
+            self.currentLUTFilter = newFilter
             
-            // If filter state changed (nil vs non-nil), update processing
-            if (filter != nil) != (currentLUTFilter != nil) {
-                if filter != nil {
-                    // New filter added when none existed
-                    setupDataOutput()
-                    
-                    // Ensure proper orientation immediately when adding a filter
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self = self else { return }
-                        
-                        if let connection = self.previewLayer.connection,
-                           connection.isVideoRotationAngleSupported(90) {
-                            // Force orientation update when LUT is applied
-                            connection.videoRotationAngle = 90
-                        }
-                    }
-                } else {
-                    // Filter removed - first clean up any existing overlay
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self = self else { return }
-                        
-                        // Remove any existing LUT overlay layer before removing the data output
-                        CATransaction.begin()
-                        CATransaction.setDisableActions(true)
-                        
-                        if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                            overlay.removeFromSuperlayer()
-                            print("DEBUG: Removed LUT overlay layer during filter update")
-                        }
-                        
-                        CATransaction.commit()
-                        
-                        // Now remove the data output on the session queue to prevent freezing
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            self.removeDataOutput()
-                        }
-                    }
-                }
-            }
-            
-            // Update our local reference only - don't modify published properties
-            currentLUTFilter = filter
-            
-            // DON'T update viewModel.lutManager here - this is called during view updates
-            // and would trigger the SwiftUI warning
-            
-            if filter != nil {
-                print("DEBUG: CustomPreviewView updated with LUT filter")
+            // Check if lens switch timestamp has changed
+            if lastProcessedLensSwitchTimestamp != newTimestamp {
+                print("DEBUG: [CustomPreviewView] Detected lens switch timestamp change. Updating preview orientation.")
+                updatePreviewOrientation()
+                lastProcessedLensSwitchTimestamp = newTimestamp
             } else {
-                print("DEBUG: CustomPreviewView cleared LUT filter")
+                print("DEBUG: [CustomPreviewView] Timestamp unchanged. Not updating preview orientation.")
             }
         }
         
-        private func setupDataOutput() {
-            // Remove any existing outputs
-            if let existingOutput = dataOutput {
-                session.removeOutput(existingOutput)
-            }
-            
-            session.beginConfiguration()
-            
-            // Create new video data output
-            let output = AVCaptureVideoDataOutput()
-            output.setSampleBufferDelegate(self, queue: processingQueue)
-            output.alwaysDiscardsLateVideoFrames = true
-            
-            // Set video settings for compatibility with CoreImage
-            let settings: [String: Any] = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-            output.videoSettings = settings
-            
-            if session.canAddOutput(output) {
-                session.addOutput(output)
-                dataOutput = output
-                
-                // Ensure proper orientation - force portrait
-                if let connection = output.connection(with: .video) {
-                    if connection.isVideoRotationAngleSupported(90) {
-                        connection.videoRotationAngle = 90
-                    }
-                }
-                
-                print("DEBUG: Added video data output for LUT processing")
-            }
-            
-            session.commitConfiguration()
-        }
-        
-        private func removeDataOutput() {
-            if let output = dataOutput {
-                session.beginConfiguration()
-                session.removeOutput(output)
-                session.commitConfiguration()
-                dataOutput = nil
-                
-                // Clear any existing LUT overlay to prevent freezing
-                DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
-                    
-                    CATransaction.begin()
-                    CATransaction.setDisableActions(true)
-                    
-                    // Remove the LUT overlay layer if it exists
-                    if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                        overlay.removeFromSuperlayer()
-                        print("DEBUG: Removed LUT overlay layer")
-                    }
-                    
-                    CATransaction.commit()
-                }
-                
-                print("DEBUG: Removed video data output for LUT processing")
-            }
+        func updateLUT(_ filter: CIFilter?) {
+            self.currentLUTFilter = filter
         }
         
         // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
@@ -559,6 +460,46 @@ struct CameraPreviewView: UIViewRepresentable {
                 return NSNull()
             }
             return super.action(for: layer, forKey: event)
+        }
+        
+        func updatePreviewOrientation() {
+            guard let connection = previewLayer.connection else {
+                print("DEBUG: PreviewLayer has no connection to update orientation.")
+                return
+            }
+            
+            let newAngle: CGFloat
+            let deviceOrientation = UIDevice.current.orientation
+            let interfaceOrientation = window?.windowScene?.interfaceOrientation ?? .portrait
+            
+            if deviceOrientation.isValidInterfaceOrientation {
+                switch deviceOrientation {
+                case .portrait: newAngle = 90
+                case .landscapeLeft: newAngle = 0
+                case .landscapeRight: newAngle = 180
+                case .portraitUpsideDown: newAngle = 270
+                default: newAngle = 90
+                }
+            } else {
+                switch interfaceOrientation {
+                case .portrait: newAngle = 90
+                case .landscapeLeft: newAngle = 0
+                case .landscapeRight: newAngle = 180
+                case .portraitUpsideDown: newAngle = 270
+                default: newAngle = 90
+                }
+            }
+            
+            if connection.isVideoRotationAngleSupported(newAngle) {
+                if connection.videoRotationAngle != newAngle {
+                    connection.videoRotationAngle = newAngle
+                    print("DEBUG: [CustomPreviewView] Updated PREVIEW layer connection angle to \(newAngle)°")
+                } else {
+                    print("DEBUG: [CustomPreviewView] PREVIEW layer connection angle already \(newAngle)°. No change.")
+                }
+            } else {
+                print("DEBUG: [CustomPreviewView] Angle \(newAngle)° not supported for PREVIEW layer connection.")
+            }
         }
     }
 }

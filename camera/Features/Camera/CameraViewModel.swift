@@ -302,6 +302,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var cameraDeviceService: CameraDeviceService!
     private var videoFormatService: VideoFormatService!
     
+    @Published var lastLensSwitchTimestamp = Date()
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -452,6 +454,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 }
             }
         }
+        
+        lastLensSwitchTimestamp = Date()
     }
     
     func setZoomFactor(_ factor: CGFloat) {
@@ -476,15 +480,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             codec: selectedCodec
         )
         
-        // Lock orientation during recording
-        cameraDeviceService.lockOrientationForRecording(true)
-        
-        // Get current orientation for recording
-        let recordingOrientation = session.outputs.first?.connection(with: .video)?.videoRotationAngle ?? 0
-        
+        // Get current orientation angle for recording
+        let recordingOrientationAngle = session.outputs.first?.connection(with: .video)?.videoRotationAngle ?? 90 // Default to portrait
+
         // Start recording
-        await recordingService.startRecording(orientation: recordingOrientation)
-        
+        await recordingService.startRecording(orientation: recordingOrientationAngle)
+
         isRecording = true
     }
     
@@ -494,9 +495,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Stop recording
         await recordingService.stopRecording()
-        
-        // Unlock orientation after recording
-        cameraDeviceService.lockOrientationForRecording(false)
         
         isRecording = false
     }
@@ -788,20 +786,17 @@ extension CameraViewModel: RecordingServiceDelegate {
 
 extension CameraViewModel: CameraDeviceServiceDelegate {
     func didUpdateCurrentLens(_ lens: CameraLens) {
+        logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
+        // Update properties on the main thread
         DispatchQueue.main.async {
             self.currentLens = lens
-            // // After updating the lens, re-apply color space settings - MOVED to CameraDeviceService
-            // do {
-            //     try self.videoFormatService.reapplyColorSpaceSettings()
-            //     print("✅ Successfully reapplied color space after lens switch to \(lens.rawValue)x")
-            // } catch {
-            //     print("❌ Failed to reapply color space after lens switch: \(error)")
-            //     self.didEncounterError(.configurationFailed(message: "Failed to apply color settings for new lens."))
-            // }
+            self.lastLensSwitchTimestamp = Date() // Trigger preview update
+            self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
         }
     }
     
     func didUpdateZoomFactor(_ factor: CGFloat) {
+        logger.debug("Delegate: didUpdateZoomFactor called with \(factor)")
         DispatchQueue.main.async {
             self.currentZoomFactor = factor
         }
