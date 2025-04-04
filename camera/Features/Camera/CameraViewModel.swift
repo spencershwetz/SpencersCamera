@@ -96,24 +96,42 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
             
             Task {
+                let currentLensValue = self.currentLens.rawValue // Capture before async operation
+                self.logger.info("🚀 Starting Task to configure Apple Log to \(self.isAppleLogEnabled) for lens: \(currentLensValue)x")
                 do {
-                    if isAppleLogEnabled {
-                        print("🎥 Configuring Apple Log...")
-                        try await videoFormatService.configureAppleLog()
+                    if self.isAppleLogEnabled {
+                        self.logger.info("🎥 Calling videoFormatService.configureAppleLog()...")
+                        try await self.videoFormatService.configureAppleLog()
+                        self.logger.info("✅ Successfully completed configureAppleLog().")
+                        
+                        self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after configure...")
+                        try self.videoFormatService.reapplyColorSpaceSettings()
+                        self.logger.info("✅ Re-applied color space settings after Apple Log configuration.")
                     } else {
-                        print("↩️ Resetting Apple Log...")
-                        try await videoFormatService.resetAppleLog()
+                        self.logger.info("🎥 Calling videoFormatService.resetAppleLog()...")
+                        try await self.videoFormatService.resetAppleLog()
+                        self.logger.info("✅ Successfully completed resetAppleLog().")
+                        
+                        self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reset...")
+                        try self.videoFormatService.reapplyColorSpaceSettings()
+                        self.logger.info("✅ Re-applied color space settings after Apple Log reset.")
                     }
+                    self.logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(self.isAppleLogEnabled)) successfully.")
                     
                     // Update recording service with new Apple Log setting
-                    recordingService.setAppleLogEnabled(isAppleLogEnabled)
-                    videoFormatService.setAppleLogEnabled(isAppleLogEnabled)
-                } catch {
-                    await MainActor.run {
-                        self.error = .configurationFailed
+                    self.recordingService.setAppleLogEnabled(self.isAppleLogEnabled)
+                    self.videoFormatService.setAppleLogEnabled(self.isAppleLogEnabled)
+                } catch let error as CameraError {
+                    self.logger.error("❌ Task failed to configure/reset Apple Log: \(error.description)")
+                    DispatchQueue.main.async {
+                        self.error = error
                     }
-                    logger.error("Failed to configure Apple Log: \(error.localizedDescription)")
-                    print("❌ Apple Log configuration failed: \(error)")
+                } catch {
+                    self.logger.error("❌ Task failed to configure/reset Apple Log with unknown error: \(error.localizedDescription)")
+                    let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        self.error = wrappedError
+                    }
                 }
             }
             print("=== End Apple Log Toggle ===\n")
@@ -749,10 +767,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 // MARK: - VideoFormatServiceDelegate
 
 extension CameraViewModel: VideoFormatServiceDelegate {
+    func getCurrentFrameRate() -> Double? {
+        return selectedFrameRate
+    }
+    
+    func getCurrentResolution() -> CameraViewModel.Resolution? {
+        return selectedResolution
+    }
+    
     func didUpdateFrameRate(_ frameRate: Double) {
-        DispatchQueue.main.async {
-            self.selectedFrameRate = frameRate
-        }
+        // Optionally update UI or state if needed when frame rate changes
+        logger.info("Delegate notified: Frame rate updated to \(frameRate) fps")
     }
 }
 

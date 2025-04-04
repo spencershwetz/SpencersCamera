@@ -53,21 +53,34 @@ class CameraDeviceService {
         try newDevice.lockForConfiguration()
         
         // If Apple Log is enabled, try to find and set a compatible format first
-        if videoFormatService.appleLogEnabled {
-            logger.info("🍏 Apple Log enabled, searching for compatible format on \(newDevice.localizedName)")
-            let appleLogFormats = newDevice.formats.filter { $0.supportedColorSpaces.contains(.appleLog) }
-            
-            if let compatibleFormat = appleLogFormats.first {
-                 // Ideally, match resolution/FPS here, but for now, just find *any* compatible format
-                if newDevice.activeFormat != compatibleFormat {
-                    newDevice.activeFormat = compatibleFormat
-                    logger.info("✅ Set Apple Log compatible format: \(compatibleFormat.description)")
+        if videoFormatService.isAppleLogEnabled {
+            logger.info("🔍 Searching for Apple Log compatible format on \(newDevice.localizedName)...")
+            // Find a format that supports Apple Log AND matches current FPS/Resolution settings
+            guard let currentFPS = videoFormatService.getCurrentFrameRateFromDelegate(),
+                  let currentResolution = videoFormatService.getCurrentResolutionFromDelegate() else {
+                logger.error("❌ Could not get current FPS/Resolution from delegate to find compatible Apple Log format.")
+                // Fallback or throw? For now, log and potentially proceed without format change.
+                return // Or consider throwing an error if this is critical
+            }
+
+            let compatibleFormat = videoFormatService.findBestFormat(for: newDevice, resolution: currentResolution, frameRate: currentFPS, requireAppleLog: true)
+
+            if let selectedFormat = compatibleFormat {
+                if newDevice.activeFormat != selectedFormat {
+                    newDevice.activeFormat = selectedFormat
+                    logger.info("✅ Set optimized Apple Log compatible format: \(selectedFormat.description)")
                 } else {
-                    logger.info("ℹ️ Current format already supports Apple Log.")
+                    logger.info("ℹ️ Current format already is the optimal Apple Log format.")
                 }
             } else {
-                logger.warning("⚠️ Apple Log enabled, but no compatible format found on \(newDevice.localizedName). Apple Log will not be applied.")
+                logger.warning("⚠️ Apple Log enabled, but no compatible format found on \(newDevice.localizedName) matching \(currentResolution.rawValue)/\(currentFPS)fps. Apple Log may not be applied correctly.")
+                // Consider falling back to a non-Log format or informing the user.
             }
+        } else {
+             logger.info("ℹ️ Apple Log is disabled, skipping specific format search.")
+             // Optionally, ensure a default non-Log format is selected if needed
+             // let defaultFormat = videoFormatService.findBestFormat(for: newDevice, ...) 
+             // if newDevice.activeFormat != defaultFormat { ... }
         }
         
         // Set other default configurations
@@ -155,9 +168,12 @@ class CameraDeviceService {
             try configureSession(for: newDevice, lens: lens)
             logger.debug("🔄 Lens switch: Configured session for new device. New active format: \(newDevice.activeFormat.description)")
             
-            // Re-apply color space settings within the same configuration transaction
-            try videoFormatService.reapplyColorSpaceSettings(for: newDevice)
-            logger.debug("🔄 Lens switch: Re-applied color space settings.")
+            // Update the internal device reference in VideoFormatService
+            videoFormatService.setDevice(newDevice)
+            
+            // Re-apply color space settings after switching format
+            try videoFormatService.reapplyColorSpaceSettings()
+            logger.info("🔄 Lens switch: Re-applied color space settings.")
             
             logger.debug("🔄 Lens switch: Committing configuration...")
             session.commitConfiguration()
