@@ -46,7 +46,7 @@ struct ContentView: View {
             }
         }
         .background(Color.black) // Extra safety black background
-        .disableSafeArea() // Use our custom modifier to disable safe area insets
+        .ignoresSafeArea(.all, edges: .all) // Use standard modifier
         .statusBar(hidden: true)
         .preferredColorScheme(.dark) // Force dark mode
         .onAppear {

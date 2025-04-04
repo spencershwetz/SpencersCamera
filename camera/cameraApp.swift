@@ -43,7 +43,7 @@ struct cameraApp: App {
                     CameraView()
                 }
             }
-            .disableSafeArea() // Use our custom modifier to completely disable safe areas
+            .ignoresSafeArea(.all, edges: .all) // Use standard modifier
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Hide status bar at app level
             .hideStatusBar()

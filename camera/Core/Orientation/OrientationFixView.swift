@@ -39,10 +39,6 @@ class OrientationFixViewController: UIViewController {
         contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(contentView)
         
-        // Disable safe area insets
-        contentView.insetsLayoutMarginsFromSafeArea = false
-        additionalSafeAreaInsets = .zero
-        
         // Set black background for all parent views up the hierarchy
         setBlackBackgroundForAllParentViews()
         
@@ -90,16 +86,6 @@ class OrientationFixViewController: UIViewController {
         // Force black background during layout
         view.backgroundColor = .black
         setBlackBackgroundForAllParentViews()
-    }
-    
-    // Force zero safe area insets
-    override var additionalSafeAreaInsets: UIEdgeInsets {
-        get {
-            return .zero
-        }
-        set {
-            super.additionalSafeAreaInsets = .zero
-        }
     }
     
     private func enforcePortraitOrientation() {

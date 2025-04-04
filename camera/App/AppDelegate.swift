@@ -30,9 +30,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             windowScene.windows.forEach { window in
                 window.enforceDarkMode()
-                
-                // Disable safe area insets for all windows
-                window.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
             }
         }
         
@@ -51,16 +48,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Set modal presentation style
         hostingController.modalPresentationStyle = .overFullScreen
         
-        // Disable safe area insets completely
-        hostingController.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
         hostingController.view.frame = UIScreen.main.bounds
         
         // Set window properties
         window?.rootViewController = hostingController
         window?.makeKeyAndVisible()
-        
-        // Disable safe area insets at window level again
-        window?.rootViewController?.additionalSafeAreaInsets = UIEdgeInsets(top: -60, left: 0, bottom: 0, right: 0)
         
         // Force dark mode again after window is visible
         window?.enforceDarkMode()
