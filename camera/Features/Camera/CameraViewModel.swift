@@ -367,6 +367,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             object: nil,
             queue: .main) { [weak self] _ in
                 guard let self = self else { return }
+                guard !self.isRecording else {
+                    self.logger.debug("Orientation changed during recording, skipping connection angle update.")
+                    return
+                }
                 self.applyCurrentOrientationToConnections()
         }
         
@@ -428,6 +432,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func updateOrientation(_ orientation: UIInterfaceOrientation) {
+        guard !isRecording else {
+            logger.debug("Interface orientation update skipped during recording.")
+            // Still update the published property so UI elements can rotate
+            self.currentInterfaceOrientation = orientation
+            return
+        }
         self.currentInterfaceOrientation = orientation
         
         applyCurrentOrientationToConnections()
@@ -436,11 +446,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func switchToLens(_ lens: CameraLens) {
+        // Remove isRecording argument
         cameraDeviceService.switchToLens(lens)
         
         // Update orientation for all video connections after lens switch
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self = self else { return }
+            guard !self.isRecording else {
+                self.logger.debug("Skipping delayed orientation update after lens switch because recording is active.")
+                return
+            }
             self.applyCurrentOrientationToConnections()
         }
         
@@ -448,6 +463,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func setZoomFactor(_ factor: CGFloat) {
+        // Remove isRecording argument
         cameraDeviceService.setZoomFactor(factor, currentLens: currentLens, availableLenses: availableLenses)
     }
     
@@ -698,6 +714,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Orientation Handling (NEW)
     
     private func applyCurrentOrientationToConnections() {
+        // --- Add this log --- 
+        logger.warning("\n*** applyCurrentOrientationToConnections CALLED! isRecording: \(self.isRecording) ***\n")
+        // --- End log ---
+        
         // Always lock the preview connection angle to portrait (90 degrees)
         // The actual recording orientation is handled by the Asset Writer's transform.
         let targetAngle: CGFloat = 90

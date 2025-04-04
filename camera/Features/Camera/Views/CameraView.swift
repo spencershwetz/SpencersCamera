@@ -263,64 +263,40 @@ struct CameraView: View {
     }
     
     private var videoLibraryButton: some View {
-        RotatingView(orientationViewModel: orientationViewModel) {
-            Button(action: {
-                print("DEBUG: [LibraryButton] Button tapped")
-                print("DEBUG: [LibraryButton] Current orientation: \(orientationViewModel.orientation.rawValue)")
-                AppDelegate.isVideoLibraryPresented = true
-                isShowingVideoLibrary = true
-            }) {
-                ZStack {
-                    // Thumbnail background
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.6))
-                        .frame(width: 60, height: 60)
-                    
-                    // Placeholder or actual thumbnail
-                    if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
-                        Image(uiImage: thumbnailImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 54, height: 54)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        Image(systemName: "film")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-        .frame(width: 60, height: 60)
-        .onChange(of: orientationViewModel.orientation) { oldValue, newValue in
-            print("DEBUG: [LibraryButton] Orientation changed: \(oldValue.rawValue) -> \(newValue.rawValue)")
+        Button {
+            print("DEBUG: [ORIENTATION-DEBUG] Library button tapped - setting AppDelegate.isVideoLibraryPresented = true")
+            AppDelegate.isVideoLibraryPresented = true // Allow landscape for library
+            isShowingVideoLibrary = true
+        } label: {
+            Image(systemName: "photo.stack")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(15)
+                .frame(width: 60, height: 60)
+                .background(Color.gray.opacity(0.3))
+                .clipShape(Circle())
+                .foregroundColor(.white)
         }
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-            print("DEBUG: [ORIENTATION-DEBUG] fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
-            AppDelegate.isVideoLibraryPresented = false
-            
+            print("DEBUG: [ORIENTATION-DEBUG] library fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
+            AppDelegate.isVideoLibraryPresented = false // Lock back to portrait
+
+            // Re-apply portrait lock when dismissing library
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                print("DEBUG: [ORIENTATION-DEBUG] Current orientation before reset: \(UIDevice.current.orientation.rawValue)")
                 let orientations: UIInterfaceOrientationMask = [.portrait]
                 let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
                 
-                print("DEBUG: Returning to portrait after video library")
+                print("DEBUG: Returning to portrait after library")
                 windowScene.requestGeometryUpdate(geometryPreferences) { error in
                     print("DEBUG: Portrait return result: \(error.localizedDescription)")
                 }
                 
                 for window in windowScene.windows {
                     window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    print("DEBUG: [ORIENTATION-DEBUG] Updated orientation on root controller")
-                }
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    print("DEBUG: [ORIENTATION-DEBUG] Device orientation 0.5s after reset: \(UIDevice.current.orientation.rawValue)")
                 }
             }
         }) {
-            // Wrap VideoLibraryView in OrientationFixView to allow landscape
+            // Allow landscape mode within the library view
             OrientationFixView(allowsLandscapeMode: true) {
                 VideoLibraryView()
             }

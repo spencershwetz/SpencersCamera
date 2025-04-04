@@ -93,8 +93,10 @@ class CameraDeviceService {
             if lens == .x2 {
                 if let currentDevice = self.device,
                    currentDevice.deviceType == .builtInWideAngleCamera {
+                    // Digital zoom is safe during recording
                     self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice)
                 } else {
+                    // Switching to wide *before* digital zoom requires physical switch
                     self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor, currentInterfaceOrientation: currentInterfaceOrientation)
                 }
                 return
