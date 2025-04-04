@@ -453,7 +453,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @MainActor
     func startRecording() async {
-        guard !isRecording, status == .running, let device = self.device else { return }
+        guard !isRecording, status == .running, let device = self.device else {
+            let deviceStatus = device != nil ? "available" : "nil"
+            logger.warning("Start recording called but conditions not met. isRecording: \\(isRecording), status: \\(String(describing: status)), device: \\(deviceStatus)")
+            return
+        }
         
         // Get current settings
         let settings = SettingsModel()
@@ -470,22 +474,33 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         )
         
         // Get current orientation angle for recording
-        let recordingOrientationAngle = session.outputs.first?.connection(with: .video)?.videoRotationAngle ?? 90 // Default to portrait
+        let connectionAngle = session.outputs.compactMap { $0.connection(with: .video) }.first?.videoRotationAngle ?? -1 // Use -1 to indicate not found
+        logger.info("Requesting recording start. Current primary video connection angle: \\(connectionAngle)° (This is passed but ignored by RecordingService)")
 
         // Start recording
-        await recordingService.startRecording(orientation: recordingOrientationAngle)
+        await recordingService.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
 
         isRecording = true
+        logger.info("Recording state set to true.")
     }
     
     @MainActor
     func stopRecording() async {
-        guard isRecording else { return }
+        guard isRecording else { 
+            logger.warning("Stop recording called but not currently recording.")
+            return 
+        }
         
+        logger.info("Requesting recording stop.")
         // Stop recording
         await recordingService.stopRecording()
         
         isRecording = false
+        logger.info("Recording state set to false.")
+        
+        // Re-apply fixed portrait orientation to connections after recording stops
+        logger.info("Applying fixed portrait orientation to connections after recording stop.")
+        applyCurrentOrientationToConnections()
     }
     
     private func updateVideoConfiguration() {
@@ -687,21 +702,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // The actual recording orientation is handled by the Asset Writer's transform.
         let targetAngle: CGFloat = 90
         let source = "Locked Preview"
-        logger.info("📱 Applying fixed portrait angle (90°) to connections")
+        logger.info("📱 Applying fixed portrait angle (90°) to connections. Source: \\(source)")
 
         for output in session.outputs {
             if let connection = output.connection(with: .video) {
+                let connectionID = connection.description // Get a stable ID for logging
                 guard connection.isVideoRotationAngleSupported(targetAngle) else {
-                    logger.warning("Rotation angle \(targetAngle)° not supported for connection: \(connection.description)")
+                    logger.warning("Rotation angle \\(targetAngle)° not supported for connection: \\(connectionID)")
                     continue
                 }
 
                 if connection.videoRotationAngle != targetAngle {
+                    let previousAngle = connection.videoRotationAngle
                     connection.videoRotationAngle = targetAngle
-                    logger.info("Updated video connection \(connection.description) rotation angle to \(targetAngle)° (Source: \(source))")
+                    logger.info("Updated video connection \\(connectionID) rotation angle from \\(previousAngle)° to \\(targetAngle)° (Source: \\(source))")
                 } else {
-                     logger.debug("📱 Angle \(targetAngle)° already set for connection \(connection.description). No change needed.")
+                     logger.debug("Angle \\(targetAngle)° already set for connection \\(connectionID). No change needed. (Source: \\(source))")
                 }
+            } else {
+                 logger.debug("Output \\(output.description) has no video connection.")
             }
         }
     }

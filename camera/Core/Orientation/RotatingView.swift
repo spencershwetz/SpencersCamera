@@ -1,19 +1,32 @@
 import SwiftUI
 import UIKit
+import Combine
+import os.log
 
+/// A SwiftUI view that wraps a UIHostingController to allow its content to rotate with the device orientation.
 struct RotatingView<Content: View>: UIViewControllerRepresentable {
     let content: Content
     @ObservedObject var orientationViewModel: DeviceOrientationViewModel
     let invertRotation: Bool
     
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "RotatingView")
+    
     init(orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool = false, @ViewBuilder content: () -> Content) {
         self.content = content()
         self._orientationViewModel = ObservedObject(wrappedValue: orientationViewModel)
         self.invertRotation = invertRotation
+        logger.info("Initializing RotatingView. InvertRotation: \\(invertRotation)")
     }
     
     func makeUIViewController(context: Context) -> RotatingViewController<Content> {
-        return RotatingViewController(rootView: content, orientationViewModel: orientationViewModel, invertRotation: invertRotation)
+        let controller = RotatingViewController(rootView: content, orientationViewModel: orientationViewModel, invertRotation: invertRotation)
+        controller.view.backgroundColor = .clear
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Set initial transform based on current orientation
+        controller.updateOrientation(UIDevice.current.orientation)
+        logger.info("RotatingViewController created. Initial orientation set.")
+        return controller
     }
     
     func updateUIViewController(_ uiViewController: RotatingViewController<Content>, context: Context) {
@@ -23,15 +36,28 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
 }
 
 class RotatingViewController<Content: View>: UIViewController {
-    private var hostingController: UIHostingController<Content>
-    private var orientationViewModel: DeviceOrientationViewModel
-    private var invertRotation: Bool
+    private var cancellables = Set<AnyCancellable>()
+    private let orientationViewModel = DeviceOrientationViewModel.shared
+    private var hostingController: UIHostingController<Content>!
+    private let invertRotation: Bool
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "RotatingView.Controller")
     
     init(rootView: Content, orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool) {
-        self.hostingController = UIHostingController(rootView: rootView)
-        self.orientationViewModel = orientationViewModel
         self.invertRotation = invertRotation
         super.init(nibName: nil, bundle: nil)
+        hostingController = UIHostingController(rootView: rootView)
+        hostingController.view.backgroundColor = .clear
+        logger.info("RotatingViewController init. InvertRotation: \\(invertRotation)")
+        
+        // Use the shared orientation view model
+        orientationViewModel.$orientation
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newOrientation in
+                self?.logger.info("Received new orientation from ViewModel: \\(newOrientation.rawValue)")
+                self?.updateOrientation(newOrientation)
+            }
+            .store(in: &cancellables)
+        logger.info("Subscribed to orientation changes.")
     }
     
     required init?(coder: NSCoder) {
@@ -61,20 +87,26 @@ class RotatingViewController<Content: View>: UIViewController {
     }
     
     func updateOrientation(_ orientation: UIDeviceOrientation) {
-        print("DEBUG: [RotatingViewController] Updating orientation to: \(orientation.rawValue)")
+        logger.info("Updating UI transform for orientation: \\(orientation.rawValue) - \\(String(describing: orientation)). Invert: \\(invertRotation)")
         var transform: CGAffineTransform = .identity
+        var angleDegrees: CGFloat = 0
         
         switch orientation {
         case .landscapeLeft:
             transform = CGAffineTransform(rotationAngle: invertRotation ? CGFloat.pi / 2 : -CGFloat.pi / 2)
+            angleDegrees = invertRotation ? 90 : -90
         case .landscapeRight:
             transform = CGAffineTransform(rotationAngle: invertRotation ? -CGFloat.pi / 2 : CGFloat.pi / 2)
+            angleDegrees = invertRotation ? -90 : 90
         case .portraitUpsideDown:
             transform = CGAffineTransform(rotationAngle: CGFloat.pi)
-        default:
+            angleDegrees = 180
+        default: // .portrait, .unknown, .faceUp, .faceDown
             transform = .identity
+            angleDegrees = 0
         }
         
+        logger.info("Applying transform for \\(orientation.rawValue): Rotation \\(angleDegrees) degrees.")
         UIView.animate(withDuration: 0.3) {
             self.hostingController.view.transform = transform
         }

@@ -1,9 +1,13 @@
 import SwiftUI
 import UIKit
 
+/// View containing the main function buttons (Record, Flip Camera, Settings, Library).
 struct FunctionButtonsView: View {
+    @ObservedObject var viewModel: CameraViewModel
+    @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
+    @Binding var isShowingSettings: Bool
+    @Binding var isShowingLibrary: Bool // Add binding for library presentation
     @State private var topSafeAreaHeight: CGFloat = 44 // Default value
-    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     
     var body: some View {
         GeometryReader { geometry in

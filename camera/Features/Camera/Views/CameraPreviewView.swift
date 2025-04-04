@@ -2,11 +2,16 @@ import SwiftUI
 import AVFoundation
 import CoreImage
 import AVKit
+import Combine
+import os.log
 
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
     let viewModel: CameraViewModel
+    
+    // Logger for CameraPreviewView
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewView")
     
     func makeUIView(context: Context) -> RotationLockedContainer {
         print("DEBUG: Creating CameraPreviewView")
@@ -242,6 +247,9 @@ struct CameraPreviewView: UIViewRepresentable {
         private let cornerRadius: CGFloat = 20.0
         private var lastProcessedLensSwitchTimestamp: Date?
         
+        // Logger for the deprecated UIView
+        private let uiViewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewUIView")
+        
         init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
             self.session = session
             self.lutManager = lutManager
@@ -273,12 +281,19 @@ struct CameraPreviewView: UIViewRepresentable {
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
             layer.addSublayer(previewLayer)
+            previewLayer.cornerRadius = cornerRadius // Apply initial corner radius
+            previewLayer.masksToBounds = true
+            uiViewLogger.info("Preview layer setup complete.")
+            
+            // Force initial portrait orientation
+            forcePortraitOrientation()
         }
         
         private func setupVideoDataOutput() {
             // Remove any existing outputs
             if let existingOutput = dataOutput {
                 session.removeOutput(existingOutput)
+                uiViewLogger.info("Removed existing video data output.")
             }
             
             session.beginConfiguration()
@@ -297,11 +312,20 @@ struct CameraPreviewView: UIViewRepresentable {
             if session.canAddOutput(output) {
                 session.addOutput(output)
                 dataOutput = output
+                uiViewLogger.info("Added video data output for LUT processing.")
                 
                 // Ensure proper orientation - force portrait
                 if let connection = output.connection(with: .video) {
                     if connection.isVideoRotationAngleSupported(90) {
-                        connection.videoRotationAngle = 90
+                        let currentAngle = connection.videoRotationAngle
+                        if currentAngle != 90 {
+                            connection.videoRotationAngle = 90
+                            uiViewLogger.info("Set video data output connection angle from \(currentAngle)° to 90°.")
+                        } else {
+                            uiViewLogger.debug("Video data output connection already 90°.")
+                        }
+                    } else {
+                        uiViewLogger.warning("Video data output connection does not support 90° rotation.")
                     }
                 }
                 
@@ -314,6 +338,8 @@ struct CameraPreviewView: UIViewRepresentable {
         override func layoutSubviews() {
             super.layoutSubviews()
             previewLayer.frame = bounds // Ensure preview layer fills the view
+            previewLayer.cornerRadius = cornerRadius // Maintain corner radius
+            uiViewLogger.debug("LayoutSubviews called, updated previewLayer frame and cornerRadius.")
         }
         
         // MARK: - Frame Management
@@ -499,6 +525,40 @@ struct CameraPreviewView: UIViewRepresentable {
                 }
             } else {
                 print("DEBUG: [CustomPreviewView] Angle \(newAngle)° not supported for PREVIEW layer connection.")
+            }
+        }
+        
+        // Method to always force portrait orientation on connections
+        private func forcePortraitOrientation() {
+            uiViewLogger.debug("Forcing portrait orientation (90°) on connections.")
+            // Apply to Preview Layer connection
+            if let connection = previewLayer.connection {
+                if connection.isVideoRotationAngleSupported(90) {
+                    let currentAngle = connection.videoRotationAngle
+                    if currentAngle != 90 {
+                        connection.videoRotationAngle = 90
+                        uiViewLogger.info("Set preview layer connection angle from \(currentAngle)° to 90°.")
+                    } else {
+                        uiViewLogger.debug("Preview layer connection already 90°.")
+                    }
+                } else {
+                    uiViewLogger.warning("Preview layer connection does not support 90° rotation.")
+                }
+            }
+            
+            // Apply to Data Output connection (if exists)
+            if let dataOutput = dataOutput, let connection = dataOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    let currentAngle = connection.videoRotationAngle
+                    if currentAngle != 90 {
+                        connection.videoRotationAngle = 90
+                        uiViewLogger.info("Set data output connection angle from \(currentAngle)° to 90°.")
+                    } else {
+                        uiViewLogger.debug("Data output connection already 90°.")
+                    }
+                } else {
+                    uiViewLogger.warning("Data output connection does not support 90° rotation.")
+                }
             }
         }
     }

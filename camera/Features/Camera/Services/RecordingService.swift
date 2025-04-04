@@ -109,44 +109,50 @@ class RecordingService: NSObject {
         guard !isRecording else { return }
         
         // Enhanced orientation logging
-        let deviceOrientation = UIDevice.current.orientation
-        let interfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation
+        let deviceOrientation = await UIDevice.current.orientation
+        let activeScene = await MainActor.run {
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState == .foregroundActive }
+        }
+        let interfaceOrientation = await MainActor.run { activeScene?.interfaceOrientation }
         
-        logger.info("📱 Starting recording with:")
-        logger.info("- Device orientation: \(deviceOrientation.rawValue)")
-        logger.info("- Interface orientation: \(interfaceOrientation?.rawValue ?? -1)")
-        logger.info("- Requested orientation angle: \(orientation)°")
+        logger.info("📱 Starting recording request:")
+        logger.info("--> Device orientation: \\(deviceOrientation.rawValue) (\\(String(describing: deviceOrientation)))")
+        logger.info("--> Interface orientation: \\(interfaceOrientation?.rawValue ?? -1) (\\(String(describing: interfaceOrientation)))")
+        logger.info("--> Explicit orientation angle passed: \\(orientation)° (Note: This value is currently ignored)")
         
-        // Determine the correct orientation angle
+        // Determine the correct orientation angle for the *recording file*
         let recordingAngle: CGFloat
         if deviceOrientation.isValidInterfaceOrientation {
-            // Use device orientation if valid
+            // Use device orientation if valid (landscape or portrait)
             recordingAngle = deviceOrientation.videoRotationAngleValue
-            logger.info("Using device orientation angle: \(recordingAngle)°")
-        } else if let interfaceOrientation = interfaceOrientation {
-            // Fallback to interface orientation
+            logger.info("Using device orientation angle for recording: \\(recordingAngle)° (Source: UIDevice.current.orientation)")
+        } else {
+            // Fallback to interface orientation if device orientation is invalid (e.g., faceUp, faceDown)
+            logger.info("Device orientation (\\(deviceOrientation.rawValue)) is invalid for recording. Falling back to interface orientation.")
             switch interfaceOrientation {
             case .portrait:
                 recordingAngle = 90
-            case .landscapeLeft:
+            case .landscapeLeft: // Device physical left side is down (USB port on right)
                 recordingAngle = 0
-            case .landscapeRight:
+            case .landscapeRight: // Device physical right side is down (USB port on left)
                 recordingAngle = 180
             case .portraitUpsideDown:
                 recordingAngle = 270
+            case .unknown, nil:
+                recordingAngle = 90 // Default to portrait if interface orientation is unknown
+                logger.warning("Interface orientation is unknown. Defaulting recording angle to 90°.")
             @unknown default:
-                recordingAngle = 90
+                recordingAngle = 90 // Default to portrait for future cases
+                logger.warning("Unknown interface orientation (\\(interfaceOrientation?.rawValue ?? -1)). Defaulting recording angle to 90°.")
             }
-            logger.info("Using interface orientation angle: \(recordingAngle)°")
-        } else {
-            // Default to portrait if no valid orientation
-            recordingAngle = 90
-            logger.info("Using default portrait orientation (90°)")
+            logger.info("Using interface orientation angle for recording: \\(recordingAngle)° (Source: UIWindowScene.interfaceOrientation)")
         }
         
-        // Store the orientation when starting recording
+        // Store the final chosen orientation for the recording file
         recordingOrientation = recordingAngle
-        logger.info("Stored recording orientation: \(recordingAngle)°")
+        logger.info("Final recording orientation angle set to: \\(recordingAngle)°")
         
         // Reset counters when starting a new recording
         videoFrameCount = 0
@@ -217,8 +223,26 @@ class RecordingService: NSObject {
             assetWriterInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
             assetWriterInput?.expectsMediaDataInRealTime = true
             
-            // Apply the correct transform based on current orientation
-            assetWriterInput?.transform = getVideoTransform(for: recordingAngle)
+            // Calculate transform based on the determined recording orientation angle
+            let transform: CGAffineTransform
+            switch recordingOrientation {
+            case 0: // Landscape Left (physical right side down, USB on right)
+                transform = .identity
+                logger.info("Applying transform: .identity (Landscape Left, 0°)")
+            case 90: // Portrait
+                transform = CGAffineTransform(rotationAngle: .pi / 2)
+                logger.info("Applying transform: 90° rotation (Portrait, 90°)")
+            case 180: // Landscape Right (physical left side down, USB on left)
+                transform = CGAffineTransform(rotationAngle: .pi)
+                logger.info("Applying transform: 180° rotation (Landscape Right, 180°)")
+            case 270: // Portrait Upside Down
+                transform = CGAffineTransform(rotationAngle: -.pi / 2) // or 3 * .pi / 2
+                logger.info("Applying transform: 270° rotation (Portrait Upside Down, 270°)")
+            default:
+                transform = CGAffineTransform(rotationAngle: .pi / 2) // Default to portrait
+                logger.warning("Unexpected recordingOrientation \\(recordingOrientation). Defaulting transform to Portrait (90° rotation).")
+            }
+            assetWriterInput?.transform = transform
             
             logger.info("Created asset writer input with settings: \(videoSettings)")
             
@@ -254,16 +278,22 @@ class RecordingService: NSObject {
             // Add inputs to writer
             if assetWriter!.canAdd(assetWriterInput!) {
                 assetWriter!.add(assetWriterInput!)
-                logger.info("Added video input to asset writer")
+                logger.info("Successfully added video input to asset writer.")
             } else {
-                logger.error("Failed to add video input to asset writer")
+                logger.error("Could not add video input to asset writer: \\(error.localizedDescription)")
+                assetWriter = nil
+                delegate?.didEncounterError(.custom(message: "Failed to add video input: \\(error.localizedDescription)"))
+                return
             }
             
             if assetWriter!.canAdd(audioInput) {
                 assetWriter!.add(audioInput)
-                logger.info("Added audio input to asset writer")
+                logger.info("Successfully added audio input to asset writer.")
             } else {
-                logger.error("Failed to add audio input to asset writer")
+                logger.error("Could not add audio input to asset writer: \\(error.localizedDescription)")
+                assetWriter = nil
+                delegate?.didEncounterError(.custom(message: "Failed to add audio input: \\(error.localizedDescription)"))
+                return
             }
             
             // Ensure video and audio outputs are configured
@@ -280,7 +310,7 @@ class RecordingService: NSObject {
             isRecording = true
             delegate?.didStartRecording()
             
-            logger.info("Started recording to: \(tempURL.path)")
+            logger.info("Recording started successfully at URL: \\(tempURL.path)")
             logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC"), Frame Rate: \(self.selectedFrameRate)")
             
         } catch {
@@ -403,36 +433,6 @@ class RecordingService: NSObject {
             logger.error("Error generating thumbnail: \(error.localizedDescription)")
             return nil
         }
-    }
-    
-    private func getVideoTransform(for rotationAngle: CGFloat) -> CGAffineTransform {
-        // Convert rotation angle to radians
-        let rotationInRadians = rotationAngle * .pi / 180.0
-        
-        // Handle specific orientations
-        let transform: CGAffineTransform
-        switch rotationAngle {
-        case 90.0:  // Portrait mode
-            transform = CGAffineTransform(rotationAngle: .pi / 2)  // 90° clockwise
-            logger.info("📱 Video Transform: Portrait mode (90°) -> π/2 radians")
-        case 180.0:  // Landscape with USB on left
-            transform = CGAffineTransform(rotationAngle: .pi)  // 180°
-            logger.info("📱 Video Transform: Landscape USB left (180°) -> π radians")
-        case 0.0:  // Landscape with USB on right
-            transform = .identity  // No rotation
-            logger.info("📱 Video Transform: Landscape USB right (0°) -> identity")
-        case 270.0:  // Portrait upside down
-            transform = CGAffineTransform(rotationAngle: -.pi / 2)  // 270°
-            logger.info("📱 Video Transform: Portrait upside down (270°) -> -π/2 radians")
-        default:
-            // For any other angles, use the standard calculation
-            transform = CGAffineTransform(rotationAngle: rotationInRadians)
-            logger.info("📱 Video Transform: Custom angle (\(rotationAngle)°) -> \(rotationInRadians) radians")
-        }
-        
-        // Log the actual transform values for debugging
-        logger.info("🔄 Transform Details - a: \(transform.a), b: \(transform.b), c: \(transform.c), d: \(transform.d)")
-        return transform
     }
     
     // Process image with LUT filter if available

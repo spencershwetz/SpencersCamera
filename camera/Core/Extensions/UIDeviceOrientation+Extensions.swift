@@ -1,7 +1,12 @@
 import UIKit
 import SwiftUI
+import os.log
 
 // MARK: - UIDeviceOrientation Extensions
+
+// Add a logger for orientation details
+private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Orientation")
+
 extension UIDeviceOrientation {
     /// Check if the orientation is portrait (portrait or portraitUpsideDown)
     var isPortrait: Bool {
@@ -20,24 +25,29 @@ extension UIDeviceOrientation {
     
     /// Returns the rotation angle in degrees (0, 90, 180, 270) for video rotation
     var videoRotationAngleValue: CGFloat {
+        orientationLogger.debug("Calculating videoRotationAngleValue for device orientation: \\(self.rawValue)")
+        let angle: CGFloat
         switch self {
         case .portrait:
-            return 90.0  // Portrait mode: rotate 90° clockwise
+            angle = 90.0  // Portrait mode: rotate 90° clockwise
         case .landscapeRight:  // USB port on left
-            return 180.0  // Landscape with USB on left: rotate 180°
+            angle = 180.0  // Landscape with USB on left: rotate 180°
         case .landscapeLeft:  // USB port on right
-            return 0.0  // Landscape with USB on right: no rotation
+            angle = 0.0  // Landscape with USB on right: no rotation
         case .portraitUpsideDown:
-            return 270.0
+            angle = 270.0
         case .unknown, .faceUp, .faceDown:
-            return 90.0  // Default to portrait mode
+            angle = 90.0  // Default to portrait mode
         @unknown default:
-            return 90.0
+            angle = 90.0
         }
+        orientationLogger.debug("Calculated videoRotationAngleValue: \\(angle)°")
+        return angle
     }
     
     /// Transform to apply for video orientation based on device orientation
     var videoTransform: CGAffineTransform {
+        orientationLogger.debug("Calculating videoTransform for device orientation: \\(self.rawValue)")
         let angle: CGFloat
         switch self {
         case .portrait:
@@ -53,7 +63,9 @@ extension UIDeviceOrientation {
         @unknown default:
             angle = .pi / 2
         }
-        return CGAffineTransform(rotationAngle: angle)
+        let transform = CGAffineTransform(rotationAngle: angle)
+        orientationLogger.debug("Calculated videoTransform angle: \\(angle) radians")
+        return transform
     }
 }
 

@@ -13,6 +13,9 @@ struct cameraApp: App {
     // Register AppDelegate for orientation control
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    // Create a StateObject for the CameraViewModel
+    @StateObject private var cameraViewModel = CameraViewModel()
+    
     init() {
         // REMOVED: Redundant appearance settings, handled by WindowGroup content and modifiers.
         /*
@@ -43,7 +46,8 @@ struct cameraApp: App {
                 
                 // Wrap CameraView in OrientationFixView for strict orientation control
                 OrientationFixView {
-                    CameraView()
+                    // Pass the viewModel instance to CameraView
+                    CameraView(viewModel: cameraViewModel)
                 }
             }
             .ignoresSafeArea(.all, edges: .all) // Use standard modifier

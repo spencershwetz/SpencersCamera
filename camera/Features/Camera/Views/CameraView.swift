@@ -2,11 +2,15 @@ import SwiftUI
 import CoreData
 import CoreMedia
 import UIKit
+import AVFoundation
 
 struct CameraView: View {
-    @StateObject private var viewModel = CameraViewModel()
-    @StateObject private var lutManager = LUTManager()
-    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
+    @StateObject private var viewModel: CameraViewModel
+    @EnvironmentObject var settings: SettingsModel
+
+    // Use the shared instance with @ObservedObject
+    @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
+
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
@@ -15,7 +19,8 @@ struct CameraView: View {
     @State private var isDebugEnabled = false
     
     // Initialize with proper handling of StateObjects
-    init() {
+    init(viewModel: CameraViewModel) {
+        self._viewModel = StateObject(wrappedValue: viewModel)
         // We CANNOT access @StateObject properties here as they won't be initialized yet
         // Only setup notifications that don't depend on StateObjects
         setupOrientationNotifications()
@@ -46,7 +51,7 @@ struct CameraView: View {
                     .edgesIgnoringSafeArea(.all)
                 
                 // Function buttons overlay
-                FunctionButtonsView()
+                FunctionButtonsView(viewModel: viewModel, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
                     .zIndex(100)
                     .allowsHitTesting(true)
                     .ignoresSafeArea()
@@ -127,10 +132,10 @@ struct CameraView: View {
                     viewModel.updateOrientation(interfaceOrientation)
                 }
             }
-            .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
+            .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator
                 if newValue != nil {
-                    print("DEBUG: LUT filter updated to: \(lutManager.currentLUTName)")
+                    print("DEBUG: LUT filter updated to: \(viewModel.lutManager.currentLUTName)")
                     // Automatically turn on preview when a new LUT is loaded
                     showLUTPreview = true
                 } else {
@@ -139,7 +144,7 @@ struct CameraView: View {
             }
             .onChange(of: viewModel.currentLens) { oldValue, newValue in
                 // When lens changes, ensure LUT overlay maintains correct orientation
-                if showLUTPreview && lutManager.currentLUTFilter != nil {
+                if showLUTPreview && viewModel.lutManager.currentLUTFilter != nil {
                     // Access the preview view and update its LUT overlay orientation
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         if let container = viewModel.owningView,
@@ -178,7 +183,7 @@ struct CameraView: View {
             }) {
                 OrientationFixView(allowsLandscapeMode: true) {
                     SettingsView(
-                        lutManager: lutManager,
+                        lutManager: viewModel.lutManager,
                         viewModel: viewModel,
                         isDebugEnabled: $isDebugEnabled,
                         dismissAction: { isShowingSettings = false }
@@ -204,7 +209,7 @@ struct CameraView: View {
                     // Camera is running - show camera preview
                     CameraPreviewView(
                         session: viewModel.session,
-                        lutManager: lutManager,
+                        lutManager: viewModel.lutManager,
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()
@@ -402,12 +407,12 @@ struct CameraView: View {
         let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
         print("LUT file size: \(fileSize) bytes")
         
-        lutManager.importLUT(from: url) { success in
+        viewModel.lutManager.importLUT(from: url) { success in
             if success {
                 print("DEBUG: LUT import successful, enabling preview")
                 
                 // Enable the LUT in the viewModel for real-time preview
-                if let lutFilter = self.lutManager.currentLUTFilter {
+                if let lutFilter = self.viewModel.lutManager.currentLUTFilter {
                     self.viewModel.lutManager.currentLUTFilter = lutFilter
                     self.showLUTPreview = true
                     print("DEBUG: LUT filter set in viewModel for preview")
@@ -449,9 +454,6 @@ struct CameraView: View {
             }
         }
         
-        // Share the lutManager between views
-        viewModel.lutManager = lutManager
-        
         // Enable LUT preview by default
         showLUTPreview = true
         
@@ -480,7 +482,7 @@ struct CameraView: View {
 
 // Add preview at the bottom of the file
 #Preview("Camera View") {
-    CameraView()
+    CameraView(viewModel: CameraViewModel())
         .preferredColorScheme(.dark)
         .environment(\.colorScheme, .dark)
 }

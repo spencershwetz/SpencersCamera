@@ -1,12 +1,23 @@
 import SwiftUI
 import Combine
+import os.log
 
-class DeviceOrientationViewModel: ObservableObject {
+/// A shared observable object that tracks the device's physical orientation.
+final class DeviceOrientationViewModel: ObservableObject {
+    static let shared = DeviceOrientationViewModel()
+
     @Published var orientation: UIDeviceOrientation = .portrait
     private var cancellables = Set<AnyCancellable>()
+    private var orientationObserver: Any?
     
-    init() {
-        print("DEBUG: [OrientationVM] Initializing DeviceOrientationViewModel")
+    // Logger for Orientation ViewModel
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "DeviceOrientationVM")
+
+    private init() {
+        logger.info("Initializing DeviceOrientationViewModel.")
+        orientation = UIDevice.current.orientation
+        logger.info("Initial device orientation: \\(orientation.rawValue) - \\(String(describing: orientation))")
+        
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
         NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
@@ -34,33 +45,43 @@ class DeviceOrientationViewModel: ObservableObject {
     deinit {
         print("DEBUG: [OrientationVM] Deinitializing DeviceOrientationViewModel")
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        logger.info("Stopping device orientation observation.")
+        if let observer = orientationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
     
     var rotationAngle: Angle {
+        logger.debug("Calculating UI rotationAngle for device orientation: \\(orientation.rawValue)")
+        let angle: Angle
         switch orientation {
         case .landscapeLeft:
-            print("DEBUG: [OrientationVM] Rotating left (90°)")
-            return .degrees(-90)
+            logger.debug("UI Rotation: Landscape Left -> -90 degrees")
+            angle = .degrees(-90)
         case .landscapeRight:
-            print("DEBUG: [OrientationVM] Rotating right (-90°)")
-            return .degrees(90)
+            logger.debug("UI Rotation: Landscape Right -> 90 degrees")
+            angle = .degrees(90)
         case .portraitUpsideDown:
-            print("DEBUG: [OrientationVM] Rotating upside down (180°)")
-            return .degrees(180)
-        default:
-            print("DEBUG: [OrientationVM] No rotation (0°)")
-            return .degrees(0)
+            logger.debug("UI Rotation: Portrait Upside Down -> 180 degrees")
+            angle = .degrees(180)
+        default: // .portrait, .unknown, .faceUp, .faceDown
+            logger.debug("UI Rotation: Portrait/Other -> 0 degrees")
+            angle = .degrees(0)
         }
+        return angle
     }
     
     var rotationOffset: CGSize {
+        logger.debug("Calculating UI rotationOffset for device orientation: \\(orientation.rawValue)")
+        let offset: CGSize
         switch orientation {
         case .landscapeLeft, .landscapeRight:
-            print("DEBUG: [OrientationVM] Applying landscape offset")
-            return CGSize(width: 0, height: 0)
+            logger.debug("UI Offset: Landscape -> Zero")
+            offset = CGSize(width: 0, height: 0) // No offset needed in landscape for simple rotations
         default:
-            print("DEBUG: [OrientationVM] Applying portrait offset")
-            return .zero
+            logger.debug("UI Offset: Portrait/Other -> Zero")
+            offset = .zero
         }
+        return offset
     }
 } 
