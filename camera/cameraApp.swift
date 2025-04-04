@@ -14,6 +14,8 @@ struct cameraApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     init() {
+        // REMOVED: Redundant appearance settings, handled by WindowGroup content and modifiers.
+        /*
         // Set background color for the entire app to black
         UIWindow.appearance().backgroundColor = UIColor.black
         
@@ -30,6 +32,7 @@ struct cameraApp: App {
         }
         
         print("DEBUG: Set window appearance background to black and enforced dark mode")
+        */
     }
     
     var body: some Scene {
@@ -49,6 +52,8 @@ struct cameraApp: App {
             .hideStatusBar()
             .preferredColorScheme(.dark) // Force dark mode at the SwiftUI level
             .onAppear {
+                // REMOVED: Redundant appearance settings in onAppear
+                /*
                 // Set the window's background color and interface style
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                    let window = windowScene.windows.first {
@@ -63,6 +68,7 @@ struct cameraApp: App {
                     window.rootViewController?.view.setNeedsLayout()
                     window.rootViewController?.view.layoutIfNeeded()
                 }
+                */
             }
         }
     }

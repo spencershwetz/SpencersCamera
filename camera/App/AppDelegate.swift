@@ -23,56 +23,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         print("DEBUG: AppDelegate - Application launching")
         
-        // Force dark mode at UIApplication level
-        window?.enforceDarkMode()
-            
-        // Update to use UIWindowScene.windows
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            windowScene.windows.forEach { window in
-                window.enforceDarkMode()
-            }
-        }
-        
-        // Create and configure window
-        window = UIWindow(frame: UIScreen.main.bounds)
-        window?.backgroundColor = .black
-        
-        // Configure root view controller
-        let contentView = ContentView()
-        let hostingController = UIHostingController(rootView: contentView)
-        hostingController.view.backgroundColor = .black
-        
-        // Force dark mode for view controller
-        hostingController.overrideUserInterfaceStyle = .dark
-        
-        // Set modal presentation style
-        hostingController.modalPresentationStyle = .overFullScreen
-        
-        hostingController.view.frame = UIScreen.main.bounds
-        
-        // Set window properties
-        window?.rootViewController = hostingController
-        window?.makeKeyAndVisible()
-        
-        // Force dark mode again after window is visible
-        window?.enforceDarkMode()
-        
-        // Force black backgrounds
-        if let rootView = window?.rootViewController?.view {
-            forceBlackBackgrounds(rootView)
-        }
-        
-        // Inspect view hierarchy colors
-        inspectViewHierarchyBackgroundColors(hostingController.view)
-        
+        // REMOVED: Manual window setup, root view controller assignment, and appearance settings.
+        // The SwiftUI App lifecycle (@main, WindowGroup) will handle this.
+
+        // Keep essential non-UI setup:
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
         // Setup orientation lock observer
-        UIWindowScene.setupOrientationLockSupport()
+        UIWindowScene.setupOrientationLockSupport() // Assuming this is a necessary custom setup
         
-        // Remove debug observer for orientation
-        NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+        // Remove debug observer for orientation (if this was specific to the old setup)
+        // NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
         
         return true
     }
@@ -105,38 +67,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
     
     // MARK: - Helper to force black backgrounds
-    
+    // REMOVED: This helper is likely redundant now.
+    /*
     private func forceBlackBackgrounds(_ view: UIView) {
-        // Force black background on the view itself
-        view.backgroundColor = .black
-        
-        // Special handling for system views
-        let systemViewClasses = [
-            "UIDropShadowView",
-            "UITransitionView",
-            "UINavigationTransitionView",
-            "_UIInteractiveHighlightEffectWindow"
-        ]
-        
-        for className in systemViewClasses {
-            if let viewClass = NSClassFromString(className),
-               view.isKind(of: viewClass) {
-                view.backgroundColor = .black
-                view.layer.backgroundColor = UIColor.black.cgColor
-            }
-        }
-        
-        // Handle status bar background
-        if view.bounds.height <= 50 && view.bounds.minY == 0 {
-            view.backgroundColor = .black
-            view.layer.backgroundColor = UIColor.black.cgColor
-        }
-        
-        // Recursively process subviews
-        for subview in view.subviews {
-            forceBlackBackgrounds(subview)
-        }
+        // ... (implementation removed) ...
     }
+    */
     
     // MARK: - Orientation Support
     
@@ -227,6 +163,8 @@ extension UIViewController {
 }
 
 // MARK: - UIWindow Extension
+// REMOVED: This extension is likely redundant now.
+/*
 extension UIWindow {
     /// Enforce dark mode for the window
     func enforceDarkMode() {
@@ -235,3 +173,4 @@ extension UIWindow {
         }
     }
 }
+*/
