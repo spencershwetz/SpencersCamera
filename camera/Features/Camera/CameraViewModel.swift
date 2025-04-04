@@ -393,8 +393,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         cameraSetupService = CameraSetupService(session: session, delegate: self)
         exposureService = ExposureService(delegate: self)
         recordingService = RecordingService(session: session, delegate: self)
-        cameraDeviceService = CameraDeviceService(session: session, delegate: self)
         videoFormatService = VideoFormatService(session: session, delegate: self)
+        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -790,6 +790,14 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
     func didUpdateCurrentLens(_ lens: CameraLens) {
         DispatchQueue.main.async {
             self.currentLens = lens
+            // // After updating the lens, re-apply color space settings - MOVED to CameraDeviceService
+            // do {
+            //     try self.videoFormatService.reapplyColorSpaceSettings()
+            //     print("✅ Successfully reapplied color space after lens switch to \(lens.rawValue)x")
+            // } catch {
+            //     print("❌ Failed to reapply color space after lens switch: \(error)")
+            //     self.didEncounterError(.configurationFailed(message: "Failed to apply color settings for new lens."))
+            // }
         }
     }
     

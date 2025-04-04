@@ -16,9 +16,11 @@ class CameraDeviceService {
     private var device: AVCaptureDevice?
     private var lastZoomFactor: CGFloat = 1.0
     private let cameraQueue = DispatchQueue(label: "com.camera.device-service")
+    private var videoFormatService: VideoFormatService
     
-    init(session: AVCaptureSession, delegate: CameraDeviceServiceDelegate) {
+    init(session: AVCaptureSession, videoFormatService: VideoFormatService, delegate: CameraDeviceServiceDelegate) {
         self.session = session
+        self.videoFormatService = videoFormatService
         self.delegate = delegate
     }
     
@@ -49,6 +51,26 @@ class CameraDeviceService {
         
         // Configure the new device
         try newDevice.lockForConfiguration()
+        
+        // If Apple Log is enabled, try to find and set a compatible format first
+        if videoFormatService.appleLogEnabled {
+            logger.info("🍏 Apple Log enabled, searching for compatible format on \(newDevice.localizedName)")
+            let appleLogFormats = newDevice.formats.filter { $0.supportedColorSpaces.contains(.appleLog) }
+            
+            if let compatibleFormat = appleLogFormats.first {
+                 // Ideally, match resolution/FPS here, but for now, just find *any* compatible format
+                if newDevice.activeFormat != compatibleFormat {
+                    newDevice.activeFormat = compatibleFormat
+                    logger.info("✅ Set Apple Log compatible format: \(compatibleFormat.description)")
+                } else {
+                    logger.info("ℹ️ Current format already supports Apple Log.")
+                }
+            } else {
+                logger.warning("⚠️ Apple Log enabled, but no compatible format found on \(newDevice.localizedName). Apple Log will not be applied.")
+            }
+        }
+        
+        // Set other default configurations
         if newDevice.isExposureModeSupported(.continuousAutoExposure) {
             newDevice.exposureMode = .continuousAutoExposure
         }
@@ -61,6 +83,9 @@ class CameraDeviceService {
     }
     
     func switchToLens(_ lens: CameraLens) {
+        // Capture the interface orientation on the main thread before dispatching
+        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+
         cameraQueue.async { [weak self] in
             guard let self = self else { return }
             
@@ -70,17 +95,17 @@ class CameraDeviceService {
                    currentDevice.deviceType == .builtInWideAngleCamera {
                     self.setDigitalZoom(to: lens.zoomFactor, on: currentDevice)
                 } else {
-                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor)
+                    self.switchToPhysicalLens(.wide, thenSetZoomTo: lens.zoomFactor, currentInterfaceOrientation: currentInterfaceOrientation)
                 }
                 return
             }
             
             // For all other lenses, try to switch physical device
-            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0)
+            self.switchToPhysicalLens(lens, thenSetZoomTo: 1.0, currentInterfaceOrientation: currentInterfaceOrientation)
         }
     }
     
-    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat) {
+    private func switchToPhysicalLens(_ lens: CameraLens, thenSetZoomTo zoomFactor: CGFloat, currentInterfaceOrientation: UIInterfaceOrientation) {
         logger.info("🔄 Attempting to switch to \(lens.rawValue)× lens")
         
         // Get discovery session for all possible back cameras
@@ -108,7 +133,6 @@ class CameraDeviceService {
         }
         
         // Store current orientation settings to preserve during lens switch
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
         var currentVideoAngle: CGFloat = 90 // Default to portrait
         
         // Get current video orientation from any existing connection
@@ -126,6 +150,9 @@ class CameraDeviceService {
         
         do {
             try configureSession(for: newDevice, lens: lens)
+            
+            // Re-apply color space settings within the same configuration transaction
+            try videoFormatService.reapplyColorSpaceSettings(for: newDevice)
             
             // Immediately set orientation for all video connections BEFORE committing configuration
             // This ensures we never display frames with incorrect orientation

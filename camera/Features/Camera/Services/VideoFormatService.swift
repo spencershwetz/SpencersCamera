@@ -14,6 +14,8 @@ class VideoFormatService {
     private var device: AVCaptureDevice?
     
     private var isAppleLogEnabled = false
+    // Public getter for the state
+    var appleLogEnabled: Bool { isAppleLogEnabled }
     
     init(session: AVCaptureSession, delegate: VideoFormatServiceDelegate) {
         self.session = session
@@ -190,6 +192,40 @@ class VideoFormatService {
         }
         
         return formats.first
+    }
+    
+    func reapplyColorSpaceSettings(for device: AVCaptureDevice) throws {
+        logger.info("🔄 Re-applying color space settings for device: \(device.localizedName)")
+        
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            let currentFormat = device.activeFormat
+            logger.info("🎨 Applying color space: Current format: \(currentFormat.description)")
+            logger.info("🎨 Supported spaces: \(currentFormat.supportedColorSpaces.map { $0.rawValue })")
+            logger.info("🎨 isAppleLogEnabled: \(self.isAppleLogEnabled)")
+            
+            let defaultColorSpace: AVCaptureColorSpace = .sRGB
+
+            if isAppleLogEnabled && currentFormat.supportedColorSpaces.contains(.appleLog) {
+                // Unconditionally set Apple Log if enabled and supported
+                device.activeColorSpace = .appleLog
+                logger.info("✅ Set activeColorSpace to Apple Log. Actual: \(String(describing: device.activeColorSpace))")
+            } else {
+                // Unconditionally set default color space
+                device.activeColorSpace = defaultColorSpace
+                logger.info("✅ Set activeColorSpace to Default (\(String(describing: defaultColorSpace))). Actual: \(String(describing: device.activeColorSpace))")
+                
+                // Log if Apple Log was requested but not supported by the current format
+                if isAppleLogEnabled && !currentFormat.supportedColorSpaces.contains(.appleLog) {
+                     logger.warning("⚠️ Apple Log was enabled but is not supported by the current format (\(currentFormat.description)). Using default color space.")
+                }
+            }
+        } catch {
+            logger.error("❌ Error reapplying color space settings: \(error.localizedDescription)")
+            throw CameraError.configurationFailed(message: "Failed to reapply color space: \(error.localizedDescription)")
+        }
     }
     
     func configureAppleLog() async throws {
