@@ -258,7 +258,6 @@ struct CameraPreviewView: UIViewRepresentable {
         private var currentLUTFilter: CIFilter?
         private let cornerRadius: CGFloat = 20.0
         private var lastProcessedLensSwitchTimestamp: Date?
-        private var orientationObserver: NSObjectProtocol? // Add observer property
         private var framesToSkipAfterLensSwitch: Int = 0 // Counter to skip frames after switch
         private var localFrameCounter: Int = 0 // Local counter for debugging
         private var isInitialDataOrientationSet = false // Flag for one-time data angle setup
@@ -275,7 +274,6 @@ struct CameraPreviewView: UIViewRepresentable {
             setupView()
             setupPreviewLayer()
             setupVideoDataOutput()
-            setupOrientationObserver() // Add this call
             
             // Set initial orientation based on current state
             updatePreviewOrientation()
@@ -287,11 +285,7 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         deinit {
-            // Remove observer
-            if let observer = orientationObserver {
-                NotificationCenter.default.removeObserver(observer)
-                uiViewLogger.info("Removed orientation observer.")
-            }
+            // REMOVED: Orientation observer removal logic
         }
         
         private func setupView() {
@@ -337,18 +331,6 @@ struct CameraPreviewView: UIViewRepresentable {
             // Call the delegate method after adding the output
             delegate?.customPreviewViewDidAddVideoOutput(self)
             customPreviewLogger.debug("Called customPreviewViewDidAddVideoOutput delegate method.") // Use customPreviewLogger
-        }
-        
-        private func setupOrientationObserver() {
-            orientationObserver = NotificationCenter.default.addObserver(
-                forName: UIDevice.orientationDidChangeNotification,
-                object: nil,
-                queue: .main) { [weak self] _ in
-                    guard let self = self, self.window != nil else { return } // Only update if view is in window
-                    uiViewLogger.debug("[Notification] UIDevice.orientationDidChangeNotification received. Updating preview orientation.")
-                    self.updatePreviewOrientation()
-            }
-             uiViewLogger.info("Setup orientation observer.")
         }
         
         override func layoutSubviews() {
@@ -437,7 +419,7 @@ struct CameraPreviewView: UIViewRepresentable {
             // Update LUT filter
             self.currentLUTFilter = newFilter
 
-            // Check if lens switch timestamp has changed OR if the filter just became active
+            // Check if lens switch timestamp has changed OR if the filter just became active/inactive
             uiViewLogger.trace("    [updateState] Checking for timestamp/filter change...")
             if lastProcessedLensSwitchTimestamp != newTimestamp || filterChanged {
                 if lastProcessedLensSwitchTimestamp != newTimestamp {
@@ -450,12 +432,8 @@ struct CameraPreviewView: UIViewRepresentable {
                     uiViewLogger.info("    [updateState] Setting framesToSkipAfterLensSwitch = 2.")
                     self.framesToSkipAfterLensSwitch = 2 // Skip the next 2 frames
                 }
-                if filterChanged {
-                     uiViewLogger.debug("    [updateState] Filter changed (or became active/inactive). Calling updatePreviewOrientation.")
-                }
-                // Log before calling updatePreviewOrientation in this specific path
-                uiViewLogger.debug("    [updateState] Calling updatePreviewOrientation due to lens switch or filter change.")
-                updatePreviewOrientation() // Update orientation on timestamp change OR filter becoming active
+                // REMOVED: Filter changed logging and updatePreviewOrientation call
+                // REMOVED: updatePreviewOrientation() call for lens switch/filter change
             } else {
                 uiViewLogger.trace("    [updateState] Timestamp and Filter state (active/inactive) unchanged. Not updating preview orientation.")
             }
