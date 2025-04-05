@@ -82,9 +82,11 @@ struct CameraView: View {
                         HStack {
                             videoLibraryButton
                                 .frame(width: 60, height: 60)
+                                .disabled(viewModel.isRecording)
                             Spacer()
                             settingsButton
                                 .frame(width: 60, height: 60)
+                                .disabled(viewModel.isRecording)
                         }
                         .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
                     }
