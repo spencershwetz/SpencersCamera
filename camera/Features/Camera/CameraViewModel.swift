@@ -127,12 +127,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
                     logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
 
-                    // Step 3: Explicitly re-apply color space (might be redundant but safe)
-                    logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reconfiguration...")
-                    guard let formatService = formatService else { throw CameraError.setupFailed }
-                    try formatService.reapplyColorSpaceSettings() // Use captured service
-                    logger.info("✅ Re-applied color space settings after reconfiguration.")
-                    
                     logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(logEnabled)) successfully.")
                 } catch let error as CameraError {
                     logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
