@@ -298,7 +298,7 @@ struct CameraView: View {
         }) {
             // Allow landscape mode within the library view
             OrientationFixView(allowsLandscapeMode: true) {
-                VideoLibraryView()
+                VideoLibraryView(dismissAction: { isShowingVideoLibrary = false })
             }
         }
     }

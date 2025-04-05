@@ -6,6 +6,7 @@ import UIKit
 struct VideoLibraryView: View {
     @StateObject private var viewModel = VideoLibraryViewModel()
     @Environment(\.dismiss) private var dismiss
+    var dismissAction: () -> Void
     
     var body: some View {
         NavigationStack {
@@ -30,7 +31,7 @@ struct VideoLibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close") {
-                        dismiss()
+                        dismissAction()
                     }
                 }
                 
