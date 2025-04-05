@@ -258,10 +258,10 @@ struct CameraPreviewView: UIViewRepresentable {
         private var currentLUTFilter: CIFilter?
         private let cornerRadius: CGFloat = 20.0
         private var lastProcessedLensSwitchTimestamp: Date?
-        private var currentRotationAngle: CGFloat = 90 // Store current angle (default portrait)
         private var orientationObserver: NSObjectProtocol? // Add observer property
         private var framesToSkipAfterLensSwitch: Int = 0 // Counter to skip frames after switch
         private var localFrameCounter: Int = 0 // Local counter for debugging
+        private var isInitialDataOrientationSet = false // Flag for one-time data angle setup
         
         // Logger for the deprecated UIView
         private let uiViewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewUIView")
@@ -614,76 +614,81 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         func updatePreviewOrientation() {
-            uiViewLogger.debug("--> updatePreviewOrientation called")
+            uiViewLogger.notice(">>>>>>>>> [START UPO] updatePreviewOrientation called <<<<<<<<<") // Entry marker
             guard let previewConnection = previewLayer.connection else {
-                uiViewLogger.warning("    [updatePreviewOrientation] PreviewLayer has no connection.")
+                uiViewLogger.warning("    [UPO] PreviewLayer has no connection. EXITING.")
                 return
             }
             
             let newAngle: CGFloat
             let deviceOrientation = UIDevice.current.orientation
             let interfaceOrientation = window?.windowScene?.interfaceOrientation ?? .portrait
-            uiViewLogger.trace("    [updatePreviewOrientation] Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)") // Log source orientations
+            uiViewLogger.trace("    [UPO] Device: \\(deviceOrientation.rawValue), Interface: \\(interfaceOrientation.rawValue)")
             
             // Prioritize valid device orientation
             if deviceOrientation.isValidInterfaceOrientation {
                 switch deviceOrientation {
                     case .portrait: newAngle = 90
-                    case .landscapeLeft: newAngle = 180 // Phone physical top points left (Interface Landscape Left)
-                    case .landscapeRight: newAngle = 0   // Phone physical top points right (Interface Landscape Right)
+                    case .landscapeLeft: newAngle = 180
+                    case .landscapeRight: newAngle = 0
                     case .portraitUpsideDown: newAngle = 270
                     default: newAngle = 90 // Should not happen
                 }
-                 uiViewLogger.debug("    [updatePreviewOrientation] Using Device Orientation: \(deviceOrientation.rawValue)")
+                 uiViewLogger.debug("    [UPO] Using Device Orientation: \\(deviceOrientation.rawValue). Calculated newAngle = \\(newAngle)°")
             } else {
-                // Fallback to interface orientation if device orientation is invalid (face up/down/unknown)
-                switch interfaceOrientation {
-                    case .portrait: newAngle = 90
-                    case .landscapeLeft: newAngle = 180 // Interface left means phone top points right
-                    case .landscapeRight: newAngle = 0 // Interface right means phone top points left
-                    case .portraitUpsideDown: newAngle = 270
-                    default: newAngle = 90 // Unknown
-                }
-                uiViewLogger.debug("    [updatePreviewOrientation] Using Interface Orientation: \(interfaceOrientation.rawValue)")
+                // Fallback to 90 degrees (portrait) if device orientation is invalid
+                newAngle = 90
+                uiViewLogger.debug("    [UPO] Invalid device orientation (\\(deviceOrientation.rawValue)). Defaulting DATA angle to 90°. Calculated newAngle = \\(newAngle)°")
             }
             
-            // Update the stored angle for captureOutput buffer rotation
-            self.currentRotationAngle = newAngle
-            uiViewLogger.info("    [updatePreviewOrientation] Stored currentRotationAngle for buffer processing: \(newAngle)°")
+            // We no longer use the calculated device angle directly for the data output after initial setup.
+            // Logging the calculation for reference.
+            uiViewLogger.debug("    [UPO] Calculated device angle based on current orientation: \\(newAngle)° (This is NOT directly applied after init)")
 
-            // --- Update Preview Layer Connection Only ---
+            // --- Force Preview Layer Connection to Portrait (90 degrees) ---
+            uiViewLogger.debug("    [UPO] [PREVIEW UPDATE START]") // Start preview update log
+            let fixedPreviewAngle: CGFloat = 90
             let currentPreviewAngle = previewConnection.videoRotationAngle
-            uiViewLogger.debug("    [updatePreviewOrientation] Current PREVIEW angle: \(currentPreviewAngle)°, Target angle: \(newAngle)°")
+            uiViewLogger.debug("    [UPO] Current PREVIEW angle: \\(currentPreviewAngle)°, Target fixed angle: \\(fixedPreviewAngle)°")
 
-            if previewConnection.isVideoRotationAngleSupported(newAngle) {
-                if previewConnection.videoRotationAngle != newAngle {
-                    previewConnection.videoRotationAngle = newAngle
-                    uiViewLogger.info("    [updatePreviewOrientation] --> Updated PREVIEW layer connection angle to \(newAngle)°") // Log success
+            if previewConnection.isVideoRotationAngleSupported(fixedPreviewAngle) {
+                if previewConnection.videoRotationAngle != fixedPreviewAngle {
+                    uiViewLogger.info("        [UPO] Attempting to force PREVIEW angle to \\(fixedPreviewAngle)°...")
+                    previewConnection.videoRotationAngle = fixedPreviewAngle
+                    uiViewLogger.info("        [UPO] --> FORCED PREVIEW layer connection angle to \\(fixedPreviewAngle)°")
                 } else {
-                    uiViewLogger.debug("    [updatePreviewOrientation] PREVIEW layer connection angle already \(newAngle)°. No change.")
+                    uiViewLogger.debug("        [UPO] PREVIEW layer connection angle already \\(fixedPreviewAngle)°. No change needed.")
                 }
             } else {
-                uiViewLogger.warning("    [updatePreviewOrientation] Angle \(newAngle)° not supported for PREVIEW layer connection.")
+                uiViewLogger.warning("    [UPO] Angle \\(fixedPreviewAngle)° not supported for PREVIEW layer connection.")
+            }
+            uiViewLogger.debug("    [UPO] [PREVIEW UPDATE END]") // End preview update log
+
+
+            // --- Update Data Output Connection based on calculated newAngle ---
+            uiViewLogger.debug("    [UPO] [DATA UPDATE START]") // Start data update log
+
+            // *** Set Data Connection Angle ONLY ONCE on initial setup, then lock it ***
+            if !isInitialDataOrientationSet {
+                // Set initial angle (locked to 90 degrees portrait)
+                if let dataOutputConnection = dataOutput?.connection(with: .video) {
+                    let targetAngle: CGFloat = 90 // Lock to portrait
+                    uiViewLogger.info("    [UPO] Setting INITIAL DATA output connection angle to \(targetAngle)°.")
+                    if dataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
+                        dataOutputConnection.videoRotationAngle = targetAngle
+                        uiViewLogger.info("        [UPO] --> Set INITIAL DATA output connection angle to \(targetAngle)°")
+                        isInitialDataOrientationSet = true // Set flag only on success
+                    } else {
+                        uiViewLogger.warning("    [UPO] Angle \(targetAngle)° not supported for INITIAL DATA output connection setup.")
+                    }
+                } else {
+                    uiViewLogger.warning("    [UPO] Could not get DATA output connection for initial setup.")
+                }
+            } else {
+                uiViewLogger.debug("    [UPO] Initial DATA orientation already set. Skipping further updates to data connection angle.")
             }
             
-            // --- Restore Data Output Connection Update ---
-            if let dataOutputConnection = dataOutput?.connection(with: .video) {
-                let currentDataAngle = dataOutputConnection.videoRotationAngle
-                uiViewLogger.debug("    [updatePreviewOrientation] Current DATA angle: \(currentDataAngle)°, Target angle: \(newAngle)°")
-                if dataOutputConnection.isVideoRotationAngleSupported(newAngle) {
-                     if dataOutputConnection.videoRotationAngle != newAngle {
-                         dataOutputConnection.videoRotationAngle = newAngle
-                         uiViewLogger.info("    [updatePreviewOrientation] --> Updated DATA output connection angle to \(newAngle)°") // Log success
-                     } else {
-                         uiViewLogger.debug("    [updatePreviewOrientation] DATA output connection angle already \(newAngle)°. No change.")
-                     }
-                } else {
-                    uiViewLogger.warning("    [updatePreviewOrientation] Angle \(newAngle)° not supported for DATA output connection.")
-                }
-            } else {
-                uiViewLogger.warning("    [updatePreviewOrientation] Could not get DATA output connection.")
-            }
-            uiViewLogger.debug("<-- Finished updatePreviewOrientation")
+            uiViewLogger.notice("<<<<<<<<< [END UPO] Finished updatePreviewOrientation >>>>>>>>>") // Exit marker
         }
     }
 }

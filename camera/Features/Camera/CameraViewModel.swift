@@ -391,6 +391,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         // Add orientation change observer
+        // REMOVED: Orientation is now handled solely within CameraPreviewView
+        /*
         orientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
@@ -402,6 +404,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 }
                 self.applyCurrentOrientationToConnections()
         }
+        */
         
         // Set initial shutter angle
         updateShutterAngle(180.0)
@@ -410,9 +413,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
+        // REMOVED: Orientation observer removal
+        /*
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        */
         
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
@@ -468,8 +474,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return
         }
         self.currentInterfaceOrientation = orientation
-        
-        applyCurrentOrientationToConnections()
         
         print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
     }
@@ -536,6 +540,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         isRecording = true
         logger.info("Recording state set to true.")
+        
+        // Notify RotationLockedContainer about recording state change
+        NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
     }
     
     @MainActor
@@ -552,9 +559,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         isRecording = false
         logger.info("Recording state set to false.")
         
+        // Notify RotationLockedContainer about recording state change
+        NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+
         // Re-apply fixed portrait orientation to connections after recording stops
-        logger.info("Applying fixed portrait orientation to connections after recording stop.")
-        applyCurrentOrientationToConnections()
+        // REMOVED: No longer needed as applyCurrentOrientationToConnections is mostly empty and orientation is fixed in PreviewView
+        // logger.info("Applying fixed portrait orientation to connections after recording stop.")
+        // applyCurrentOrientationToConnections()
     }
     
     private func updateVideoConfiguration() {
@@ -832,7 +843,8 @@ extension CameraViewModel: CustomPreviewViewDelegate {
     func customPreviewViewDidAddVideoOutput(_ previewView: CameraPreviewView.CustomPreviewView) {
         orientationLogger.debug("Delegate: CustomPreviewView did add video output. Applying initial orientation.")
         // Now that we know the output exists, apply the initial orientation
-        applyCurrentOrientationToConnections()
+        // REMOVED: Calls to applyCurrentOrientationToConnections are no longer needed
+        // applyCurrentOrientationToConnections()
     }
 }
 
