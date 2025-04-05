@@ -178,6 +178,20 @@ class CameraDeviceService {
             session.commitConfiguration()
             logger.debug("🔄 Lens switch: Configuration committed.")
             
+            // *** Add code to set data output orientation AFTER committing config ***
+            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
+               let connection = videoDataOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    logger.info("🔄 Lens switch: Set VideoDataOutput connection angle to 90° after config commit.")
+                } else {
+                    logger.warning("🔄 Lens switch: 90° angle not supported for VideoDataOutput after config commit.")
+                }
+            } else {
+                logger.warning("🔄 Lens switch: Could not find VideoDataOutput or connection after config commit.")
+            }
+            // *** End added code ***
+            
             if wasRunning {
                 logger.debug("🔄 Lens switch: Starting session...")
                 session.startRunning()
@@ -334,7 +348,21 @@ class CameraDeviceService {
             
             logger.info("⚙️ Committing session configuration block.")
             session.commitConfiguration()
-            
+
+            // *** Add code to set data output orientation AFTER committing config ***
+            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
+               let connection = videoDataOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    logger.info("🔄 [reconfigureSessionForCurrentDevice] Set VideoDataOutput connection angle to 90° after config commit.")
+                } else {
+                    logger.warning("🔄 [reconfigureSessionForCurrentDevice] 90° angle not supported for VideoDataOutput after config commit.")
+                }
+            } else {
+                logger.warning("🔄 [reconfigureSessionForCurrentDevice] Could not find VideoDataOutput or connection after config commit.")
+            }
+            // *** End added code ***
+
             // Re-apply color space just in case (redundant if called by ViewModel, but safe)
             logger.info("🎨 Re-applying color space settings after reconfiguration...")
             try videoFormatService.reapplyColorSpaceSettings()

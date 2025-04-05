@@ -510,13 +510,15 @@ struct CameraPreviewView: UIViewRepresentable {
 
             uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). LUT Filter ACTIVE. Applying filter.")
             // Create CIImage from the pixel buffer
-            var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
 
-            // Apply LUT filter to the *original* (non-manually-rotated) image
-            // *** FIX: Explicitly orient the CIImage to Portrait (90 deg clockwise) before filtering ***
-            let portraitImage = ciImage.oriented(forExifOrientation: 6) // 6 = RightTop (90 deg CW)
+            // *** REMOVE CIImage orientation logic AGAIN ***
+            // let currentDeviceOrientation = UIDevice.current.orientation
+            // let exifOrientation = exifOrientationForDeviceOrientation(currentDeviceOrientation)
+            // let orientedImage = ciImage.oriented(forExifOrientation: exifOrientation)
 
-            currentLUTFilter.setValue(portraitImage, forKey: kCIInputImageKey)
+            // Apply LUT filter to the *original* (non-oriented) image
+            currentLUTFilter.setValue(ciImage, forKey: kCIInputImageKey) // Apply to original ciImage
 
             guard let outputImage = currentLUTFilter.outputImage else {
                 uiViewLogger.error("    [captureOutput] Frame: \(frameNumber). Failed to apply LUT filter to image.")
@@ -547,50 +549,37 @@ struct CameraPreviewView: UIViewRepresentable {
                      return
                 }
 
-                // *** Check frame skipping counter AGAIN on main thread ***
-                // This check is likely redundant now as the check at the start of captureOutput should handle it,
-                // but keeping it as a safety measure won't hurt. If a switch happened EXACTLY between
-                // the check in captureOutput and this block running, this *might* catch it.
-                if self.framesToSkipAfterLensSwitch > 0 {
-                     self.uiViewLogger.warning("    [captureOutput MAIN THREAD] Frame: \(frameNumber). Skipping overlay update as framesToSkipAfterLensSwitch (\(self.framesToSkipAfterLensSwitch)) > 0. This should ideally not happen.")
-                     return
-                }
-
                 let currentFrameNumber = frameNumber // Capture frame number for async block
                 self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Running on main thread to update LUTOverlayLayer.")
                 
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
                 
-                // Get the screen bounds
                 let viewBounds = self.bounds // Use view bounds for overlay frame
+
+                // *** Ensure Identity Transform is ALWAYS used ***
+                let transform = CATransform3DIdentity
 
                 // Update existing overlay or create a new one
                 if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
                     overlay.contents = cgImage
-                    overlay.frame = viewBounds // Use view bounds
+                    overlay.frame = viewBounds
                     overlay.cornerRadius = self.cornerRadius
-                    overlay.masksToBounds = true // Ensure masking applies after transform
-                    
-                    // *** IMPORTANT: Reset any layer transform on the overlay itself ***
-                    // The content (cgImage) is now pre-rotated. The layer should match the previewLayer exactly.
-                    overlay.transform = CATransform3DIdentity
-                    
+                    overlay.masksToBounds = true
+                    overlay.transform = transform // Use Identity transform
                 } else {
                     let overlayLayer = CALayer()
                     overlayLayer.name = "LUTOverlayLayer"
-                    overlayLayer.frame = viewBounds // Use view bounds
+                    overlayLayer.frame = viewBounds
                     overlayLayer.contentsGravity = .resizeAspectFill
                     overlayLayer.contents = cgImage
                     overlayLayer.cornerRadius = self.cornerRadius
                     overlayLayer.masksToBounds = true
-                    
-                    // *** Ensure orientation is correct JUST before adding first overlay ***
-                    self.updatePreviewOrientation()
-                    uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Called updatePreviewOrientation just before adding first overlay.")
+                    overlayLayer.transform = transform // Use Identity transform
 
+                    // Orientation should be handled by the fixed preview layer connection
                     self.previewLayer.addSublayer(overlayLayer)
-                    self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Added NEW LUTOverlayLayer.") // Log new layer
+                    self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Added NEW LUTOverlayLayer with Identity transform.")
                 }
                 
                 CATransaction.commit()
@@ -626,7 +615,7 @@ struct CameraPreviewView: UIViewRepresentable {
             let newAngle: CGFloat
             let deviceOrientation = UIDevice.current.orientation
             let interfaceOrientation = window?.windowScene?.interfaceOrientation ?? .portrait
-            uiViewLogger.trace("    [UPO] Device: \\(deviceOrientation.rawValue), Interface: \\(interfaceOrientation.rawValue)")
+            uiViewLogger.trace("    [UPO] Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)")
             
             // Prioritize valid device orientation
             if deviceOrientation.isValidInterfaceOrientation {
@@ -637,61 +626,79 @@ struct CameraPreviewView: UIViewRepresentable {
                     case .portraitUpsideDown: newAngle = 270
                     default: newAngle = 90 // Should not happen
                 }
-                 uiViewLogger.debug("    [UPO] Using Device Orientation: \\(deviceOrientation.rawValue). Calculated newAngle = \\(newAngle)°")
+                 uiViewLogger.debug("    [UPO] Using Device Orientation: \(deviceOrientation.rawValue). Calculated newAngle = \(newAngle)°")
             } else {
                 // Fallback to 90 degrees (portrait) if device orientation is invalid
                 newAngle = 90
-                uiViewLogger.debug("    [UPO] Invalid device orientation (\\(deviceOrientation.rawValue)). Defaulting DATA angle to 90°. Calculated newAngle = \\(newAngle)°")
+                uiViewLogger.debug("    [UPO] Invalid device orientation (\(deviceOrientation.rawValue)). Defaulting DATA angle to 90°. Calculated newAngle = \(newAngle)°")
             }
             
             // We no longer use the calculated device angle directly for the data output after initial setup.
             // Logging the calculation for reference.
-            uiViewLogger.debug("    [UPO] Calculated device angle based on current orientation: \\(newAngle)° (This is NOT directly applied after init)")
+            uiViewLogger.debug("    [UPO] Calculated device angle based on current orientation: \(newAngle)° (This is NOT directly applied after init)")
 
             // --- Force Preview Layer Connection to Portrait (90 degrees) ---
             uiViewLogger.debug("    [UPO] [PREVIEW UPDATE START]") // Start preview update log
             let fixedPreviewAngle: CGFloat = 90
             let currentPreviewAngle = previewConnection.videoRotationAngle
-            uiViewLogger.debug("    [UPO] Current PREVIEW angle: \\(currentPreviewAngle)°, Target fixed angle: \\(fixedPreviewAngle)°")
+            uiViewLogger.debug("    [UPO] Current PREVIEW angle: \(currentPreviewAngle)°, Target fixed angle: \(fixedPreviewAngle)°")
 
             if previewConnection.isVideoRotationAngleSupported(fixedPreviewAngle) {
                 if previewConnection.videoRotationAngle != fixedPreviewAngle {
-                    uiViewLogger.info("        [UPO] Attempting to force PREVIEW angle to \\(fixedPreviewAngle)°...")
+                    uiViewLogger.info("        [UPO] Attempting to force PREVIEW angle to \(fixedPreviewAngle)°...")
                     previewConnection.videoRotationAngle = fixedPreviewAngle
-                    uiViewLogger.info("        [UPO] --> FORCED PREVIEW layer connection angle to \\(fixedPreviewAngle)°")
+                    uiViewLogger.info("        [UPO] --> FORCED PREVIEW layer connection angle to \(fixedPreviewAngle)°")
                 } else {
-                    uiViewLogger.debug("        [UPO] PREVIEW layer connection angle already \\(fixedPreviewAngle)°. No change needed.")
+                    uiViewLogger.debug("        [UPO] PREVIEW layer connection angle already \(fixedPreviewAngle)°. No change needed.")
                 }
             } else {
-                uiViewLogger.warning("    [UPO] Angle \\(fixedPreviewAngle)° not supported for PREVIEW layer connection.")
+                uiViewLogger.warning("    [UPO] Angle \(fixedPreviewAngle)° not supported for PREVIEW layer connection.")
             }
             uiViewLogger.debug("    [UPO] [PREVIEW UPDATE END]") // End preview update log
 
 
-            // --- Update Data Output Connection based on calculated newAngle ---
+            // --- Remove Data Output Connection Update Logic --- 
+            // This is now handled in CameraDeviceService after lens switch reconfiguration.
+            /* 
             uiViewLogger.debug("    [UPO] [DATA UPDATE START]") // Start data update log
 
-            // *** Set Data Connection Angle ONLY ONCE on initial setup, then lock it ***
-            if !isInitialDataOrientationSet {
-                // Set initial angle (locked to 90 degrees portrait)
-                if let dataOutputConnection = dataOutput?.connection(with: .video) {
-                    let targetAngle: CGFloat = 90 // Lock to portrait
-                    uiViewLogger.info("    [UPO] Setting INITIAL DATA output connection angle to \(targetAngle)°.")
-                    if dataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
-                        dataOutputConnection.videoRotationAngle = targetAngle
-                        uiViewLogger.info("        [UPO] --> Set INITIAL DATA output connection angle to \(targetAngle)°")
-                        isInitialDataOrientationSet = true // Set flag only on success
+            // *** ALWAYS ensure Data Connection Angle is locked to Portrait (90 degrees) ***
+            if let dataOutputConnection = dataOutput?.connection(with: .video) {
+                let targetAngle: CGFloat = 90 // Lock to portrait
+                uiViewLogger.debug("    [UPO] Ensuring DATA output connection angle is \\(targetAngle)°.") // Changed log from "Setting INITIAL"
+                if dataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
+                    if dataOutputConnection.videoRotationAngle != targetAngle {
+                         uiViewLogger.info("        [UPO] --> Attempting to set DATA output connection angle to \\(targetAngle)°...")
+                         dataOutputConnection.videoRotationAngle = targetAngle
+                         uiViewLogger.info("        [UPO] --> SET/RESET DATA output connection angle to \\(targetAngle)°")
+                         // isInitialDataOrientationSet = true // No longer needed
                     } else {
-                        uiViewLogger.warning("    [UPO] Angle \(targetAngle)° not supported for INITIAL DATA output connection setup.")
+                         uiViewLogger.debug("        [UPO] DATA output connection angle already \\(targetAngle)°. No change needed.")
                     }
                 } else {
-                    uiViewLogger.warning("    [UPO] Could not get DATA output connection for initial setup.")
+                    uiViewLogger.warning("    [UPO] Angle \\(targetAngle)° not supported for DATA output connection.")
                 }
             } else {
-                uiViewLogger.debug("    [UPO] Initial DATA orientation already set. Skipping further updates to data connection angle.")
+                uiViewLogger.warning("    [UPO] Could not get DATA output connection to update angle.")
             }
+            */
             
             uiViewLogger.notice("<<<<<<<<< [END UPO] Finished updatePreviewOrientation >>>>>>>>>") // Exit marker
         }
     }
 }
+
+// Helper function to map UIDeviceOrientation to CIImageOrientation (EXIF)
+// TopLeft: 1 (Normal), TopRight: 2 (Flipped H), BottomRight: 3 (Rotated 180), BottomLeft: 4 (Flipped V),
+// LeftTop: 5 (Rotated 90 CW + Flipped V), RightTop: 6 (Rotated 90 CW), RightBottom: 7 (Rotated 90 CCW + Flipped V), LeftBottom: 8 (Rotated 90 CCW)
+/* // REMOVING - No longer needed as we don't orient the CIImage directly
+func exifOrientationForDeviceOrientation(_ deviceOrientation: UIDeviceOrientation) -> Int32 {
+    switch deviceOrientation {
+        case .portrait: return 6 // Rotated 90 CW
+        case .portraitUpsideDown: return 8 // Rotated 90 CCW
+        case .landscapeLeft: return 3 // Rotated 180
+        case .landscapeRight: return 1 // Normal (Home button right)
+        default: return 6 // Default to Portrait if unknown/faceup/facedown
+    }
+}
+*/
