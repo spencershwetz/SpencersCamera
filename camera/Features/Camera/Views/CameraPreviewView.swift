@@ -513,7 +513,10 @@ struct CameraPreviewView: UIViewRepresentable {
             var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
 
             // Apply LUT filter to the *original* (non-manually-rotated) image
-            currentLUTFilter.setValue(ciImage, forKey: kCIInputImageKey)
+            // *** FIX: Explicitly orient the CIImage to Portrait (90 deg clockwise) before filtering ***
+            let portraitImage = ciImage.oriented(forExifOrientation: 6) // 6 = RightTop (90 deg CW)
+
+            currentLUTFilter.setValue(portraitImage, forKey: kCIInputImageKey)
 
             guard let outputImage = currentLUTFilter.outputImage else {
                 uiViewLogger.error("    [captureOutput] Frame: \(frameNumber). Failed to apply LUT filter to image.")
