@@ -371,6 +371,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     format.supportedColorSpaces.contains(.appleLog)
                 }
                 print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+                
+                // Initialize isAppleLogEnabled based on the *actual* active color space at startup
+                self.isAppleLogEnabled = (device.activeColorSpace == .appleLog)
+                logger.info("Initial Apple Log Enabled state based on activeColorSpace: \(self.isAppleLogEnabled)")
+
             }
             print("=== End Initialization ===\n")
             
