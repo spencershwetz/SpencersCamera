@@ -181,14 +181,12 @@ struct CameraView: View {
                     }
                 }
             }) {
-                OrientationFixView(allowsLandscapeMode: true) {
-                    SettingsView(
-                        lutManager: viewModel.lutManager,
-                        viewModel: viewModel,
-                        isDebugEnabled: $isDebugEnabled,
-                        dismissAction: { isShowingSettings = false }
-                    )
-                }
+                SettingsView(
+                    lutManager: viewModel.lutManager,
+                    viewModel: viewModel,
+                    isDebugEnabled: $isDebugEnabled,
+                    dismissAction: { isShowingSettings = false }
+                )
             }
             .sheet(isPresented: $isShowingDocumentPicker) {
                 DocumentPicker(types: LUTManager.supportedTypes) { url in
@@ -414,23 +412,6 @@ struct CameraView: View {
                     viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
                     print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
                 }
-            }
-        }
-        
-        // Double enforce orientation lock on view appearance
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            viewModel.updateOrientation(windowScene.interfaceOrientation)
-        }
-        
-        // Setup notification for when app becomes active
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("DEBUG: App became active - re-enforcing camera orientation")
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                viewModel.updateOrientation(windowScene.interfaceOrientation)
             }
         }
         

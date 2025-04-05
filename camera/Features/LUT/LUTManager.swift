@@ -1,8 +1,11 @@
 import SwiftUI
 import CoreImage
 import UniformTypeIdentifiers
+import os
 
 class LUTManager: ObservableObject {
+    
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
     
     @Published var currentLUTFilter: CIFilter?
     private var dimension: Int = 0
@@ -264,7 +267,11 @@ class LUTManager: ObservableObject {
     
     // Applies the LUT to the given CIImage using a freshly created filter instance
     func applyLUT(to image: CIImage) -> CIImage? {
-        guard let cubeData = self.cubeData else { return nil }
+        logger.debug("--> applyLUT called")
+        guard let cubeData = self.cubeData else { 
+             logger.warning("    [applyLUT] Failed: cubeData is nil")
+            return nil 
+        }
         
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
         
@@ -275,7 +282,14 @@ class LUTManager: ObservableObject {
             kCIInputImageKey: image
         ]
         
-        return CIFilter(name: "CIColorCube", parameters: params)?.outputImage
+        let filter = CIFilter(name: "CIColorCube", parameters: params)
+        let outputImage = filter?.outputImage
+        if outputImage != nil {
+             logger.debug("    [applyLUT] Successfully applied LUT filter.")
+        } else {
+             logger.error("    [applyLUT] Failed: CIFilter outputImage was nil.")
+        }
+        return outputImage
     }
     
     // Creates a basic programmatic LUT when no files are available

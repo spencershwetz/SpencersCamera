@@ -129,17 +129,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             
             // Check the VC name against our list
             if AppDelegate.landscapeEnabledViewControllers.contains(where: { vcName.contains($0) }) {
-                logger.info("Top view controller \(vcName) allows landscape. Allowing Portrait and Landscape Left/Right.")
+                logger.info("    [Orientation] Top VC '\(vcName)' allows landscape via static list. Allowing All.")
                 return [.portrait, .landscapeLeft, .landscapeRight]
             }
             
-            logger.info("AppDelegate enforcing portrait for \(vcName)")
+            logger.info("    [Orientation] No special case matched for VC '\(vcName)'. Locking to Portrait.")
         } else {
-            logger.warning("Could not determine top view controller. Locking to Portrait as a fallback.")
+            logger.warning("    [Orientation] Could not determine top view controller. Locking to Portrait as fallback.")
         }
         
         // Default to portrait only
-        logger.info("Defaulting to Portrait only.")
+        logger.info("    [Orientation] Defaulting to Portrait only.")
         return .portrait
     }
 }

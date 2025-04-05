@@ -41,7 +41,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     @Published var captureMode: CaptureMode = .video
     
-    private let logger = Logger(subsystem: "com.camera", category: "CameraViewModel")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModel")
     
     @Published var isSessionRunning = false
     @Published var error: CameraError?
@@ -325,6 +325,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @Published var lastLensSwitchTimestamp = Date()
     
+    // Logger for orientation specific logs
+    private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModelOrientation")
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -372,12 +375,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 }
                 print("\n✅ Apple Log Support: \(isAppleLogSupported)")
                 
-                // Initialize isAppleLogEnabled based on the *actual* active color space at startup
-                self.isAppleLogEnabled = (device.activeColorSpace == .appleLog)
-                logger.info("Initial Apple Log Enabled state based on activeColorSpace: \(self.isAppleLogEnabled)")
-
+                // Set initial Apple Log state based on current color space
+                isAppleLogEnabled = device.activeColorSpace == .appleLog
+                
+                print("Initial Apple Log Enabled state based on activeColorSpace: \(isAppleLogEnabled)")
+                print("=== End Initialization ===\n")
             }
-            print("=== End Initialization ===\n")
             
             if let device = device {
                 defaultFormat = device.activeFormat
@@ -473,19 +476,51 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func switchToLens(_ lens: CameraLens) {
         // Remove isRecording argument
+        
+        // Temporarily disable LUT preview during switch to prevent flash
+        logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
+        self.tempLUTFilter = lutManager.currentLUTFilter // Store current filter
+        lutManager.currentLUTFilter = nil // Disable LUT in manager (triggers update in PreviewView -> removeLUTOverlay)
+        
+        // Perform the lens switch
         cameraDeviceService.switchToLens(lens)
         
-        // Update orientation for all video connections after lens switch
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Update the timestamp immediately to trigger orientation update in PreviewView via updateState
+        lastLensSwitchTimestamp = Date()
+        logger.debug("🔄 Lens switch: Updated lastLensSwitchTimestamp to trigger PreviewView orientation update.")
+
+        // Restore LUT filter immediately after initiating the switch.
+        // The PreviewView will handle reapplying it via captureOutput when ready.
+        if let storedFilter = self.tempLUTFilter {
+            self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter immediately.")
+            self.lutManager.currentLUTFilter = storedFilter
+            self.tempLUTFilter = nil // Clear temporary storage
+        } else {
+             self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+        }
+        
+        // REMOVED Delay block: Orientation update is now triggered by lastLensSwitchTimestamp update via updateState
+        /*
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in // Increased delay slightly
             guard let self = self else { return }
             guard !self.isRecording else {
                 self.logger.debug("Skipping delayed orientation update after lens switch because recording is active.")
+                // If recording, LUT should remain disabled as it was potentially changed by recording logic
                 return
             }
-            self.applyCurrentOrientationToConnections()
+            self.logger.debug("🔄 Lens switch: Applying orientation after delay.")
+            self.applyCurrentOrientationToConnections() // Ensure connections are updated
+            
+            // Restore LUT filter after orientation is applied and session is stable
+             if let storedFilter = self.tempLUTFilter {
+                 self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter.")
+                 self.lutManager.currentLUTFilter = storedFilter
+                 self.tempLUTFilter = nil // Clear temporary storage
+             } else {
+                  self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+             }
         }
-        
-        lastLensSwitchTimestamp = Date()
+        */
     }
     
     func setZoomFactor(_ factor: CGFloat) {
@@ -740,35 +775,87 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Orientation Handling (NEW)
     
     private func applyCurrentOrientationToConnections() {
-        // --- Add this log --- 
-        logger.warning("\n*** applyCurrentOrientationToConnections CALLED! isRecording: \(self.isRecording) ***\n")
-        // --- End log ---
-        
-        // Always lock the preview connection angle to portrait (90 degrees)
-        // The actual recording orientation is handled by the Asset Writer's transform.
-        let targetAngle: CGFloat = 90
-        let source = "Locked Preview"
-        logger.info("📱 Applying fixed portrait angle (90°) to connections. Source: \\(source)")
+        orientationLogger.debug("--> applyCurrentOrientationToConnections called.")
+        // Add logging here to check videoDataOutput
+        if self.videoDataOutput == nil {
+            orientationLogger.warning("    [applyCurrentOrientation] videoDataOutput is NIL at this point.")
+        } else {
+            orientationLogger.debug("    [applyCurrentOrientation] videoDataOutput is assigned.")
+        }
 
-        for output in session.outputs {
-            if let connection = output.connection(with: .video) {
-                let connectionID = connection.description // Get a stable ID for logging
-                guard connection.isVideoRotationAngleSupported(targetAngle) else {
-                    logger.warning("Rotation angle \\(targetAngle)° not supported for connection: \\(connectionID)")
-                    continue
-                }
+        // Use UIDevice orientation
+        let deviceOrientation = UIDevice.current.orientation
+        let targetAngle: CGFloat
 
-                if connection.videoRotationAngle != targetAngle {
-                    let previousAngle = connection.videoRotationAngle
-                    connection.videoRotationAngle = targetAngle
-                    logger.info("Updated video connection \\(connectionID) rotation angle from \\(previousAngle)° to \\(targetAngle)° (Source: \\(source))")
+        switch deviceOrientation {
+        case .landscapeLeft:
+            targetAngle = 0
+            orientationLogger.debug("    Device orientation: Landscape Left -> Target Angle: 0°")
+        case .landscapeRight:
+            targetAngle = 180
+            orientationLogger.debug("    Device orientation: Landscape Right -> Target Angle: 180°")
+        case .portraitUpsideDown:
+            targetAngle = 270
+            orientationLogger.debug("    Device orientation: Portrait Upside Down -> Target Angle: 270°")
+        case .portrait:
+            targetAngle = 90
+            orientationLogger.debug("    Device orientation: Portrait -> Target Angle: 90°")
+        default: // Includes .unknown, .faceUp, .faceDown
+            // Fallback to portrait if orientation is invalid or face up/down
+            targetAngle = 90
+            orientationLogger.debug("    Device orientation: \(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
+        }
+
+        // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView
+        // The previewLayer's connection orientation should be managed within CustomPreviewView itself (e.g., via forcePortraitOrientation)
+        /* 
+        if let previewLayerConnection = (owningView?.viewWithTag(100) as? CameraPreviewView.CustomPreviewView)?.previewLayer.connection {
+            ... // Removed logic
+        } else {
+            orientationLogger.warning("    Could not get PreviewLayer connection.")
+        }
+        */
+
+        // Apply to Video Data Output connection (The one managed by CameraViewModel/CameraSetupService)
+        // REMOVED: This is handled by RecordingService during recording setup.
+        /*
+        if let videoDataOutputConnection = videoDataOutput?.connection(with: .video) {
+            let connectionID = videoDataOutputConnection.description
+            let previousAngle = videoDataOutputConnection.videoRotationAngle
+            orientationLogger.debug("    Checking VideoDataOutput Connection (\(connectionID)): Current=\(previousAngle)°, Target=\(targetAngle)°")
+            if videoDataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
+                if videoDataOutputConnection.videoRotationAngle != targetAngle {
+                    videoDataOutputConnection.videoRotationAngle = targetAngle
+                    orientationLogger.info("    [applyCurrentOrientation] Updated VideoDataOutput connection \(connectionID) rotation angle from \(previousAngle)° to \(targetAngle)°")
                 } else {
-                     logger.debug("Angle \\(targetAngle)° already set for connection \\(connectionID). No change needed. (Source: \\(source))")
+                     orientationLogger.debug("    Angle \(targetAngle)° already set for VideoDataOutput connection \(connectionID). No change needed.")
                 }
             } else {
-                 logger.debug("Output \\(output.description) has no video connection.")
+                orientationLogger.warning("    Angle \(targetAngle)° not supported for VideoDataOutput connection \(connectionID).")
             }
+        } else {
+             orientationLogger.warning("    Could not get VideoDataOutput connection (ViewModel's instance).") // Clarified which instance
         }
+        */
+
+        // Apply to Audio Connection - REMOVED as audioOutput is not directly accessible here
+        /* 
+        if let audioConnection = audioOutput?.connection(with: .audio) {
+            ... // Removed logic
+        } else {
+             orientationLogger.warning("    Could not get AudioOutput connection.")
+        }
+        */
+        orientationLogger.debug("<-- Finished applyCurrentOrientationToConnections")
+    }
+}
+
+// MARK: - CustomPreviewViewDelegate (NEW)
+extension CameraViewModel: CustomPreviewViewDelegate {
+    func customPreviewViewDidAddVideoOutput(_ previewView: CameraPreviewView.CustomPreviewView) {
+        orientationLogger.debug("Delegate: CustomPreviewView did add video output. Applying initial orientation.")
+        // Now that we know the output exists, apply the initial orientation
+        applyCurrentOrientationToConnections()
     }
 }
 
@@ -889,3 +976,4 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
         }
     }
 }
+
