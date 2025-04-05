@@ -330,6 +330,24 @@ struct CameraPreviewView: UIViewRepresentable {
             // Call the delegate method after adding the output
             delegate?.customPreviewViewDidAddVideoOutput(self)
             customPreviewLogger.debug("Called customPreviewViewDidAddVideoOutput delegate method.") // Use customPreviewLogger
+
+            // === ADDED: Ensure data output connection orientation matches fixed preview ===
+            if let connection = output.connection(with: .video) {
+                let targetAngle: CGFloat = 90 // Match fixed portrait preview layer
+                if connection.isVideoRotationAngleSupported(targetAngle) {
+                    if connection.videoRotationAngle != targetAngle {
+                        connection.videoRotationAngle = targetAngle
+                        customPreviewLogger.info("Set initial video data output connection angle to \(targetAngle)°.")
+                    } else {
+                        customPreviewLogger.debug("Video data output connection angle already \(targetAngle)°.")
+                    }
+                } else {
+                    customPreviewLogger.warning("Angle \(targetAngle)° not supported for video data output connection.")
+                }
+            } else {
+                customPreviewLogger.warning("Could not get video data output connection to set initial angle.")
+            }
+            // ==========================================================================
         }
         
         override func layoutSubviews() {
