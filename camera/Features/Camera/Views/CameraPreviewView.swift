@@ -402,7 +402,8 @@ struct CameraPreviewView: UIViewRepresentable {
             // Update overlay to match preview layer orientation
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                // Check if the overlay layer exists without assigning it to a variable
+                if self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) != nil {
                     // No need to modify overlay properties, just ensure underlying connections are correct
                     print("DEBUG: Ensured LUT overlay orientation is correct (90°)")
                 }
@@ -504,8 +505,8 @@ struct CameraPreviewView: UIViewRepresentable {
             
             // Render the final image using the context
             // Use the extent of the processed image, which includes rotation
-            let originalWidth = CVPixelBufferGetWidth(pixelBuffer)
-            let originalHeight = CVPixelBufferGetHeight(pixelBuffer)
+            _ = CVPixelBufferGetWidth(pixelBuffer) // Assign to _ as it's unused
+            _ = CVPixelBufferGetHeight(pixelBuffer) // Assign to _ as it's unused
             
             uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). Filter applied. Creating CGImage.")
             guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else {

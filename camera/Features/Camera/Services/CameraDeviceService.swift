@@ -19,6 +19,11 @@ class CameraDeviceService {
     private let cameraQueue = DispatchQueue(label: "com.camera.device-service")
     private var videoFormatService: VideoFormatService
     
+    // Public computed property to access the current device
+    var currentDevice: AVCaptureDevice? {
+        return device
+    }
+    
     init(session: AVCaptureSession, videoFormatService: VideoFormatService, delegate: CameraDeviceServiceDelegate) {
         self.session = session
         self.videoFormatService = videoFormatService

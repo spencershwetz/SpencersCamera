@@ -523,11 +523,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @MainActor
     func startRecording() async {
-        guard !isRecording, status == .running, let device = self.device else {
-            // REMOVE: let deviceStatus = device != nil ? "available" : "nil"
-            // UPDATE: Corrected log message syntax
-            let deviceName = device?.localizedName ?? "nil"
-            logger.warning("Start recording called but conditions not met. isRecording: \\(isRecording), status: \\(String(describing: status)), device: \\(deviceName)")
+        logger.info("Attempting to start recording...")
+        // Use the new public `currentDevice` property
+        guard !self.isRecording,
+              self.status == .running,
+              let currentDevice = self.cameraDeviceService?.currentDevice else { // Use the public currentDevice
+            // Log detailed reason for failure
+            // Use the public `currentDevice` in the log message as well
+            logger.warning("Start recording called but conditions not met. isRecording: \(self.isRecording), status: \(String(describing: self.status)), device: \(self.cameraDeviceService?.currentDevice?.localizedName ?? "nil")")
             return
         }
         
@@ -535,7 +538,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let settings = SettingsModel()
         
         // Update configuration for recording
-        recordingService.setDevice(device)
+        recordingService.setDevice(currentDevice)
         recordingService.setLUTManager(lutManager)
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
@@ -849,6 +852,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         */
         orientationLogger.debug("<-- Finished applyCurrentOrientationToConnections")
+    }
+
+    func setCamera(_ device: AVCaptureDevice?) {
+        Task {
+            _ = device?.localizedName ?? "nil" // Assign unused deviceName to _
+//            logger.trace("Setting camera device: \(deviceName)")
+            // ... other logic
+        }
     }
 }
 
