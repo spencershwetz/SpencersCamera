@@ -1,6 +1,7 @@
 import AVFoundation
 import os.log
 import UIKit
+import Foundation
 
 protocol CameraDeviceServiceDelegate: AnyObject {
     func didUpdateCurrentLens(_ lens: CameraLens)
@@ -51,46 +52,44 @@ class CameraDeviceService {
         
         // Configure the new device
         try newDevice.lockForConfiguration()
+        defer { newDevice.unlockForConfiguration() } // Ensure unlock even on error
         
-        // If Apple Log is enabled, try to find and set a compatible format first
-        if videoFormatService.isAppleLogEnabled {
-            logger.info("🔍 Searching for Apple Log compatible format on \(newDevice.localizedName)...")
-            // Find a format that supports Apple Log AND matches current FPS/Resolution settings
-            guard let currentFPS = videoFormatService.getCurrentFrameRateFromDelegate(),
-                  let currentResolution = videoFormatService.getCurrentResolutionFromDelegate() else {
-                logger.error("❌ Could not get current FPS/Resolution from delegate to find compatible Apple Log format.")
-                // Fallback or throw? For now, log and potentially proceed without format change.
-                return // Or consider throwing an error if this is critical
-            }
-
-            let compatibleFormat = videoFormatService.findBestFormat(for: newDevice, resolution: currentResolution, frameRate: currentFPS, requireAppleLog: true)
-
-            if let selectedFormat = compatibleFormat {
-                if newDevice.activeFormat != selectedFormat {
-                    newDevice.activeFormat = selectedFormat
-                    logger.info("✅ Set optimized Apple Log compatible format: \(selectedFormat.description)")
-                } else {
-                    logger.info("ℹ️ Current format already is the optimal Apple Log format.")
-                }
-            } else {
-                logger.warning("⚠️ Apple Log enabled, but no compatible format found on \(newDevice.localizedName) matching \(currentResolution.rawValue)/\(currentFPS)fps. Apple Log may not be applied correctly.")
-                // Consider falling back to a non-Log format or informing the user.
-            }
-        } else {
-             logger.info("ℹ️ Apple Log is disabled, skipping specific format search.")
-             // Optionally, ensure a default non-Log format is selected if needed
-             // let defaultFormat = videoFormatService.findBestFormat(for: newDevice, ...) 
-             // if newDevice.activeFormat != defaultFormat { ... }
+        // Always find the best format based on current settings and Apple Log state
+        logger.info("⚙️ [configureSession] Finding best format for device \(newDevice.localizedName)...")
+        guard let currentFPS = videoFormatService.getCurrentFrameRateFromDelegate(),
+              let currentResolution = videoFormatService.getCurrentResolutionFromDelegate() else {
+            logger.error("❌ [configureSession] Could not get current FPS/Resolution from delegate.")
+            // Decide how to handle this - maybe use device defaults?
+            // For now, throw an error as settings are crucial.
+            throw CameraError.configurationFailed(message: "Missing delegate settings for session config.")
         }
         
-        // Set other default configurations
+        let requireLog = videoFormatService.isAppleLogEnabled
+        logger.info("Delegate settings: Res=\(currentResolution.rawValue), FPS=\(currentFPS), RequireLog=\(requireLog)")
+        
+        guard let selectedFormat = videoFormatService.findBestFormat(for: newDevice, resolution: currentResolution, frameRate: currentFPS, requireAppleLog: requireLog) else {
+            logger.error("❌ [configureSession] No suitable format found matching current settings (Res=\(currentResolution.rawValue), FPS=\(currentFPS), AppleLog=\(requireLog)).")
+            // Fallback? Inform user? Throw?
+            throw CameraError.configurationFailed(message: "No matching format found for current settings.")
+        }
+        
+        // Set the format
+        if newDevice.activeFormat != selectedFormat {
+            newDevice.activeFormat = selectedFormat
+            logger.info("✅ [configureSession] Set active format to: \(selectedFormat.description)")
+        } else {
+            logger.info("ℹ️ [configureSession] Device already using the target format.")
+        }
+        
+        // Set other default configurations like exposure/focus (if needed here)
         if newDevice.isExposureModeSupported(.continuousAutoExposure) {
             newDevice.exposureMode = .continuousAutoExposure
         }
         if newDevice.isFocusModeSupported(.continuousAutoFocus) {
             newDevice.focusMode = .continuousAutoFocus
         }
-        newDevice.unlockForConfiguration()
+        // Note: Frame rate and color space are handled by VideoFormatService during its calls
+        // or by the reapplyColorSpaceSettings call after this.
         
         logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
     }
@@ -303,6 +302,59 @@ class CameraDeviceService {
             device.unlockForConfiguration()
         } catch {
             logger.error("Error optimizing video settings: \(error.localizedDescription)")
+        }
+    }
+    
+    // New public method to trigger reconfiguration
+    func reconfigureSessionForCurrentDevice() async throws {
+        logger.info("🔄 [reconfigureSessionForCurrentDevice] Starting reconfiguration request...")
+        guard let currentDevice = self.device else {
+            logger.error("❌ [reconfigureSessionForCurrentDevice] Failed: No current device set.")
+            throw CameraError.configurationFailed(message: "No current device to reconfigure.")
+        }
+        
+        let wasRunning = session.isRunning
+        logger.debug("Session was running: \(wasRunning)")
+        if wasRunning {
+            logger.info("⏸️ Stopping session for reconfiguration...")
+            session.stopRunning()
+            // Optional small delay after stopping
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        
+        logger.info("⚙️ Beginning session configuration block...")
+        session.beginConfiguration()
+        
+        do {
+            // We don't need to remove/re-add the input if we're just changing format/settings on the *same* device.
+            // But we do need to call the configuration logic for the current device.
+            logger.info("🔧 Calling internal configureSession logic for device: \(currentDevice.localizedName)")
+            try configureSession(for: currentDevice, lens: .wide) // We need a lens, but it's less critical here if device is same
+            // TODO: Revisit if passing .wide is always correct here, or if we need current lens state.
+            
+            logger.info("⚙️ Committing session configuration block.")
+            session.commitConfiguration()
+            
+            // Re-apply color space just in case (redundant if called by ViewModel, but safe)
+            logger.info("🎨 Re-applying color space settings after reconfiguration...")
+            try videoFormatService.reapplyColorSpaceSettings()
+            
+            if wasRunning {
+                logger.info("▶️ Restarting session after reconfiguration...")
+                session.startRunning()
+            }
+            logger.info("✅ [reconfigureSessionForCurrentDevice] Reconfiguration completed successfully.")
+        } catch {
+            logger.error("❌ [reconfigureSessionForCurrentDevice] Error during reconfiguration: \(error.localizedDescription)")
+            // Rollback configuration changes on error
+            logger.warning("⏪ Rolling back configuration changes due to error.")
+            session.commitConfiguration() // Commit to end the block, even though changes failed
+            // Try to restart session if it was running before failure
+            if wasRunning { 
+                logger.info("▶️ Attempting to restart session after failed reconfiguration...")
+                session.startRunning()
+             }
+            throw error // Re-throw the error
         }
     }
 }

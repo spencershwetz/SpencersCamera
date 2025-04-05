@@ -99,35 +99,38 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 let currentLensValue = self.currentLens.rawValue // Capture before async operation
                 self.logger.info("🚀 Starting Task to configure Apple Log to \(self.isAppleLogEnabled) for lens: \(currentLensValue)x")
                 do {
-                    if self.isAppleLogEnabled {
-                        self.logger.info("🎥 Calling videoFormatService.configureAppleLog()...")
-                        try await self.videoFormatService.configureAppleLog()
-                        self.logger.info("✅ Successfully completed configureAppleLog().")
-                        
-                        self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after configure...")
-                        try self.videoFormatService.reapplyColorSpaceSettings()
-                        self.logger.info("✅ Re-applied color space settings after Apple Log configuration.")
-                    } else {
-                        self.logger.info("🎥 Calling videoFormatService.resetAppleLog()...")
-                        try await self.videoFormatService.resetAppleLog()
-                        self.logger.info("✅ Successfully completed resetAppleLog().")
-                        
-                        self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reset...")
-                        try self.videoFormatService.reapplyColorSpaceSettings()
-                        self.logger.info("✅ Re-applied color space settings after Apple Log reset.")
-                    }
-                    self.logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(self.isAppleLogEnabled)) successfully.")
-                    
-                    // Update recording service with new Apple Log setting
-                    self.recordingService.setAppleLogEnabled(self.isAppleLogEnabled)
+                    // Update the service state first
                     self.videoFormatService.setAppleLogEnabled(self.isAppleLogEnabled)
+                    
+                    // Asynchronously configure the format
+                    if self.isAppleLogEnabled {
+                        self.logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
+                        try await self.videoFormatService.configureAppleLog() // Modify this to NOT start/stop session
+                        self.logger.info("✅ Successfully completed configureAppleLog() device preparation.")
+                    } else {
+                        self.logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
+                        try await self.videoFormatService.resetAppleLog() // Modify this to NOT start/stop session
+                        self.logger.info("✅ Successfully completed resetAppleLog() device preparation.")
+                    }
+                    
+                    // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
+                    self.logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
+                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                    self.logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
+
+                    // Step 3: Explicitly re-apply color space (might be redundant but safe)
+                    self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reconfiguration...")
+                    try self.videoFormatService.reapplyColorSpaceSettings()
+                    self.logger.info("✅ Re-applied color space settings after reconfiguration.")
+                    
+                    self.logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(self.isAppleLogEnabled)) successfully.")
                 } catch let error as CameraError {
-                    self.logger.error("❌ Task failed to configure/reset Apple Log: \(error.description)")
+                    self.logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
                     DispatchQueue.main.async {
                         self.error = error
                     }
                 } catch {
-                    self.logger.error("❌ Task failed to configure/reset Apple Log with unknown error: \(error.localizedDescription)")
+                    self.logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
                     let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
                     DispatchQueue.main.async {
                         self.error = wrappedError
