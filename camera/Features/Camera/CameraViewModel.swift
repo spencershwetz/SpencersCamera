@@ -498,29 +498,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         } else {
              self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
         }
-        
-        // REMOVED Delay block: Orientation update is now triggered by lastLensSwitchTimestamp update via updateState
-        /*
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in // Increased delay slightly
-            guard let self = self else { return }
-            guard !self.isRecording else {
-                self.logger.debug("Skipping delayed orientation update after lens switch because recording is active.")
-                // If recording, LUT should remain disabled as it was potentially changed by recording logic
-                return
-            }
-            self.logger.debug("🔄 Lens switch: Applying orientation after delay.")
-            self.applyCurrentOrientationToConnections() // Ensure connections are updated
-            
-            // Restore LUT filter after orientation is applied and session is stable
-             if let storedFilter = self.tempLUTFilter {
-                 self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter.")
-                 self.lutManager.currentLUTFilter = storedFilter
-                 self.tempLUTFilter = nil // Clear temporary storage
-             } else {
-                  self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
-             }
-        }
-        */
     }
     
     func setZoomFactor(_ factor: CGFloat) {

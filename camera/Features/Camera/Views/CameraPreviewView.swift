@@ -666,15 +666,6 @@ struct CameraPreviewView: UIViewRepresentable {
                 uiViewLogger.warning("    [updatePreviewOrientation] Angle \(newAngle)° not supported for PREVIEW layer connection.")
             }
             
-            // --- REMOVED Data Output Connection Update ---
-            // We are now rotating the buffer manually in captureOutput based on currentRotationAngle
-            /*
-            if let dataOutputConnection = dataOutput?.connection(with: .video) {
-                // ... removed code ...
-            } else {
-                uiViewLogger.warning("    [updatePreviewOrientation] Could not get DATA output connection.")
-            }
-            */
             // --- Restore Data Output Connection Update ---
             if let dataOutputConnection = dataOutput?.connection(with: .video) {
                 let currentDataAngle = dataOutputConnection.videoRotationAngle

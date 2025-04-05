@@ -265,29 +265,25 @@ class LUTManager: ObservableObject {
         }
     }
     
-    // Applies the LUT to the given CIImage using a freshly created filter instance
+    // Applies the LUT to the given CIImage using the current filter instance
     func applyLUT(to image: CIImage) -> CIImage? {
-        logger.debug("--> applyLUT called")
-        guard let cubeData = self.cubeData else { 
-             logger.warning("    [applyLUT] Failed: cubeData is nil")
-            return nil 
+        logger.trace("--> applyLUT called") // Use trace for frequent calls
+
+        // Check if a valid LUT filter is currently configured
+        guard let filter = self.currentLUTFilter else {
+            logger.trace("    [applyLUT] No currentLUTFilter set. Returning original image.") // Use trace
+            return image // Return original image if no LUT is active
         }
-        
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
-        
-        let params: [String: Any] = [
-            "inputCubeDimension": cubeDimension,
-            "inputCubeData": cubeData,
-            "inputColorSpace": colorSpace as Any, // Explicit cast to Any
-            kCIInputImageKey: image
-        ]
-        
-        let filter = CIFilter(name: "CIColorCube", parameters: params)
-        let outputImage = filter?.outputImage
+
+        // Apply the existing filter to the new image
+        filter.setValue(image, forKey: kCIInputImageKey)
+
+        // Return the output image
+        let outputImage = filter.outputImage
         if outputImage != nil {
-             logger.debug("    [applyLUT] Successfully applied LUT filter.")
+            logger.trace("    [applyLUT] Successfully applied existing LUT filter.") // Use trace
         } else {
-             logger.error("    [applyLUT] Failed: CIFilter outputImage was nil.")
+            logger.warning("    [applyLUT] Failed: Existing CIFilter outputImage was nil.") // Use warning
         }
         return outputImage
     }

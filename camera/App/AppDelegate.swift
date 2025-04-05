@@ -73,14 +73,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
     
-    // MARK: - Helper to force black backgrounds
-    // REMOVED: This helper is likely redundant now.
-    /*
-    private func forceBlackBackgrounds(_ view: UIView) {
-        // ... (implementation removed) ...
-    }
-    */
-    
     // MARK: - Orientation Support
     
     /// Handle orientation lock dynamically based on the current view controller
@@ -164,16 +156,3 @@ extension UIViewController {
         return self
     }
 }
-
-// MARK: - UIWindow Extension
-// REMOVED: This extension is likely redundant now.
-/*
-extension UIWindow {
-    /// Enforce dark mode for the window
-    func enforceDarkMode() {
-        if #available(iOS 13.0, *) {
-            self.overrideUserInterfaceStyle = .dark
-        }
-    }
-}
-*/
