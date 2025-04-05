@@ -28,6 +28,14 @@ class VideoFormatService {
         self.isAppleLogEnabled = enabled
     }
     
+    // ADDED: Function to check Apple Log support for a given device
+    public func isAppleLogSupported(on device: AVCaptureDevice) -> Bool {
+        logger.info("Checking Apple Log support for device: \(device.localizedName)")
+        let supported = device.formats.contains { $0.supportedColorSpaces.contains(.appleLog) }
+        logger.info("Apple Log Supported: \(supported)")
+        return supported
+    }
+    
     func updateCameraFormat(for resolution: CameraViewModel.Resolution) async throws {
         guard let device = device else { 
             logger.error("No camera device available")

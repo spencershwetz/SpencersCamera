@@ -22,6 +22,53 @@ class CameraDeviceService {
         self.delegate = delegate
     }
     
+    // New method to get available lenses based on discovery
+    func getAvailableCameraLenses() -> [CameraLens] {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera, .builtInTelephotoCamera],
+            mediaType: .video,
+            position: .back
+        )
+        
+        var availableLenses: [CameraLens] = []
+        var hasWide = false
+        
+        for device in discoverySession.devices {
+            if let lens = getCameraLens(for: device) {
+                if !availableLenses.contains(lens) { // Avoid duplicates if discovery returns same type multiple times
+                    availableLenses.append(lens)
+                    if lens == .wide { hasWide = true }
+                }
+            }
+        }
+        
+        // If wide lens exists, add the .x2 digital zoom option
+        if hasWide && !availableLenses.contains(.x2) {
+            availableLenses.append(.x2)
+        }
+        
+        // Sort the lenses logically (e.g., ultra-wide, wide, x2, telephoto)
+        availableLenses.sort { $0.zoomFactor < $1.zoomFactor }
+        
+        logger.info("📸 Determined available lenses: \(availableLenses.map { $0.rawValue })")
+        return availableLenses
+    }
+
+    // New method to map AVCaptureDevice to CameraLens enum
+    func getCameraLens(for device: AVCaptureDevice) -> CameraLens? {
+        switch device.deviceType {
+        case .builtInUltraWideCamera:
+            return .ultraWide
+        case .builtInWideAngleCamera:
+            return .wide
+        case .builtInTelephotoCamera:
+            // Differentiate telephoto based on zoom factor if necessary in the future
+            return .telephoto
+        default:
+            return nil // Or handle other specific types if needed
+        }
+    }
+    
     func setDevice(_ device: AVCaptureDevice) {
         self.device = device
         logger.info("📸 Set initial device: \(device.localizedName)")
@@ -130,7 +177,10 @@ class CameraDeviceService {
     
     func switchToLens(_ lens: CameraLens) {
         // CAPTURE orientation on main thread *before* going to background
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        let currentInterfaceOrientation = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .interfaceOrientation ?? .portrait
         
         cameraQueue.async { [weak self] in
             guard let self = self else { return }
@@ -248,7 +298,11 @@ class CameraDeviceService {
                 // We need the orientation again for the recovery switch
                 DispatchQueue.main.async { [weak self] in // Get orientation on main thread
                     guard let self else { return }
-                    let recoveryOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+                    // Get orientation again for the recovery switch using modern API
+                    _ = UIApplication.shared.connectedScenes
+                        .compactMap { $0 as? UIWindowScene }
+                        .first?
+                        .interfaceOrientation ?? .portrait
                     self.switchToLens(.wide) // Let switchToLens handle dispatching again
                 }
             } else {
@@ -449,7 +503,7 @@ class CameraDeviceService {
         logger.info("Orientation updates \(locked ? "locked" : "unlocked") for recording.")
         if locked {
             logger.info("📱 Locking orientation state:")
-            logger.info("- Interface Orientation: \(UIApplication.shared.windows.first?.windowScene?.interfaceOrientation.rawValue ?? -1)")
+            logger.info("- Interface Orientation: \(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.interfaceOrientation.rawValue ?? -1)")
             logger.info("- Device Orientation: \(UIDevice.current.orientation.rawValue)")
             if let connection = session.outputs.first?.connection(with: .video) {
                 logger.info("- Current Connection Angle: \(connection.videoRotationAngle)°")

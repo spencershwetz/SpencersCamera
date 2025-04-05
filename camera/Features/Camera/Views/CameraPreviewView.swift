@@ -65,7 +65,41 @@ struct CameraPreviewView: UIViewRepresentable {
         // CHANGE: Make processingQueue serial for safety
         private let processingQueue = DispatchQueue(label: "com.camera.lutprocessing", qos: .userInitiated)
         // CHANGE: Make currentLUTFilter private
-        private(set) var currentLUTFilter: CIFilter? // Keep track internally
+        private(set) var currentLUTFilter: CIFilter? {
+            didSet {
+                // Update the data output only if the filter state changes (from nil to non-nil or vice-versa)
+                if (oldValue != nil) != (currentLUTFilter != nil) {
+                    // **Important**: Wrap session changes in begin/commit configuration
+                    viewModel?.session.beginConfiguration()
+
+                    if currentLUTFilter != nil {
+                        // New filter added when none existed
+                        setupDataOutput()
+                        print("DEBUG: Added video data output for LUT processing.")
+                    } else {
+                        // Filter removed - first clean up any existing overlay
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self = self else { return }
+                            CATransaction.begin()
+                            CATransaction.setDisableActions(true)
+                            if let overlay = self.previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
+                                overlay.removeFromSuperlayer()
+                                print("DEBUG: Removed LUT overlay layer during filter update")
+                            }
+                            CATransaction.commit()
+                        }
+                        // Remove the data output on the session queue
+                        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                            self?.removeDataOutput()
+                            print("DEBUG: Removed video data output.")
+                        }
+                    }
+                    
+                    // Commit the session changes
+                    viewModel?.session.commitConfiguration()
+                }
+            }
+        }
         private let cornerRadius: CGFloat = 20.0
         private let instanceId = UUID() // Add for logging
         private var volumeButtonHandler: VolumeButtonHandler? // Move handler here

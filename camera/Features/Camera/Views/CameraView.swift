@@ -5,21 +5,20 @@ import UIKit
 import AVFoundation
 
 struct CameraView: View {
-    // Add a unique ID for logging
-    private let viewInstanceId = UUID()
-
     @StateObject private var viewModel = CameraViewModel()
     @StateObject private var lutManager = LUTManager()
     @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
     @State private var showLUTPreview = true
-    @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
     @State private var isDebugEnabled = false
+    @State private var isShowingAlert = false
+    @State private var alertMessage = ""
+    @State private var isShowingLibrary = false
+    private let viewInstanceId = UUID()
 
     init() {
-        // Log creation with unique ID
         print("🟣 CameraView.init() - Instance ID: \(viewInstanceId)")
         setupOrientationNotifications()
     }
@@ -42,9 +41,18 @@ struct CameraView: View {
             // Background...
             Color.black.edgesIgnoringSafeArea(.all)
 
-            // REVERT: Place cameraPreview directly in ZStack without VStack/frame
-            cameraPreview()
-                .edgesIgnoringSafeArea(.all) // Let the preview itself handle safe area for now
+            // Wrap cameraPreview in GeometryReader to apply the 90% frame
+            GeometryReader { geometry in
+                cameraPreview()
+                    // Frame that starts below safe area and takes up 90% of the original size
+                    .frame(
+                        width: geometry.size.width * 0.9,
+                        height: geometry.size.height * 0.75 * 0.9 // 90% of the available 75% vertical space
+                    )
+                    .padding(.top, geometry.safeAreaInsets.top + 60) // Keep the same vertical position
+                    .clipped() // Ensure the preview stays within bounds
+                    .frame(maxWidth: .infinity) // Center the preview horizontally
+            }
 
             // Overlays... (Keep existing FunctionButtonsView)
             FunctionButtonsView()
@@ -52,60 +60,23 @@ struct CameraView: View {
                 .allowsHitTesting(true)
                 .ignoresSafeArea()
 
-            // Zoom Slider VStack (Keep existing)
+            // Bottom Controls VStack - Now includes ZoomSliderView
             VStack {
-                 Spacer()
-                     .frame(height: UIScreen.main.bounds.height * 0.65) // Keep adjustment
+                Spacer() // Pushes everything down
 
-                 if !viewModel.availableLenses.isEmpty {
-                     ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
-                         .padding(.bottom, 20)
-                 }
+                // Add ZoomSliderView here if lenses are available
+                if !viewModel.availableLenses.isEmpty {
+                    ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                        .padding(.bottom, 20) // Space between slider and record button area
+                }
 
-                 Spacer()
-             }
-             .zIndex(99)
-
-
-            // Bottom Controls VStack (Keep existing)
-            VStack {
-                Spacer()
-                ZStack {
+                ZStack { // This ZStack holds the record/library/settings buttons
                     recordButton
                         .frame(width: 75, height: 75)
 
                     HStack {
-                        videoLibraryButton
+                        libraryButton
                             .frame(width: 60, height: 60)
-                            .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-                                print("DEBUG: [LibraryButton] Dismissed - Setting isVideoLibraryPresented = false")
-                                // **Crucial:** Reset the flag *after* dismissing
-                                AppDelegate.isVideoLibraryPresented = false
-
-                                // Force orientation back to portrait
-                                DispatchQueue.main.async { // Ensure UI updates on main thread
-                                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                                        print("DEBUG: Forcing portrait after video library dismissal")
-                                        let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
-                                        windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                                            if error != nil {
-                                                print("DEBUG: Portrait reset error: \(error.localizedDescription)")
-                                            } else {
-                                                print("DEBUG: Portrait reset successful")
-                                            }
-                                            // Force update orientation on root controller AFTER the geometry update attempt
-                                            windowScene.windows.forEach { window in
-                                                window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                                            }
-                                        }
-                                    }
-                                }
-                            }) {
-                                // Wrap VideoLibraryView in OrientationFixView to allow landscape
-                                OrientationFixView(allowsLandscapeMode: true) {
-                                    VideoLibraryView()
-                                }
-                            }
                         Spacer()
                         settingsButton
                             .frame(width: 60, height: 60)
@@ -118,12 +89,6 @@ struct CameraView: View {
             .zIndex(101)
 
         }
-        // Apply OrientationFixView as a background... (Keep existing)
-        .background( // This ensures the CameraView itself respects portrait-only
-            OrientationFixView(allowsLandscapeMode: false) {
-                EmptyView()
-            }
-        )
         // Keep other existing modifiers (.onAppear, .onChange, etc.)...
          .onAppear {
              print("🟢 CameraView.onAppear - Instance ID: \(viewInstanceId)")
@@ -138,9 +103,6 @@ struct CameraView: View {
          }
          .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
              startSession()
-         }
-         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-             // Orientation is handled within CustomPreviewView now
          }
          .onChange(of: lutManager.currentLUTFilter) { oldValue, newValue in
              if newValue != nil {
@@ -179,9 +141,30 @@ struct CameraView: View {
                  }
              }
          }
+         .sheet(isPresented: $isShowingLibrary) {
+             VideoLibraryView()
+         }
          .statusBar(hidden: statusBarHidden)
          .preferredColorScheme(.dark) // Ensure dark mode
          .ignoresSafeArea(.all) // Try ignoring safe area at the top level
+    }
+
+    // Add the new library button definition
+    private var libraryButton: some View {
+        Button(action: {
+            isShowingLibrary = true
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: 60, height: 60)
+
+                Image(systemName: "photo.on.rectangle") // Or play.rectangle.on.rectangle
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
+            }
+        }
+        .buttonStyle(PlainButtonStyle()) // Use plain style to avoid default button appearance interference
     }
 
     // cameraPreview() function definition remains the same
@@ -255,37 +238,6 @@ struct CameraView: View {
         .padding(6)
         .background(Color.black.opacity(0.5))
         .cornerRadius(6)
-    }
-
-    private var videoLibraryButton: some View {
-        RotatingView(orientationViewModel: orientationViewModel) {
-            Button(action: {
-                print("DEBUG: [LibraryButton] Tapped - Setting isVideoLibraryPresented = true")
-                // **Crucial:** Set the flag *before* presenting
-                AppDelegate.isVideoLibraryPresented = true
-                isShowingVideoLibrary = true
-            }) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.6))
-                        .frame(width: 60, height: 60)
-
-                    if let thumbnailImage = viewModel.lastRecordedVideoThumbnail {
-                        Image(uiImage: thumbnailImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 54, height: 54)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    } else {
-                        Image(systemName: "film")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-        .frame(width: 60, height: 60)
     }
 
     private var settingsButton: some View {
@@ -367,22 +319,13 @@ struct CameraView: View {
     }
 
     private func handleLUTImport(url: URL) {
-        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-        print("LUT file size: \(fileSize) bytes")
-
-        lutManager.importLUT(from: url) { success in
-            if success {
-                print("DEBUG: LUT import successful, enabling preview")
-
-                // **Important:** Update the viewModel's lutManager reference
-                // This ensures the preview and recording service use the new LUT
-                self.viewModel.lutManager = self.lutManager
-                self.showLUTPreview = true
-                print("DEBUG: LUT filter set in viewModel")
-
-            } else {
-                print("DEBUG: LUT import failed")
-            }
+        Task {
+            // Removed unnecessary try/await as loadLUT is synchronous and handles errors internally
+            lutManager.loadLUT(from: url)
+            viewModel.selectedLUTURL = url // Assign the loaded URL to the ViewModel property
+            // Removed unnecessary ?? as currentLUTName is non-optional
+            print("✅ Successfully loaded LUT: \(lutManager.currentLUTName)")
+            // Removed catch block as loadLUT doesn't throw
         }
     }
 
