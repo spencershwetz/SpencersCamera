@@ -201,18 +201,33 @@ class CameraDeviceService {
             }
             // *** End added code ***
             
+            // Apply digital zoom INSTANTLY if needed after the physical switch
+            if zoomFactor != 1.0 {
+                 logger.debug("🔄 Lens switch: Applying digital zoom factor \(zoomFactor) after physical switch to \(newDevice.localizedName).")
+                 // Use the modified setDigitalZoom which is now instant
+                 self.setDigitalZoom(to: zoomFactor, on: newDevice)
+            }
+            
             if wasRunning {
                 logger.debug("🔄 Lens switch: Starting session...")
                 session.startRunning()
                 logger.debug("🔄 Lens switch: Session started.")
             }
             
-            // Notify delegate *after* orientation is set
+            // Notify delegate *after* orientation is set and digital zoom (if any) is applied
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                logger.debug("🔄 Lens switch: Notifying delegate about lens update: \(lens.rawValue)x")
-                self.delegate?.didUpdateCurrentLens(lens)
-                self.delegate?.didUpdateZoomFactor(zoomFactor)
+                // Determine the LOGICAL lens state based on the final zoom factor
+                let finalLens: CameraLens
+                if lens == .wide && zoomFactor == CameraLens.x2.zoomFactor {
+                    // If we physically switched to wide specifically to apply 2x digital zoom
+                    finalLens = .x2
+                } else {
+                    // Otherwise, the logical lens matches the physical lens we switched to
+                    finalLens = lens
+                }
+                logger.debug("🔄 Lens switch: Notifying delegate about logical lens update: \(finalLens.rawValue)x, physical: \(lens.rawValue)x, final zoom: \(zoomFactor)")
+                self.delegate?.didUpdateCurrentLens(finalLens) // Notify with the logical lens
             }
             
             logger.info("✅ Successfully switched to \(lens.rawValue)× lens")
@@ -239,21 +254,29 @@ class CameraDeviceService {
     }
     
     private func setDigitalZoom(to factor: CGFloat, on device: AVCaptureDevice) {
-        logger.info("📸 Setting digital zoom to \(factor)×")
+        logger.info("📸 Setting digital zoom INSTANTLY to \(factor)×") // Indicate instant change
         
         do {
             try device.lockForConfiguration()
             
-            let zoomFactor = factor.clamped(to: device.minAvailableVideoZoomFactor...device.maxAvailableVideoZoomFactor)
-            device.ramp(toVideoZoomFactor: zoomFactor, withRate: 20.0)
+            let zoomFactorClamped = factor.clamped(to: device.minAvailableVideoZoomFactor...device.maxAvailableVideoZoomFactor)
+            // Set instantly instead of ramping for button presses
+            device.videoZoomFactor = zoomFactorClamped
             
             device.unlockForConfiguration()
             
+            // Keep delegate notification here
             DispatchQueue.main.async { [weak self] in
+                // Notify actual applied factor (might differ slightly if clamped)
                 self?.delegate?.didUpdateZoomFactor(factor)
+                // Notify that the logical lens is now 2x if the factor matches
+                if factor == CameraLens.x2.zoomFactor {
+                     self?.delegate?.didUpdateCurrentLens(.x2)
+                     self?.logger.debug("📸 Digital zoom set, notifying delegate that logical lens is now .x2")
+                }
             }
             
-            logger.info("✅ Set digital zoom to \(factor)×")
+            logger.info("✅ Set digital zoom instantly to \(factor)× (Applied: \(zoomFactorClamped))")
             
         } catch {
             logger.error("❌ Failed to set zoom: \(error.localizedDescription)")
@@ -265,39 +288,63 @@ class CameraDeviceService {
     
     func setZoomFactor(_ factor: CGFloat, currentLens: CameraLens, availableLenses: [CameraLens]) {
         guard let currentDevice = self.device else {
-            logger.error("No camera device available")
+            logger.error("No camera device available for zoom factor adjustment.")
             return
         }
         
         // Find the appropriate lens based on the zoom factor
+        // Use a small tolerance to prefer staying on the current lens if very close
+        let tolerance = 0.05
         let targetLens = availableLenses
-            .sorted { abs($0.zoomFactor - factor) < abs($1.zoomFactor - factor) }
+            .sorted { lens1, lens2 in
+                let diff1 = abs(lens1.zoomFactor - factor)
+                let diff2 = abs(lens2.zoomFactor - factor)
+                // Prioritize current lens within tolerance
+                if lens1 == currentLens && diff1 <= tolerance { return true }
+                if lens2 == currentLens && diff2 <= tolerance { return false }
+                // Otherwise, pick the closest
+                return diff1 < diff2
+            }
             .first ?? .wide
-        
-        // If we need to switch lenses
-        if targetLens != currentLens && abs(targetLens.zoomFactor - factor) < 0.5 {
+
+        logger.debug("Slider zoom: Target factor=\(factor), Current=\(currentLens.rawValue)x, Target Lens=\(targetLens.rawValue)x")
+
+        // If we need to switch lenses (and not just slightly off due to tolerance)
+        if targetLens != currentLens {
+            logger.debug("Slider zoom: Switching lens from \(currentLens.rawValue)x to \(targetLens.rawValue)x")
+            // Lens switch triggered by slider should be instant too now
             switchToLens(targetLens)
+            // After switching, we might need to apply remaining zoom smoothly
+            // Let the delegate update handle the state, then a subsequent call to this function might apply ramp
+             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in // Small delay to allow lens switch state update
+                 self?.setZoomFactor(factor, currentLens: targetLens, availableLenses: availableLenses)
+             }
             return
         }
         
+        // If staying on the same lens, apply zoom smoothly using RAMP
         do {
             try currentDevice.lockForConfiguration()
             
-            // Calculate zoom factor relative to the current lens
-            let baseZoom = currentLens.zoomFactor
-            let relativeZoom = factor / baseZoom
-            let zoomFactor = min(max(relativeZoom, currentDevice.minAvailableVideoZoomFactor),
-                               currentDevice.maxAvailableVideoZoomFactor)
+            // Calculate zoom factor relative to the current lens's base zoom
+            let baseZoom = currentLens.zoomFactor // e.g., 1.0 for wide, 5.0 for telephoto
+            let relativeZoom = factor / baseZoom  // Target factor relative to the current physical lens
             
-            // Apply zoom smoothly
-            currentDevice.ramp(toVideoZoomFactor: zoomFactor, withRate: 20.0)
+            let zoomFactorClamped = relativeZoom.clamped(to: currentDevice.minAvailableVideoZoomFactor...currentDevice.maxAvailableVideoZoomFactor)
             
+            logger.debug("Slider zoom: Staying on \(currentLens.rawValue)x. Ramping to relative factor \(zoomFactorClamped) (Target: \(factor)")
+            
+            // Use ramp for smooth slider adjustments ON THE SAME LENS
+            currentDevice.ramp(toVideoZoomFactor: zoomFactorClamped, withRate: 30.0) // Increased rate for faster slider response
+
+            // Update the overall zoom factor in the delegate immediately
+            // Use the unclamped target factor for UI consistency
             self.delegate?.didUpdateZoomFactor(factor)
-            self.lastZoomFactor = zoomFactor
-            
+            // self.lastZoomFactor = zoomFactorClamped // Keep track of the actual device zoom
+
             currentDevice.unlockForConfiguration()
         } catch {
-            logger.error("Failed to set zoom: \(error.localizedDescription)")
+            logger.error("Failed to set zoom smoothly via slider: \(error.localizedDescription)")
             self.delegate?.didEncounterError(.configurationFailed)
         }
     }
