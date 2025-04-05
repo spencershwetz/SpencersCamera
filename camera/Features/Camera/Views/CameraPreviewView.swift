@@ -260,6 +260,8 @@ struct CameraPreviewView: UIViewRepresentable {
         private var lastProcessedLensSwitchTimestamp: Date?
         private var currentRotationAngle: CGFloat = 90 // Store current angle (default portrait)
         private var orientationObserver: NSObjectProtocol? // Add observer property
+        private var framesToSkipAfterLensSwitch: Int = 0 // Counter to skip frames after switch
+        private var localFrameCounter: Int = 0 // Local counter for debugging
         
         // Logger for the deprecated UIView
         private let uiViewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewUIView")
@@ -436,20 +438,26 @@ struct CameraPreviewView: UIViewRepresentable {
             self.currentLUTFilter = newFilter
 
             // Check if lens switch timestamp has changed OR if the filter just became active
+            uiViewLogger.trace("    [updateState] Checking for timestamp/filter change...")
             if lastProcessedLensSwitchTimestamp != newTimestamp || filterChanged {
                 if lastProcessedLensSwitchTimestamp != newTimestamp {
-                    uiViewLogger.debug("    [updateState] Timestamp changed (\(self.lastProcessedLensSwitchTimestamp?.description ?? "nil") -> \(newTimestamp)). Lens Switch Detected.")
+                    uiViewLogger.info("    [updateState] DETECTED LENS SWITCH. Timestamp changed (\(self.lastProcessedLensSwitchTimestamp?.description ?? "nil") -> \(newTimestamp)).")
                     lastProcessedLensSwitchTimestamp = newTimestamp
                     // Explicitly remove overlay during lens switch to prevent flash
-                    uiViewLogger.debug("    [updateState] Removing LUT overlay due to lens switch.")
-                    removeLUTOverlay()
+                    uiViewLogger.info("    [updateState] Removing LUT overlay due to lens switch.")
+                    removeLUTOverlay() // Log added inside this func
+                    // *** Set flag to skip the next frame ***
+                    uiViewLogger.info("    [updateState] Setting framesToSkipAfterLensSwitch = 2.")
+                    self.framesToSkipAfterLensSwitch = 2 // Skip the next 2 frames
                 }
                 if filterChanged {
                      uiViewLogger.debug("    [updateState] Filter changed (or became active/inactive). Calling updatePreviewOrientation.")
                 }
+                // Log before calling updatePreviewOrientation in this specific path
+                uiViewLogger.debug("    [updateState] Calling updatePreviewOrientation due to lens switch or filter change.")
                 updatePreviewOrientation() // Update orientation on timestamp change OR filter becoming active
             } else {
-                uiViewLogger.debug("    [updateState] Timestamp and Filter state (active/inactive) unchanged. Not updating preview orientation.")
+                uiViewLogger.trace("    [updateState] Timestamp and Filter state (active/inactive) unchanged. Not updating preview orientation.")
             }
         }
         
@@ -460,9 +468,28 @@ struct CameraPreviewView: UIViewRepresentable {
         // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
         
         func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-            // Reduce logging frequency
-            guard VideoOutputDelegate.frameCounter % 60 == 0 else { return }
-            uiViewLogger.debug("--> CustomPreviewView captureOutput (Frame: \(VideoOutputDelegate.frameCounter))")
+            localFrameCounter += 1 // Use local counter
+            let frameNumber = localFrameCounter // Capture frame number early
+            uiViewLogger.trace("--> [captureOutput ENTRY] Frame: \(frameNumber)")
+            
+            // *** Skip the first few frames immediately after a lens switch ***
+            if framesToSkipAfterLensSwitch > 0 {
+                uiViewLogger.info("--> [captureOutput SKIP] Frame: \(frameNumber). Skipping frame (\(3 - self.framesToSkipAfterLensSwitch)/2) after lens switch. Frames left to skip: \(self.framesToSkipAfterLensSwitch - 1)")
+                framesToSkipAfterLensSwitch -= 1
+                return // Ignore this frame
+            } else {
+                 uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). framesToSkipAfterLensSwitch is 0, proceeding.")
+            }
+
+            // Reduce logging frequency for general processing, but log the first frame after skip attempt
+            if frameNumber % 60 != 0 {
+                // Optionally log the first frame that *isn't* skipped after a switch
+                if let lastSwitchTime = lastProcessedLensSwitchTimestamp,
+                   (CACurrentMediaTime() - Double(truncating: NSNumber(value: lastSwitchTime.timeIntervalSince1970))) < 0.2 { // Log for 200ms after switch
+                   uiViewLogger.debug("--> [captureOutput FIRST PROCESSED] Frame: \(frameNumber) after potential skip.")
+                }
+                // return // Keep original frame skipping for performance, but allow first frame log
+            }
 
             guard let currentLUTFilter = currentLUTFilter,
                   let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
@@ -481,7 +508,7 @@ struct CameraPreviewView: UIViewRepresentable {
                 return // Exit if no LUT filter or no pixel buffer
             }
 
-            uiViewLogger.debug("    [captureOutput] LUT Filter ACTIVE. Processing frame.")
+            uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). LUT Filter ACTIVE. Applying filter.")
             // Create CIImage from the pixel buffer
             var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
 
@@ -489,7 +516,7 @@ struct CameraPreviewView: UIViewRepresentable {
             currentLUTFilter.setValue(ciImage, forKey: kCIInputImageKey)
 
             guard let outputImage = currentLUTFilter.outputImage else {
-                uiViewLogger.error("    [captureOutput] Failed to apply LUT filter to image.") // Updated log message
+                uiViewLogger.error("    [captureOutput] Frame: \(frameNumber). Failed to apply LUT filter to image.")
                 return
             }
             
@@ -499,16 +526,35 @@ struct CameraPreviewView: UIViewRepresentable {
             let originalHeight = CVPixelBufferGetHeight(pixelBuffer)
             let targetRect = CGRect(x: 0, y: 0, width: originalWidth, height: originalHeight)
             
+            uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). Filter applied. Creating CGImage.")
             guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else {
-                 uiViewLogger.error("    [captureOutput] Failed create CGImage from filtered output.")
+                 uiViewLogger.error("    [captureOutput] Frame: \(frameNumber). Failed create CGImage from filtered output.")
                  return
             }
 
-            uiViewLogger.debug("    [captureOutput] CGImage created. Preparing to update overlay on main thread.")
+            uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). CGImage created. Dispatching to main thread for overlay update.")
             // Create or update overlay on main thread
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                self.uiViewLogger.debug("    [captureOutput] Running on main thread to update LUTOverlayLayer.")
+                
+                // *** Check isLensSwitching AGAIN on main thread ***
+                // If a lens switch started *after* background processing but *before* this block runs, skip update.
+                if self.framesToSkipAfterLensSwitch > 0 {
+                     self.uiViewLogger.warning("    [captureOutput MAIN THREAD] Frame: \(frameNumber). Skipping overlay update as framesToSkipAfterLensSwitch (\(self.framesToSkipAfterLensSwitch)) > 0. This should ideally not happen.")
+                     return
+                }
+
+                // *** Check frame skipping counter AGAIN on main thread ***
+                // This check is likely redundant now as the check at the start of captureOutput should handle it,
+                // but keeping it as a safety measure won't hurt. If a switch happened EXACTLY between
+                // the check in captureOutput and this block running, this *might* catch it.
+                if self.framesToSkipAfterLensSwitch > 0 {
+                     self.uiViewLogger.warning("    [captureOutput MAIN THREAD] Frame: \(frameNumber). Skipping overlay update as framesToSkipAfterLensSwitch (\(self.framesToSkipAfterLensSwitch)) > 0. This should ideally not happen.")
+                     return
+                }
+
+                let currentFrameNumber = frameNumber // Capture frame number for async block
+                self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Running on main thread to update LUTOverlayLayer.")
                 
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
@@ -538,23 +584,24 @@ struct CameraPreviewView: UIViewRepresentable {
                     
                     // *** Ensure orientation is correct JUST before adding first overlay ***
                     self.updatePreviewOrientation()
-                    uiViewLogger.debug("    [captureOutput] Called updatePreviewOrientation just before adding first overlay.")
+                    uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Called updatePreviewOrientation just before adding first overlay.")
 
                     self.previewLayer.addSublayer(overlayLayer)
-
-                    // REMOVED - Redundant with updatePreviewOrientation call in updateState
+                    self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Added NEW LUTOverlayLayer.") // Log new layer
                 }
                 
                 CATransaction.commit()
-                self.uiViewLogger.debug("    [captureOutput] Finished updating LUTOverlayLayer on main thread.")
+                self.uiViewLogger.debug("    [captureOutput MAIN THREAD] Frame: \(currentFrameNumber). Finished updating LUTOverlayLayer on main thread.")
             }
         }
         
         // Helper to remove LUT overlay if LUT is disabled
         private func removeLUTOverlay() {
             if let overlay = previewLayer.sublayers?.first(where: { $0.name == "LUTOverlayLayer" }) {
-                uiViewLogger.debug("    [removeLUTOverlay] Removing LUTOverlayLayer.")
+                uiViewLogger.info("    [removeLUTOverlay] Removing existing LUTOverlayLayer.") // Enhanced log
                 overlay.removeFromSuperlayer()
+            } else {
+                uiViewLogger.trace("    [removeLUTOverlay] No LUTOverlayLayer found to remove.") // Added trace log
             }
         }
         
@@ -576,6 +623,7 @@ struct CameraPreviewView: UIViewRepresentable {
             let newAngle: CGFloat
             let deviceOrientation = UIDevice.current.orientation
             let interfaceOrientation = window?.windowScene?.interfaceOrientation ?? .portrait
+            uiViewLogger.trace("    [updatePreviewOrientation] Device: \(deviceOrientation.rawValue), Interface: \(interfaceOrientation.rawValue)") // Log source orientations
             
             // Prioritize valid device orientation
             if deviceOrientation.isValidInterfaceOrientation {
@@ -610,7 +658,7 @@ struct CameraPreviewView: UIViewRepresentable {
             if previewConnection.isVideoRotationAngleSupported(newAngle) {
                 if previewConnection.videoRotationAngle != newAngle {
                     previewConnection.videoRotationAngle = newAngle
-                    uiViewLogger.info("    [updatePreviewOrientation] Updated PREVIEW layer connection angle to \(newAngle)°")
+                    uiViewLogger.info("    [updatePreviewOrientation] --> Updated PREVIEW layer connection angle to \(newAngle)°") // Log success
                 } else {
                     uiViewLogger.debug("    [updatePreviewOrientation] PREVIEW layer connection angle already \(newAngle)°. No change.")
                 }
@@ -634,7 +682,7 @@ struct CameraPreviewView: UIViewRepresentable {
                 if dataOutputConnection.isVideoRotationAngleSupported(newAngle) {
                      if dataOutputConnection.videoRotationAngle != newAngle {
                          dataOutputConnection.videoRotationAngle = newAngle
-                         uiViewLogger.info("    [updatePreviewOrientation] Updated DATA output connection angle to \(newAngle)°")
+                         uiViewLogger.info("    [updatePreviewOrientation] --> Updated DATA output connection angle to \(newAngle)°") // Log success
                      } else {
                          uiViewLogger.debug("    [updatePreviewOrientation] DATA output connection angle already \(newAngle)°. No change.")
                      }
