@@ -2,6 +2,7 @@
 
 import SwiftUI
 import AVFoundation
+import os.log
 
 /// A SwiftUI view that presents a live camera preview using an AVCaptureVideoPreviewLayer.
 /// This implementation locks the preview to a fixed portrait orientation
@@ -9,13 +10,13 @@ import AVFoundation
 struct CameraPreview: UIViewRepresentable {
     private let source: PreviewSource
 
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewImpl")
+
     init(source: PreviewSource) {
         self.source = source
     }
 
     func makeUIView(context: Context) -> PreviewView {
-        // Lock the orientation to portrait
-        CameraOrientationLock.lockToPortrait()
         let preview = PreviewView()
         source.connect(to: preview)
         return preview
@@ -27,7 +28,6 @@ struct CameraPreview: UIViewRepresentable {
     
     static func dismantleUIView(_ uiView: PreviewView, coordinator: ()) {
         // Maintain portrait orientation when view is dismantled
-        CameraOrientationLock.lockToPortrait()
     }
 
     /// A UIView whose backing layer is AVCaptureVideoPreviewLayer.
@@ -41,6 +41,8 @@ struct CameraPreview: UIViewRepresentable {
             layer as! AVCaptureVideoPreviewLayer
         }
         
+        private let viewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewImpl.PreviewView")
+        
         init() {
             super.init(frame: .zero)
             backgroundColor = .black
@@ -52,20 +54,26 @@ struct CameraPreview: UIViewRepresentable {
         }
         
         func setSession(_ session: AVCaptureSession) {
+            viewLogger.info("Setting session on PreviewView.")
             previewLayer.session = session
             previewLayer.videoGravity = .resizeAspectFill
             
             if let connection = previewLayer.connection {
                 // Force a fixed rotation to portrait (90 degrees)
                 if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                    print("DEBUG: Set videoRotationAngle to 90 (portrait fixed)")
+                    let currentAngle = connection.videoRotationAngle
+                    if currentAngle != 90 {
+                        connection.videoRotationAngle = 90
+                        viewLogger.info("Set previewLayer connection videoRotationAngle from \(currentAngle)° to 90° (portrait fixed)")
+                    } else {
+                        viewLogger.debug("PreviewLayer connection videoRotationAngle already 90°.")
+                    }
                 } else {
-                    print("DEBUG: videoRotationAngle 90 not supported")
+                    viewLogger.warning("PreviewLayer connection does not support videoRotationAngle 90°.")
                 }
-                print("DEBUG: Current videoRotationAngle: \(connection.videoRotationAngle)")
+                viewLogger.debug("Current previewLayer connection videoRotationAngle: \(connection.videoRotationAngle)°")
             } else {
-                print("DEBUG: No connection available on previewLayer")
+                viewLogger.warning("No connection available on previewLayer to set orientation.")
             }
         }
     }
@@ -86,6 +94,8 @@ protocol PreviewTarget {
 struct DefaultPreviewSource: PreviewSource {
     private let session: AVCaptureSession
     
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewImpl.DefaultSource")
+    
     init(session: AVCaptureSession) {
         self.session = session
     }
@@ -104,8 +114,15 @@ struct DefaultPreviewSource: PreviewSource {
         
         // Force portrait orientation
         if let connection = previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
-            print("DEBUG: DefaultPreviewSource set rotation to 90°")
+            let currentAngle = connection.videoRotationAngle
+            if currentAngle != 90 {
+                connection.videoRotationAngle = 90
+                logger.info("DefaultPreviewSource set rotation from \(currentAngle)° to 90° in makeUIView")
+            } else {
+                logger.debug("DefaultPreviewSource rotation already 90° in makeUIView.")
+            }
+        } else {
+            logger.warning("DefaultPreviewSource could not set rotation to 90° in makeUIView (supported: \(previewLayer.connection?.isVideoRotationAngleSupported(90) ?? false))")
         }
         
         // Add preview layer to view
@@ -122,7 +139,15 @@ struct DefaultPreviewSource: PreviewSource {
         
         // Force portrait orientation
         if let connection = previewLayer.connection, connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
+            let currentAngle = connection.videoRotationAngle
+            if currentAngle != 90 {
+                connection.videoRotationAngle = 90
+                logger.info("DefaultPreviewSource set rotation from \(currentAngle)° to 90° in updateUIView")
+            } else {
+                logger.debug("DefaultPreviewSource rotation already 90° in updateUIView.")
+            }
+        } else {
+            logger.warning("DefaultPreviewSource could not set rotation to 90° in updateUIView (supported: \(previewLayer.connection?.isVideoRotationAngleSupported(90) ?? false))")
         }
         
         // Update frame to match view

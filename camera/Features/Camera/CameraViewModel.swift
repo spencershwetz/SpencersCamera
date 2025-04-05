@@ -5,10 +5,27 @@ import VideoToolbox
 import CoreVideo
 import os.log
 import CoreImage
+import CoreMedia
 
-class CameraViewModel: NSObject, ObservableObject {
+extension CFString {
+    var string: String {
+        self as String
+    }
+}
+
+extension AVCaptureDevice.Format {
+    var dimensions: CMVideoDimensions? {
+        CMVideoFormatDescriptionGetDimensions(formatDescription)
+    }
+}
+
+class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     // Add property to track the view containing the camera preview
     weak var owningView: UIView?
+    
+    // Flashlight manager
+    private let flashlightManager = FlashlightManager()
+    private var settingsObserver: NSObjectProtocol?
     
     enum Status {
         case unknown
@@ -24,17 +41,34 @@ class CameraViewModel: NSObject, ObservableObject {
     }
     @Published var captureMode: CaptureMode = .video
     
-    private let logger = Logger(subsystem: "com.camera", category: "CameraViewModel")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModel")
     
     @Published var isSessionRunning = false
     @Published var error: CameraError?
     @Published var whiteBalance: Float = 5000 // Kelvin
     @Published var iso: Float = 100
     @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60)
-    @Published var isRecording = false
+    @Published var isRecording = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+            
+            // Handle flashlight state based on recording state
+            let settings = SettingsModel()
+            if isRecording && settings.isFlashlightEnabled {
+                Task {
+                    await flashlightManager.performStartupSequence()
+                }
+            } else {
+                flashlightManager.cleanup()
+            }
+        }
+    }
     @Published var recordingFinished = false
     @Published var isSettingsPresented = false
     @Published var isProcessingRecording = false
+    
+    // Add thumbnail property
+    @Published var lastRecordedVideoThumbnail: UIImage?
     
     // Storage for temporarily disabling LUT preview without losing the filter
     var tempLUTFilter: CIFilter? {
@@ -47,7 +81,7 @@ class CameraViewModel: NSObject, ObservableObject {
         }
     }
     
-    @Published var isAppleLogEnabled = false {
+    @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
         didSet {
             print("\n=== Apple Log Toggle ===")
             print("🔄 Status: \(status)")
@@ -61,21 +95,52 @@ class CameraViewModel: NSObject, ObservableObject {
                 return
             }
             
+            // Capture necessary values before the Task
+            let logEnabled = self.isAppleLogEnabled
+            let currentLensVal = self.currentLens.rawValue
+            let formatService = self.videoFormatService // Assume services are Sendable or actors
+            let deviceService = self.cameraDeviceService // Assume services are Sendable or actors
+            let logger = self.logger // Logger is Sendable
+
             Task {
+                logger.info("🚀 Starting Task to configure Apple Log to \(logEnabled) for lens: \(currentLensVal)x")
                 do {
-                    if isAppleLogEnabled {
-                        print("🎥 Configuring Apple Log...")
-                        try await configureAppleLog()
+                    // Update the service state first
+                    formatService?.setAppleLogEnabled(logEnabled) // Use captured value
+                    
+                    // Asynchronously configure the format
+                    if logEnabled {
+                        logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.configureAppleLog() // Use captured service
+                        logger.info("✅ Successfully completed configureAppleLog() device preparation.")
                     } else {
-                        print("↩️ Resetting Apple Log...")
-                        try await resetAppleLog()
+                        logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.resetAppleLog() // Use captured service
+                        logger.info("✅ Successfully completed resetAppleLog() device preparation.")
+                    }
+                    
+                    // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
+                    logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
+                    guard let deviceService = deviceService else { throw CameraError.setupFailed }
+                    try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
+                    logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
+
+                    logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(logEnabled)) successfully.")
+                } catch let error as CameraError {
+                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
+                    // Update error on main thread
+                    Task { @MainActor in
+                        self.error = error
                     }
                 } catch {
-                    await MainActor.run {
-                        self.error = .configurationFailed
+                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
+                    let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
+                    // Update error on main thread
+                    Task { @MainActor in
+                        self.error = wrappedError
                     }
-                    logger.error("Failed to configure Apple Log: \(error.localizedDescription)")
-                    print("❌ Apple Log configuration failed: \(error)")
                 }
             }
             print("=== End Apple Log Toggle ===\n")
@@ -87,8 +152,14 @@ class CameraViewModel: NSObject, ObservableObject {
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
     
-    private let movieOutput = AVCaptureMovieFileOutput()
+    // Video recording properties
+    private var assetWriter: AVAssetWriter?
+    private var assetWriterInput: AVAssetWriterInput?
+    private var assetWriterPixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var videoDataOutput: AVCaptureVideoDataOutput?
+    private var audioDataOutput: AVCaptureAudioDataOutput?
     private var currentRecordingURL: URL?
+    private var recordingStartTime: CMTime?
     
     private var defaultFormat: AVCaptureDevice.Format?
     
@@ -122,6 +193,60 @@ class CameraViewModel: NSObject, ObservableObject {
         device?.activeFormat.videoSupportedFrameRateRanges.first
     }
     
+    // Resolution settings
+    enum Resolution: String, CaseIterable {
+        case uhd = "4K (3840x2160)"
+        case hd = "HD (1920x1080)"
+        case sd = "720p (1280x720)"
+        
+        var dimensions: CMVideoDimensions {
+            switch self {
+            case .uhd: return CMVideoDimensions(width: 3840, height: 2160)
+            case .hd: return CMVideoDimensions(width: 1920, height: 1080)
+            case .sd: return CMVideoDimensions(width: 1280, height: 720)
+            }
+        }
+    }
+    
+    @Published var selectedResolution: Resolution = .uhd {
+        didSet {
+            Task {
+                do {
+                    try await videoFormatService.updateCameraFormat(for: selectedResolution)
+                } catch {
+                    print("Error updating camera format: \(error)")
+                    self.error = .configurationFailed
+                }
+            }
+        }
+    }
+    
+    // Codec settings
+    enum VideoCodec: String, CaseIterable {
+        case hevc = "HEVC (H.265)"
+        case proRes = "Apple ProRes"
+        
+        var avCodecKey: AVVideoCodecType {
+            switch self {
+            case .hevc: return .hevc
+            case .proRes: return .proRes422HQ
+            }
+        }
+        
+        var bitrate: Int {
+            switch self {
+            case .hevc: return 50_000_000 // Increased to 50 Mbps for 4:2:2
+            case .proRes: return 0 // ProRes doesn't use bitrate control
+            }
+        }
+    }
+    
+    @Published var selectedCodec: VideoCodec = .hevc { // Set HEVC as default codec
+        didSet {
+            updateVideoConfiguration()
+        }
+    }
+    
     private var videoConfiguration: [String: Any] = [
         AVVideoCodecKey: AVVideoCodecType.proRes422,
         AVVideoCompressionPropertiesKey: [
@@ -147,27 +272,105 @@ class CameraViewModel: NSObject, ObservableObject {
     
     @Published var isAutoExposureEnabled: Bool = true {
         didSet {
-            updateExposureMode()
+            exposureService.setAutoExposureEnabled(isAutoExposureEnabled)
         }
     }
     
     @Published var lutManager = LUTManager()
     private var ciContext = CIContext()
     
-    private var orientationMonitorTimer: Timer?
-    
-    // Temporarily disable the orientation enforcement during recording
-    private var isOrientationLocked = false
+    // Add flag to lock orientation updates during recording
+    private var recordingOrientationLocked = false
     
     // Save the original rotation values to restore them after recording
     private var originalRotationValues: [AVCaptureConnection: CGFloat] = [:]
+    
+    @Published var currentLens: CameraLens = .wide
+    @Published var availableLenses: [CameraLens] = []
+    
+    @Published var currentZoomFactor: CGFloat = 1.0
+    private var lastZoomFactor: CGFloat = 1.0
+    
+    // HEVC Hardware Encoding Properties
+    private var compressionSession: VTCompressionSession?
+    private let encoderQueue = DispatchQueue(label: "com.camera.encoder", qos: .userInteractive)
+    
+    // Add constants that are missing from VideoToolbox
+    private enum VTConstants {
+        static let hardwareAcceleratorOnly = "EnableHardwareAcceleratedVideoEncoder" as CFString
+        static let priority = "Priority" as CFString
+        static let priorityRealtimePreview = "RealtimePreview" as CFString
+        
+        // Color space constants for HEVC
+        static let primariesITUR709 = "ITU_R_709_2"
+        static let primariesBT2020 = "ITU_R_2020"
+        static let yCbCrMatrix2020 = "ITU_R_2020"
+        static let yCbCrMatrixITUR709 = "ITU_R_709_2"
+        
+        // HEVC Profile constants
+        static let hevcMain422_10Profile = "HEVC_Main42210_AutoLevel"
+    }
+    
+    private var encoderSpecification: [CFString: Any] {
+        [
+            kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true,
+            kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true
+        ]
+    }
+    
+    // Store recording orientation
+    private var recordingOrientation: CGFloat?
+    
+    // Service Instances
+    private var cameraSetupService: CameraSetupService!
+    private var exposureService: ExposureService!
+    private var recordingService: RecordingService!
+    private var cameraDeviceService: CameraDeviceService!
+    private var videoFormatService: VideoFormatService!
+    
+    @Published var lastLensSwitchTimestamp = Date()
+    
+    // Logger for orientation specific logs
+    private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModelOrientation")
     
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
         
+        // Initialize services
+        setupServices()
+        
+        // Add observer for flashlight settings changes
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .flashlightSettingChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let settings = SettingsModel()
+            if self.isRecording && settings.isFlashlightEnabled {
+                self.flashlightManager.isEnabled = true
+                self.flashlightManager.intensity = settings.flashlightIntensity
+            } else {
+                self.flashlightManager.isEnabled = false
+            }
+        }
+        
+        // Add observer for bake in LUT setting changes
+        NotificationCenter.default.addObserver(
+            forName: .bakeInLUTSettingChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            let settings = SettingsModel()
+            self.recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        }
+        
         do {
-            try setupSession()
+            try cameraSetupService.setupSession()
+            
             if let device = device {
                 print("📊 Device Capabilities:")
                 print("- Name: \(device.localizedName)")
@@ -177,1055 +380,608 @@ class CameraViewModel: NSObject, ObservableObject {
                     format.supportedColorSpaces.contains(.appleLog)
                 }
                 print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+                
+                // Set initial Apple Log state based on current color space
+                isAppleLogEnabled = device.activeColorSpace == .appleLog
+                
+                print("Initial Apple Log Enabled state based on activeColorSpace: \(isAppleLogEnabled)")
+                print("=== End Initialization ===\n")
             }
-            print("=== End Initialization ===\n")
             
             if let device = device {
                 defaultFormat = device.activeFormat
             }
-            
-            isAppleLogSupported = device?.formats.contains { format in
-                format.supportedColorSpaces.contains(.appleLog)
-            } ?? false
         } catch {
             self.error = .setupFailed
             print("Failed to setup session: \(error)")
         }
         
+        // Add orientation change observer
+        // REMOVED: Orientation is now handled solely within CameraPreviewView
+        /*
         orientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
             queue: .main) { [weak self] _ in
-                guard let self = self,
-                      let connection = self.movieOutput.connection(with: .video) else { return }
-                self.updateVideoRotationAngle(connection)
+                guard let self = self else { return }
+                guard !self.isRecording else {
+                    self.logger.debug("Orientation changed during recording, skipping connection angle update.")
+                    return
+                }
+                self.applyCurrentOrientationToConnections()
         }
+        */
         
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.updateShutterAngle(180.0)
-        }
+        // Set initial shutter angle
+        updateShutterAngle(180.0)
         
         print("📱 LUT Loading: No default LUTs will be loaded")
-        
-        startOrientationMonitoring()
     }
     
     deinit {
-        orientationMonitorTimer?.invalidate()
-        orientationMonitorTimer = nil
-        
+        // REMOVED: Orientation observer removal
+        /*
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        */
+        
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        
+        flashlightManager.cleanup()
     }
     
-    private func findBestAppleLogFormat(_ device: AVCaptureDevice) -> AVCaptureDevice.Format? {
-        return device.formats.first { format in
-            let desc = format.formatDescription
-            let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-            let codecType = CMFormatDescriptionGetMediaSubType(desc)
-            
-            let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-            let isProRes422 = (codecType == kCMVideoCodecType_AppleProRes422)
-            let hasAppleLog = format.supportedColorSpaces.contains(.appleLog)
-            
-            return is4K && isProRes422 && hasAppleLog
-        }
-    }
-    
-    private func configureAppleLog() async throws {
-        guard let device = device else {
-            print("❌ No camera device available")
-            return
-        }
-        
-        print("\n=== Apple Log Configuration ===")
-        print("🎥 Current device: \(device.localizedName)")
-        print("📊 Current format: \(device.activeFormat.formatDescription)")
-        print("🎨 Current color space: \(device.activeColorSpace.rawValue)")
-        print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
-        
-        session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        
-        let supportsAppleLog = device.formats.contains { format in
-            format.supportedColorSpaces.contains(.appleLog)
-        }
-        print("✓ Device supports Apple Log: \(supportsAppleLog)")
-        
-        do {
-            session.stopRunning()
-            print("⏸️ Session stopped for reconfiguration")
-            
-            try await Task.sleep(for: .milliseconds(100))
-            session.beginConfiguration()
-            
-            try device.lockForConfiguration()
-            defer {
-                device.unlockForConfiguration()
-                session.commitConfiguration()
-                
-                if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoRotationAngle(videoConnection, lockCamera: true)
-                }
-                
-                session.startRunning()
-            }
-            
-            if let format = device.formats.first(where: {
-                let desc = $0.formatDescription
-                let dimensions = CMVideoFormatDescriptionGetDimensions(desc)
-                let codecType = CMFormatDescriptionGetMediaSubType(desc)
-                
-                let is4K = (dimensions.width == 3840 && dimensions.height == 2160)
-                let isProRes = (codecType == kCMVideoCodecType_AppleProRes422 ||
-                              codecType == kCMVideoCodecType_AppleProRes422HQ ||
-                              codecType == 2016686642)
-                let hasAppleLog = $0.supportedColorSpaces.contains(.appleLog)
-                
-                return (is4K || dimensions.width >= 1920) && isProRes && hasAppleLog
-            }) {
-                print("✅ Found suitable Apple Log format")
-                
-                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
-                device.activeVideoMinFrameDuration = duration
-                device.activeVideoMaxFrameDuration = duration
-                
-                device.activeFormat = format
-                device.activeColorSpace = .appleLog
-                print("🎨 Set color space to Apple Log")
-                
-                print("✅ Successfully configured Apple Log format")
-            } else {
-                print("❌ No suitable Apple Log format found")
-                throw CameraError.configurationFailed
-            }
-            
-            print("💾 Configuration committed")
-            print("▶️ Session restarted")
-            
-        } catch {
-            print("❌ Error configuring Apple Log: \(error.localizedDescription)")
-            device.unlockForConfiguration()
-            session.commitConfiguration()
-            session.startRunning()
-            await MainActor.run {
-                self.error = .configurationFailed
-            }
-            print("🔄 Attempting session recovery")
-            throw error
-        }
-        
-        print("=== End Apple Log Configuration ===\n")
-    }
-    
-    private func resetAppleLog() async throws {
-        guard let device = device else {
-            print("❌ No camera device available")
-            return
-        }
-        
-        print("\n=== Resetting Apple Log Configuration ===")
-        print("🎨 Wide color enabled: \(session.automaticallyConfiguresCaptureDeviceForWideColor)")
-        
-        session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        
-        do {
-            session.stopRunning()
-            session.beginConfiguration()
-            
-            try device.lockForConfiguration()
-            defer {
-                device.unlockForConfiguration()
-                session.commitConfiguration()
-                
-                if let videoConnection = movieOutput.connection(with: .video) {
-                    updateVideoRotationAngle(videoConnection, lockCamera: true)
-                }
-                
-                session.startRunning()
-            }
-            
-            if let defaultFormat = defaultFormat {
-                device.activeFormat = defaultFormat
-            }
-            device.activeColorSpace = .sRGB
-            
-            session.commitConfiguration()
-            session.startRunning()
-            
-            print("✅ Successfully reset to sRGB color space")
-        } catch {
-            print("❌ Error resetting Apple Log: \(error.localizedDescription)")
-            self.error = .configurationFailed
-            session.startRunning()
-        }
-        
-        print("=== End Reset ===\n")
-    }
-    
-    private func setupSession() throws {
-        print("DEBUG: 🎥 Setting up camera session")
-        session.automaticallyConfiguresCaptureDeviceForWideColor = false
-        session.beginConfiguration()
-        
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                                    for: .video,
-                                                    position: .back) else {
-            print("DEBUG: ❌ No camera device available")
-            error = .cameraUnavailable
-            status = .failed
-            session.commitConfiguration()
-            return
-        }
-        
-        print("DEBUG: ✅ Found camera device: \(videoDevice.localizedName)")
-        self.device = videoDevice
-        
-        do {
-            let input = try AVCaptureDeviceInput(device: videoDevice)
-            self.videoDeviceInput = input
-            
-            if isAppleLogEnabled, let appleLogFormat = findBestAppleLogFormat(videoDevice) {
-                let frameRateRange = appleLogFormat.videoSupportedFrameRateRanges.first!
-                try videoDevice.lockForConfiguration()
-                videoDevice.activeVideoMinFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.maxFrameRate))
-                videoDevice.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: Int32(frameRateRange.minFrameRate))
-                videoDevice.activeFormat = appleLogFormat
-                videoDevice.activeColorSpace = .appleLog
-                print("Initial setup: Enabled Apple Log in 4K ProRes format")
-                videoDevice.unlockForConfiguration()
-            }
-            
-            if session.canAddInput(input) {
-                session.addInput(input)
-                print("DEBUG: ✅ Added video input to session")
-            } else {
-                print("DEBUG: ❌ Failed to add video input to session")
-            }
-            
-            if let audioDevice = AVCaptureDevice.default(for: .audio),
-               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
-                print("DEBUG: ✅ Added audio input to session")
-            }
-            
-            if session.canAddOutput(movieOutput) {
-                session.addOutput(movieOutput)
-                print("DEBUG: ✅ Added movie output to session")
-                
-                movieOutput.movieFragmentInterval = .invalid
-                
-                if let connection = movieOutput.connection(with: .video) {
-                    if connection.isVideoStabilizationSupported {
-                        connection.preferredVideoStabilizationMode = .auto
-                    }
-                    updateVideoRotationAngle(connection, lockCamera: true)
-                }
-            } else {
-                print("DEBUG: ❌ Failed to add movie output to session")
-            }
-            
-            if let device = device {
-                try device.lockForConfiguration()
-                let duration = CMTimeMake(value: 1000, timescale: Int32(selectedFrameRate * 1000))
-                device.activeVideoMinFrameDuration = duration
-                device.activeVideoMaxFrameDuration = duration
-                device.unlockForConfiguration()
-                print("DEBUG: ✅ Set frame rate to \(selectedFrameRate) fps")
-            }
-            
-        } catch {
-            print("Error setting up camera: \(error)")
-            self.error = .setupFailed
-            session.commitConfiguration()
-            return
-        }
-        
-        session.commitConfiguration()
-        print("DEBUG: ✅ Session configuration committed")
-        
-        if session.canSetSessionPreset(.hd4K3840x2160) {
-            session.sessionPreset = .hd4K3840x2160
-            print("DEBUG: ✅ Using 4K preset")
-        } else if session.canSetSessionPreset(.hd1920x1080) {
-            session.sessionPreset = .hd1920x1080
-            print("DEBUG: ✅ Using 1080p preset")
-        }
-        
-        // Request camera permissions if needed
-        checkCameraPermissionsAndStart()
-        
-        isAppleLogSupported = device?.formats.contains { format in
-            format.supportedColorSpaces.contains(.appleLog)
-        } ?? false
-        
-        defaultFormat = device?.activeFormat
-    }
-    
-    private func checkCameraPermissionsAndStart() {
-        let cameraAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-        
-        switch cameraAuthorizationStatus {
-        case .authorized:
-            print("DEBUG: ✅ Camera access already authorized")
-            startCameraSession()
-            
-        case .notDetermined:
-            print("DEBUG: 🔄 Requesting camera authorization...")
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                if granted {
-                    print("DEBUG: ✅ Camera access granted")
-                    self.startCameraSession()
-                } else {
-                    print("DEBUG: ❌ Camera access denied")
-                    DispatchQueue.main.async {
-                        self.error = .unauthorized
-                        self.status = .unauthorized
-                    }
-                }
-            }
-            
-        case .denied, .restricted:
-            print("DEBUG: ❌ Camera access denied or restricted")
-            DispatchQueue.main.async {
-                self.error = .unauthorized
-                self.status = .unauthorized
-            }
-            
-        @unknown default:
-            print("DEBUG: ❓ Unknown camera authorization status")
-            startCameraSession()
-        }
-    }
-    
-    private func startCameraSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            
-            print("DEBUG: 🎬 Starting camera session...")
-            if !self.session.isRunning {
-                self.session.startRunning()
-                
-                DispatchQueue.main.async {
-                    self.isSessionRunning = self.session.isRunning
-                    self.status = self.session.isRunning ? .running : .failed
-                    print("DEBUG: 📷 Camera session running: \(self.session.isRunning)")
-                }
-            } else {
-                print("DEBUG: ⚠️ Camera session already running")
-                
-                DispatchQueue.main.async {
-                    self.isSessionRunning = true
-                    self.status = .running
-                }
-            }
-        }
+    private func setupServices() {
+        // Initialize services with self as delegate
+        cameraSetupService = CameraSetupService(session: session, delegate: self)
+        exposureService = ExposureService(delegate: self)
+        recordingService = RecordingService(session: session, delegate: self)
+        videoFormatService = VideoFormatService(session: session, delegate: self)
+        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
     }
     
     func updateWhiteBalance(_ temperature: Float) {
-        guard let device = device else { return }
-        do {
-            try device.lockForConfiguration()
-            let tnt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: temperature, tint: 0.0)
-            var gains = device.deviceWhiteBalanceGains(for: tnt)
-            let maxGain = device.maxWhiteBalanceGain
-            
-            gains.redGain   = min(max(1.0, gains.redGain), maxGain)
-            gains.greenGain = min(max(1.0, gains.greenGain), maxGain)
-            gains.blueGain  = min(max(1.0, gains.blueGain), maxGain)
-            
-            device.setWhiteBalanceModeLocked(with: gains) { _ in }
-            device.unlockForConfiguration()
-            
-            whiteBalance = temperature
-        } catch {
-            print("White balance error: \(error)")
-            self.error = .configurationFailed
-        }
+        exposureService.updateWhiteBalance(temperature)
     }
     
     func updateISO(_ iso: Float) {
-        guard let device = device else { return }
-        
-        // Get the current device's supported ISO range
-        let minISO = device.activeFormat.minISO
-        let maxISO = device.activeFormat.maxISO
-        
-        print("DEBUG: ISO update requested to \(iso). Device supports range: \(minISO) to \(maxISO)")
-        
-        // Ensure the ISO value is within the supported range
-        let clampedISO = min(max(minISO, iso), maxISO)
-        
-        // Log if clamping occurred
-        if clampedISO != iso {
-            print("DEBUG: Clamped ISO from \(iso) to \(clampedISO) to stay within device limits")
-        }
-        
-        do {
-            try device.lockForConfiguration()
-            
-            // Double check that we're within range before setting
-            device.setExposureModeCustom(duration: device.exposureDuration, iso: clampedISO) { _ in }
-            device.unlockForConfiguration()
-            
-            // Update the published property with the actual value used
-            DispatchQueue.main.async {
-                self.iso = clampedISO
-            }
-            
-            print("DEBUG: Successfully set ISO to \(clampedISO)")
-        } catch {
-            print("❌ ISO error: \(error)")
-            self.error = .configurationFailed
-        }
+        exposureService.updateISO(iso)
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
-        guard let device = device else { return }
-        do {
-            try device.lockForConfiguration()
-            
-            // Get the current device's supported ISO range
-            let minISO = device.activeFormat.minISO
-            let maxISO = device.activeFormat.maxISO
-            
-            // Get current ISO value, either from device or our stored value
-            let currentISO = device.iso
-            
-            // Ensure the ISO value is within the supported range
-            let clampedISO = min(max(minISO, currentISO), maxISO)
-            
-            // If ISO is 0 or outside valid range, use our stored value or minISO as fallback
-            let safeISO: Float
-            if clampedISO <= 0 {
-                safeISO = max(self.iso, minISO)
-                print("DEBUG: Corrected invalid ISO \(currentISO) to \(safeISO)")
-            } else {
-                safeISO = clampedISO
-            }
-            
-            device.setExposureModeCustom(duration: speed, iso: safeISO) { _ in }
-            device.unlockForConfiguration()
-            
-            DispatchQueue.main.async {
-                self.shutterSpeed = speed
-                // Update our stored ISO if we had to correct it
-                if safeISO != currentISO {
-                    self.iso = safeISO
-                }
-            }
-        } catch {
-            print("❌ Shutter speed error: \(error)")
-            self.error = .configurationFailed
-        }
+        exposureService.updateShutterSpeed(speed)
     }
     
-    func startRecording() {
-    guard !isRecording && !isProcessingRecording else { return }
- 
-    let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    let videoName = "recording-\(Date().timeIntervalSince1970).mov"
-    currentRecordingURL = documentsPath.appendingPathComponent(videoName)
- 
-    guard let videoConnection = movieOutput.connection(with: .video),
-          videoConnection.isVideoRotationAngleSupported(0) else {
-        error = .configurationFailed
-        return
-    }
- 
-    let orientation = UIDevice.current.orientation
- 
-    switch orientation {
-    case .portrait:
-        videoConnection.videoRotationAngle = 90
-    case .portraitUpsideDown:
-        videoConnection.videoRotationAngle = 270
-    case .landscapeLeft:
-        videoConnection.videoRotationAngle = 0
-    case .landscapeRight:
-        videoConnection.videoRotationAngle = 180
-    default:
-        videoConnection.videoRotationAngle = 90
-    }
- 
-    movieOutput.startRecording(to: currentRecordingURL!, recordingDelegate: self)
-    isRecording = true
-}
-    
-    func stopRecording() {
-        guard isRecording else {
-            print("Cannot stop recording: No ongoing recording")
-            return
-        }
-        
-        print("Stopping recording...")
-        isProcessingRecording = true
-        movieOutput.stopRecording()
-        
-        // Restore orientation enforcement timer and original settings
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self else { return }
-            
-            // Restore all original rotation values
-            for (connection, angle) in self.originalRotationValues {
-                if connection.isVideoRotationAngleSupported(angle) {
-                    connection.videoRotationAngle = angle
-                    print("DEBUG: Restored connection rotation angle to \(angle)°")
-                }
-            }
-            
-            // Clear saved values
-            self.originalRotationValues.removeAll()
-            
-            // Reinitiate orientation monitoring
-            self.isOrientationLocked = false
-            self.startOrientationMonitoring()
-            
-            // Re-enforce orientation lock for UI
-            self.updateInterfaceOrientation(lockCamera: true)
-        }
-    }
-    
-    private func updateVideoRotationAngle(_ connection: AVCaptureConnection, lockCamera: Bool = false) {
-        let requiredAngles: [CGFloat] = [0, 90, 180, 270]
-        let supportsRotation = requiredAngles.allSatisfy { angle in
-            connection.isVideoRotationAngleSupported(angle)
-        }
-        
-        guard supportsRotation else { return }
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Skip orientation enforcement if video library is presented
-            if AppDelegate.isVideoLibraryPresented {
-                return
-            }
-            
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                let interfaceOrientation = windowScene.interfaceOrientation
-                self.currentInterfaceOrientation = interfaceOrientation
-                
-                if !lockCamera {
-                    switch interfaceOrientation {
-                    case .portrait:
-                        connection.videoRotationAngle = 90
-                    case .portraitUpsideDown:
-                        connection.videoRotationAngle = 270
-                    case .landscapeLeft:
-                        connection.videoRotationAngle = 0
-                    case .landscapeRight:
-                        connection.videoRotationAngle = 180
-                    default:
-                        connection.videoRotationAngle = 90
-                    }
-                } else {
-                    connection.videoRotationAngle = 90
-                    print("DEBUG: Camera orientation locked to fixed angle: 90°")
-                }
-            }
-            
-            if connection.isVideoMirroringSupported {
-                connection.isVideoMirrored = false
-            }
-        }
-    }
-    
-    private func findCompatibleFormat(for fps: Double) -> AVCaptureDevice.Format? {
-        guard let device = device else { return nil }
-        
-        let targetFps = fps
-        let tolerance = 0.01
-        
-        let formats = device.formats.filter { format in
-            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let isHighRes = dimensions.width >= 1920
-            let supportsFrameRate = format.videoSupportedFrameRateRanges.contains { range in
-                if abs(targetFps - 23.976) < 0.001 {
-                    return range.minFrameRate <= (targetFps - tolerance) &&
-                           (targetFps + tolerance) <= range.maxFrameRate
-                } else {
-                    return range.minFrameRate <= targetFps && targetFps <= range.maxFrameRate
-                }
-            }
-            
-            if isAppleLogEnabled {
-                return isHighRes && supportsFrameRate && format.supportedColorSpaces.contains(.appleLog)
-            }
-            return isHighRes && supportsFrameRate
-        }
-        
-        return formats.first
+    func updateShutterAngle(_ angle: Double) {
+        exposureService.updateShutterAngle(angle, frameRate: selectedFrameRate)
     }
     
     func updateFrameRate(_ fps: Double) {
-        guard let device = device else { return }
-        
         do {
-            guard let compatibleFormat = findCompatibleFormat(for: fps) else {
-                print("❌ No compatible format found for \(fps) fps")
-                DispatchQueue.main.async {
-                    self.error = .configurationFailed(message: "This device doesn't support \(fps) fps recording")
-                }
-                return
-            }
-            
-            try device.lockForConfiguration()
-            
-            if device.activeFormat != compatibleFormat {
-                print("Switching to compatible format...")
-                device.activeFormat = compatibleFormat
-            }
-            
-            let frameDuration: CMTime
-            switch fps {
-            case 23.976:
-                frameDuration = FrameRates.ntsc23_976
-                print("Setting 23.976 fps with duration \(FrameRates.ntsc23_976.value)/\(FrameRates.ntsc23_976.timescale)")
-            case 29.97:
-                frameDuration = FrameRates.ntsc29_97
-            case 24:
-                frameDuration = FrameRates.film24
-            case 25:
-                frameDuration = FrameRates.pal25
-            case 30:
-                frameDuration = FrameRates.ntsc30
-            default:
-                frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
-            }
-            
-            device.activeVideoMinFrameDuration = frameDuration
-            device.activeVideoMaxFrameDuration = frameDuration
-            
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.selectedFrameRate = fps
-                self.frameCount = 0
-                self.frameRateAccumulator = 0
-                self.lastFrameTime = nil
-            }
-            
-            device.unlockForConfiguration()
-            
-            let currentAngle = shutterAngle
-            updateShutterAngle(currentAngle)
+            try videoFormatService.updateFrameRate(fps)
         } catch {
             print("❌ Frame rate error: \(error)")
-            self.error = .configurationFailed(message: "Failed to set \(fps) fps: \(error.localizedDescription)")
-        }
-    }
-    
-    private func adjustFrameRatePrecision(currentFPS: Double) {
-        let deviation = abs(currentFPS - selectedFrameRate) / selectedFrameRate
-        guard deviation > 0.02 else { return }
-        
-        let now = Date().timeIntervalSince1970
-        guard (now - lastAdjustmentTime) > 1.0 else { return }
-        
-        lastAdjustmentTime = now
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.updateFrameRate(self.selectedFrameRate)
-        }
-    }
-    
-    private var lastAdjustmentTime: TimeInterval = 0
-    
-    func updateInterfaceOrientation(lockCamera: Bool = false) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            print("DEBUG: Enforcing camera orientation lock...")
-            
-            // Update current orientation state
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                self.currentInterfaceOrientation = windowScene.interfaceOrientation
-                
-                // First: Lock movie output connection
-                if let connection = self.movieOutput.connection(with: .video) {
-                    // Always enforce fixed rotation for video
-                    if connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: CameraViewModel enforced fixed angle=90° for video connection")
-                    }
-                    
-                    // Check and set any other connections as well
-                    self.movieOutput.connections.forEach { conn in
-                        if conn !== connection && conn.isVideoRotationAngleSupported(90) && conn.videoRotationAngle != 90 {
-                            conn.videoRotationAngle = 90
-                            print("DEBUG: Set additional connection to 90°")
-                        }
-                    }
-                }
-                
-                // Second: Force all session connections to have fixed rotation
-                self.session.connections.forEach { connection in
-                    if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                        connection.videoRotationAngle = 90
-                        print("DEBUG: Set session connection to 90°")
-                    }
-                }
-                
-                // Third: Check all session outputs and their connections
-                self.session.outputs.forEach { output in
-                    output.connections.forEach { connection in
-                        if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                            connection.videoRotationAngle = 90
-                            print("DEBUG: Set output connection to 90°")
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func configureHDR() {
-        guard let device = device,
-              device.activeFormat.isVideoHDRSupported else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            device.automaticallyAdjustsVideoHDREnabled = false
-            device.isVideoHDREnabled = true
-            device.unlockForConfiguration()
-        } catch {
-            print("Error configuring HDR: \(error)")
-        }
-    }
-    
-    private func optimizeVideoCapture() {
-        guard let device = device else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            
-            if device.activeFormat.isVideoStabilizationModeSupported(.cinematic) {
-                if let connection = movieOutput.connection(with: .video),
-                   connection.isVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .cinematic
-                }
-            }
-            
-            if device.isFocusModeSupported(.continuousAutoFocus) {
-                device.focusMode = .continuousAutoFocus
-            }
-            
-            // Only set auto exposure if we're in auto mode
-            if isAutoExposureEnabled {
-                if device.isExposureModeSupported(.continuousAutoExposure) {
-                    device.exposureMode = .continuousAutoExposure
-                }
-            } else {
-                // If in manual mode, ensure we have a valid ISO value
-                if device.isExposureModeSupported(.custom) {
-                    // Get the current device's supported ISO range
-                    let minISO = device.activeFormat.minISO
-                    let maxISO = device.activeFormat.maxISO
-                    
-                    // Ensure the ISO value is within the supported range
-                    let clampedISO = min(max(minISO, self.iso), maxISO)
-                    
-                    // Update our stored value if needed
-                    if clampedISO != self.iso {
-                        print("DEBUG: Optimizing video - Clamped ISO from \(self.iso) to \(clampedISO)")
-                        DispatchQueue.main.async {
-                            self.iso = clampedISO
-                        }
-                    }
-                    
-                    device.exposureMode = .custom
-                    device.setExposureModeCustom(duration: device.exposureDuration, 
-                                                iso: clampedISO) { _ in }
-                }
-            }
-            
-            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
-                device.whiteBalanceMode = .continuousAutoWhiteBalance
-            }
-            
-            device.unlockForConfiguration()
-        } catch {
-            print("Error optimizing video capture: \(error)")
-        }
-    }
-    
-    private func configureTintSettings() {
-        guard let device = device else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            if device.isWhiteBalanceModeSupported(.locked) {
-                device.whiteBalanceMode = .locked
-                
-                let currentGains = device.deviceWhiteBalanceGains
-                var newGains = currentGains
-                let tintScale = currentTint / 150.0
-                
-                if tintScale > 0 {
-                    newGains.greenGain = currentGains.greenGain * (1.0 + Float(tintScale))
-                } else {
-                    let magentaScale = 1.0 + Float(abs(tintScale))
-                    newGains.redGain = currentGains.redGain * magentaScale
-                    newGains.blueGain = currentGains.blueGain * magentaScale
-                }
-                
-                let maxGain = device.maxWhiteBalanceGain
-                newGains.redGain = min(max(1.0, newGains.redGain), maxGain)
-                newGains.greenGain = min(max(1.0, newGains.greenGain), maxGain)
-                newGains.blueGain = min(max(1.0, newGains.blueGain), maxGain)
-                
-                device.setWhiteBalanceModeLocked(with: newGains) { _ in }
-            }
-            device.unlockForConfiguration()
-        } catch {
-            print("Error setting tint: \(error.localizedDescription)")
-            self.error = .whiteBalanceError
+            self.error = .configurationFailed
         }
     }
     
     func updateTint(_ newValue: Double) {
         currentTint = newValue.clamped(to: tintRange)
-        configureTintSettings()
+        exposureService.updateTint(currentTint, currentWhiteBalance: whiteBalance)
     }
     
-    var shutterAngle: Double {
-        get {
-            let angle = Double(shutterSpeed.value) / Double(shutterSpeed.timescale) * selectedFrameRate * 360.0
-            let clampedAngle = min(max(angle, 1.1), 360.0)
-            return clampedAngle
+    func updateOrientation(_ orientation: UIInterfaceOrientation) {
+        guard !isRecording else {
+            logger.debug("Interface orientation update skipped during recording.")
+            // Still update the published property so UI elements can rotate
+            self.currentInterfaceOrientation = orientation
+            return
         }
-        set {
-            let clampedAngle = min(max(newValue, 1.1), 360.0)
-            let duration = (clampedAngle/360.0) * (1.0/selectedFrameRate)
-            let time = CMTimeMakeWithSeconds(duration, preferredTimescale: 1000000)
-            updateShutterSpeed(time)
-            DispatchQueue.main.async {
-                self.shutterSpeed = time
-            }
-        }
-    }
-    
-    func updateShutterAngle(_ angle: Double) {
-        self.shutterAngle = angle
-    }
-    
-    private func updateExposureMode() {
-        guard let device = device else { return }
+        self.currentInterfaceOrientation = orientation
         
-        do {
-            try device.lockForConfiguration()
+        print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
+    }
+    
+    func switchToLens(_ lens: CameraLens) {
+        // Remove isRecording argument
+        
+        // Temporarily disable LUT preview during switch to prevent flash
+        logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
+        self.tempLUTFilter = lutManager.currentLUTFilter // Store current filter
+        lutManager.currentLUTFilter = nil // Disable LUT in manager (triggers update in PreviewView -> removeLUTOverlay)
+        
+        // Perform the lens switch
+        cameraDeviceService.switchToLens(lens)
+        
+        // Update the timestamp immediately to trigger orientation update in PreviewView via updateState
+        lastLensSwitchTimestamp = Date()
+        logger.debug("🔄 Lens switch: Updated lastLensSwitchTimestamp to trigger PreviewView orientation update.")
+
+        // Restore LUT filter immediately after initiating the switch.
+        // The PreviewView will handle reapplying it via captureOutput when ready.
+        if let storedFilter = self.tempLUTFilter {
+            self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter immediately.")
+            self.lutManager.currentLUTFilter = storedFilter
+            self.tempLUTFilter = nil // Clear temporary storage
+        } else {
+             self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+        }
+    }
+    
+    func setZoomFactor(_ factor: CGFloat) {
+        // Remove isRecording argument
+        cameraDeviceService.setZoomFactor(factor, currentLens: currentLens, availableLenses: availableLenses)
+    }
+    
+    @MainActor
+    func startRecording() async {
+        logger.info("Attempting to start recording...")
+        // Use the new public `currentDevice` property
+        guard !self.isRecording,
+              self.status == .running,
+              let currentDevice = self.cameraDeviceService?.currentDevice else { // Use the public currentDevice
+            // Log detailed reason for failure
+            // Use the public `currentDevice` in the log message as well
+            logger.warning("Start recording called but conditions not met. isRecording: \(self.isRecording), status: \(String(describing: self.status)), device: \(self.cameraDeviceService?.currentDevice?.localizedName ?? "nil")")
+            return
+        }
+        
+        // Get current settings
+        let settings = SettingsModel()
+        
+        // Update configuration for recording
+        recordingService.setDevice(currentDevice)
+        recordingService.setLUTManager(lutManager)
+        recordingService.setAppleLogEnabled(isAppleLogEnabled)
+        recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        recordingService.setVideoConfiguration(
+            frameRate: selectedFrameRate,
+            resolution: selectedResolution,
+            codec: selectedCodec
+        )
+        
+        // Get current orientation angle for recording
+        let connectionAngle = session.outputs.compactMap { $0.connection(with: .video) }.first?.videoRotationAngle ?? -1 // Use -1 to indicate not found
+        logger.info("Requesting recording start. Current primary video connection angle: \\(connectionAngle)° (This is passed but ignored by RecordingService)")
+
+        // Start recording
+        await recordingService.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
+
+        isRecording = true
+        logger.info("Recording state set to true.")
+        
+        // Notify RotationLockedContainer about recording state change
+        NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+    }
+    
+    @MainActor
+    func stopRecording() async {
+        guard isRecording else { 
+            logger.warning("Stop recording called but not currently recording.")
+            return 
+        }
+        
+        logger.info("Requesting recording stop.")
+        // Stop recording
+        await recordingService.stopRecording()
+        
+        isRecording = false
+        logger.info("Recording state set to false.")
+        
+        // Notify RotationLockedContainer about recording state change
+        NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+
+        // Re-apply fixed portrait orientation to connections after recording stops
+        // REMOVED: No longer needed as applyCurrentOrientationToConnections is mostly empty and orientation is fixed in PreviewView
+        // logger.info("Applying fixed portrait orientation to connections after recording stop.")
+        // applyCurrentOrientationToConnections()
+    }
+    
+    private func updateVideoConfiguration() {
+        // Update recording service with new codec
+        recordingService.setVideoConfiguration(
+            frameRate: selectedFrameRate,
+            resolution: selectedResolution,
+            codec: selectedCodec
+        )
+        
+        print("\n=== Updating Video Configuration ===")
+        print("🎬 Selected Codec: \(selectedCodec.rawValue)")
+        print("🎨 Apple Log Enabled: \(isAppleLogEnabled)")
+        
+        if selectedCodec == .proRes {
+            print("✅ Configured for ProRes recording")
+        } else {
+            print("✅ Configured for HEVC recording")
+            print("📊 Bitrate: \(selectedCodec.bitrate / 1_000_000) Mbps")
+        }
+        
+        print("=== End Video Configuration ===\n")
+    }
+    
+    // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+    
+    // Track frame counts for logging
+    private var videoFrameCount = 0
+    private var audioFrameCount = 0
+    private var successfulVideoFrames = 0
+    private var failedVideoFrames = 0
+    
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let assetWriter = assetWriter,
+              assetWriter.status == .writing else {
+            return
+        }
+        
+        // Handle video data
+        if output == videoDataOutput,
+           let assetWriterInput = assetWriterInput,
+           assetWriterInput.isReadyForMoreMediaData {
             
-            if isAutoExposureEnabled {
-                if device.isExposureModeSupported(.continuousAutoExposure) {
-                    device.exposureMode = .continuousAutoExposure
-                    print("📷 Auto exposure enabled")
-                }
-            } else {
-                if device.isExposureModeSupported(.custom) {
-                    device.exposureMode = .custom
-                    
-                    // Double check ISO range limits
-                    let minISO = device.activeFormat.minISO
-                    let maxISO = device.activeFormat.maxISO
-                    let clampedISO = min(max(minISO, self.iso), maxISO)
-                    
-                    if clampedISO != self.iso {
-                        print("DEBUG: Exposure mode - Clamped ISO from \(self.iso) to \(clampedISO)")
-                        DispatchQueue.main.async {
-                            self.iso = clampedISO
+            videoFrameCount += 1
+            
+            // Log every 30 frames to avoid flooding
+            let shouldLog = videoFrameCount % 30 == 0
+            if shouldLog {
+                print("📽️ Processing video frame #\(videoFrameCount), writer status: \(assetWriter.status.rawValue)")
+            }
+            
+            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {
+                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+                    if let processedImage = applyLUT(to: ciImage, using: lutFilter),
+                       let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
+                        
+                        // Use original timing information
+                        var timing = CMSampleTimingInfo()
+                        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
+                        
+                        // Create format description for processed buffer
+                        var info: CMFormatDescription?
+                        let status = CMVideoFormatDescriptionCreateForImageBuffer(
+                            allocator: kCFAllocatorDefault,
+                            imageBuffer: processedPixelBuffer,
+                            formatDescriptionOut: &info
+                        )
+                        
+                        if status == noErr, let info = info,
+                           let newSampleBuffer = createSampleBuffer(
+                            from: processedPixelBuffer,
+                            formatDescription: info,
+                            timing: &timing
+                           ) {
+                            assetWriterInput.append(newSampleBuffer)
+                            successfulVideoFrames += 1
+                            if shouldLog {
+                                print("✅ Successfully appended processed frame #\(successfulVideoFrames)")
+                            }
+                        } else {
+                            failedVideoFrames += 1
+                            print("⚠️ Failed to create format description for processed frame #\(videoFrameCount), status: \(status)")
                         }
                     }
-                    
-                    device.setExposureModeCustom(duration: device.exposureDuration,
-                                                 iso: clampedISO) { _ in }
-                    print("📷 Manual exposure enabled with ISO \(clampedISO)")
+                } else {
+                    // No LUT processing needed - use original sample buffer directly
+                    assetWriterInput.append(sampleBuffer)
+                    successfulVideoFrames += 1
+                    if shouldLog {
+                        print("✅ Successfully appended original frame #\(successfulVideoFrames)")
+                    }
                 }
             }
-            
-            device.unlockForConfiguration()
-        } catch {
-            print("❌ Error setting exposure mode: \(error.localizedDescription)")
-            self.error = .configurationFailed
+        }
+        
+        // Handle audio data
+        if output == audioDataOutput,
+           let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
+           audioInput.isReadyForMoreMediaData {
+            audioFrameCount += 1
+            audioInput.append(sampleBuffer)
+            if audioFrameCount % 100 == 0 {
+                print("🎵 Processed audio frame #\(audioFrameCount)")
+            }
         }
     }
     
-    func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CIImage? {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            print("DEBUG: No pixel buffer in sample buffer")
+    private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
+        var newPixelBuffer: CVPixelBuffer?
+        CVPixelBufferCreate(kCFAllocatorDefault,
+                           CVPixelBufferGetWidth(template),
+                           CVPixelBufferGetHeight(template),
+                           CVPixelBufferGetPixelFormatType(template),
+                           [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
+                           &newPixelBuffer)
+        
+        guard let outputBuffer = newPixelBuffer else { 
+            print("⚠️ Failed to create pixel buffer from CI image")
+            return nil 
+        }
+        
+        ciContext.render(ciImage, to: outputBuffer)
+        return outputBuffer
+    }
+
+    // Add helper property for tracking keyframes
+    private var lastKeyFrameTime: CMTime?
+
+    // Add helper method for creating sample buffers
+    private func createSampleBuffer(
+        from pixelBuffer: CVPixelBuffer,
+        formatDescription: CMFormatDescription,
+        timing: UnsafeMutablePointer<CMSampleTimingInfo>
+    ) -> CMSampleBuffer? {
+        var sampleBuffer: CMSampleBuffer?
+        let status = CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: formatDescription,
+            sampleTiming: timing,
+            sampleBufferOut: &sampleBuffer
+        )
+        
+        if status != noErr {
+            print("⚠️ Failed to create sample buffer: \(status)")
             return nil
         }
         
-        // Create CIImage from the pixel buffer
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        
-        // Apply LUT filter if available
-        if let lutFilter = lutManager.currentLUTFilter {
-            lutFilter.setValue(ciImage, forKey: kCIInputImageKey)
-            if let outputImage = lutFilter.outputImage {
-                return outputImage
-            } else {
-                // If LUT application fails, return the original image
-                print("DEBUG: LUT filter failed to produce output image, using original")
-                return ciImage
-            }
-        }
-        
-        // No LUT filter applied, return original image
-        return ciImage
+        return sampleBuffer
     }
-    
-    private func enforceFixedOrientation() {
-        guard isSessionRunning && !isOrientationLocked && !isRecording else { return }
-        
-        // Add debug log to track when this is called
-        print("DEBUG: [ORIENTATION-DEBUG] CameraViewModel.enforceFixedOrientation called - AppDelegate.isVideoLibraryPresented = \(AppDelegate.isVideoLibraryPresented)")
-        
-        // If video library is presented, we should not enforce orientation
-        guard !AppDelegate.isVideoLibraryPresented else {
-            print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
-            return
+
+    private func getVideoTransform(for orientation: UIInterfaceOrientation) -> CGAffineTransform {
+        switch orientation {
+        case .portrait:
+            return CGAffineTransform(rotationAngle: .pi/2) // 90 degrees clockwise
+        case .portraitUpsideDown:
+            return CGAffineTransform(rotationAngle: -.pi/2) // 90 degrees counterclockwise
+        case .landscapeLeft: // USB on right
+            return CGAffineTransform(rotationAngle: .pi) // 180 degrees (was .identity)
+        case .landscapeRight: // USB on left
+            return .identity // No rotation (was .pi)
+        default:
+            return .identity
         }
-        
-        // If video library is not presented, enforce camera orientation
+    }
+
+    // MARK: - LUT Processing
+
+    private func applyLUT(to image: CIImage, using filter: CIFilter) -> CIImage? {
+        filter.setValue(image, forKey: kCIInputImageKey)
+        return filter.outputImage
+    }
+
+    // MARK: - Error Handling
+
+    // Common error handler for all delegate protocols
+    func didEncounterError(_ error: CameraError) {
         DispatchQueue.main.async {
-            self.movieOutput.connections.forEach { connection in
-                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                    connection.videoRotationAngle = 90
-                    print("DEBUG: Timer enforced fixed angle=90° on connection")
-                }
-            }
-            
-            self.session.connections.forEach { connection in
-                if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                    connection.videoRotationAngle = 90
-                }
-            }
+            self.error = error
         }
     }
+
+    // MARK: - Video Frame Processing
     
-    private func startOrientationMonitoring() {
-        // Only start if not already locked
-        guard !isOrientationLocked else { return }
-        
-        orientationMonitorTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self = self, !self.isOrientationLocked else { return }
-                
-                // Add debug log
-                if AppDelegate.isVideoLibraryPresented {
-                    print("DEBUG: [ORIENTATION-DEBUG] Orientation timer fired while video library is active")
-                }
-                
-                // Skip enforcing orientation if video library is presented
-                if !AppDelegate.isVideoLibraryPresented {
-                    self.enforceFixedOrientation()
+    func processVideoFrame(_ sampleBuffer: CMSampleBuffer) -> CVPixelBuffer? {
+        // Process the frame if needed, or handle any frame-level logic
+        // For now, just returning the pixel buffer from the sample buffer
+        return CMSampleBufferGetImageBuffer(sampleBuffer)
+    }
+    
+    // MARK: - Orientation Handling (NEW)
+    
+    private func applyCurrentOrientationToConnections() {
+        orientationLogger.debug("--> applyCurrentOrientationToConnections called.")
+        // Add logging here to check videoDataOutput
+        if self.videoDataOutput == nil {
+            orientationLogger.warning("    [applyCurrentOrientation] videoDataOutput is NIL at this point.")
+        } else {
+            orientationLogger.debug("    [applyCurrentOrientation] videoDataOutput is assigned.")
+        }
+
+        // Use UIDevice orientation
+        let deviceOrientation = UIDevice.current.orientation
+        // REMOVE: let targetAngle: CGFloat
+
+        switch deviceOrientation {
+        case .landscapeLeft:
+            // REMOVE: targetAngle = 0
+            orientationLogger.debug("    Device orientation: Landscape Left -> Target Angle: 0°")
+        case .landscapeRight:
+            // REMOVE: targetAngle = 180
+            orientationLogger.debug("    Device orientation: Landscape Right -> Target Angle: 180°")
+        case .portraitUpsideDown:
+            // REMOVE: targetAngle = 270
+            orientationLogger.debug("    Device orientation: Portrait Upside Down -> Target Angle: 270°")
+        case .portrait:
+            // REMOVE: targetAngle = 90
+            orientationLogger.debug("    Device orientation: Portrait -> Target Angle: 90°")
+        default: // Includes .unknown, .faceUp, .faceDown
+            // Fallback to portrait if orientation is invalid or face up/down
+            // REMOVE: targetAngle = 90
+            orientationLogger.debug("    Device orientation: \\(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
+        }
+
+        // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView
+        // The previewLayer's connection orientation should be managed within CustomPreviewView itself (e.g., via forcePortraitOrientation)
+        /* 
+        if let previewLayerConnection = (owningView?.viewWithTag(100) as? CameraPreviewView.CustomPreviewView)?.previewLayer.connection {
+            ... // Removed logic
+        } else {
+            orientationLogger.warning("    Could not get PreviewLayer connection.")
+        }
+        */
+
+        // Apply to Video Data Output connection (The one managed by CameraViewModel/CameraSetupService)
+        // REMOVED: This is handled by RecordingService during recording setup.
+        /*
+        if let videoDataOutputConnection = videoDataOutput?.connection(with: .video) {
+            let connectionID = videoDataOutputConnection.description
+            let previousAngle = videoDataOutputConnection.videoRotationAngle
+            orientationLogger.debug("    Checking VideoDataOutput Connection (\(connectionID)): Current=\(previousAngle)°, Target=\(targetAngle)°")
+            if videoDataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
+                if videoDataOutputConnection.videoRotationAngle != targetAngle {
+                    videoDataOutputConnection.videoRotationAngle = targetAngle
+                    orientationLogger.info("    [applyCurrentOrientation] Updated VideoDataOutput connection \(connectionID) rotation angle from \(previousAngle)° to \(targetAngle)°")
                 } else {
-                    print("DEBUG: [ORIENTATION-DEBUG] Skipping camera orientation enforcement since video library is active")
+                     orientationLogger.debug("    Angle \(targetAngle)° already set for VideoDataOutput connection \(connectionID). No change needed.")
                 }
+            } else {
+                orientationLogger.warning("    Angle \(targetAngle)° not supported for VideoDataOutput connection \(connectionID).")
             }
+        } else {
+             orientationLogger.warning("    Could not get VideoDataOutput connection (ViewModel's instance).") // Clarified which instance
         }
-        
-        print("DEBUG: Started orientation monitoring timer")
+        */
+
+        // Apply to Audio Connection - REMOVED as audioOutput is not directly accessible here
+        /* 
+        if let audioConnection = audioOutput?.connection(with: .audio) {
+            ... // Removed logic
+        } else {
+             orientationLogger.warning("    Could not get AudioOutput connection.")
+        }
+        */
+        orientationLogger.debug("<-- Finished applyCurrentOrientationToConnections")
+    }
+
+    func setCamera(_ device: AVCaptureDevice?) {
+        Task {
+            _ = device?.localizedName ?? "nil" // Assign unused deviceName to _
+//            logger.trace("Setting camera device: \(deviceName)")
+            // ... other logic
+        }
     }
 }
 
-extension CameraViewModel: AVCaptureFileOutputRecordingDelegate {
-    func fileOutput(_ output: AVCaptureFileOutput,
-                    didStartRecordingTo fileURL: URL,
-                    from connections: [AVCaptureConnection]) {
-        print("Recording started successfully")
-        
-        // Ensure connections maintain their orientation settings throughout recording
-        for connection in connections {
-            // Check if this is a video connection
-            if connection.inputPorts.contains(where: { $0.mediaType == .video }) {
-                print("DEBUG: Recording connection rotation angle: \(connection.videoRotationAngle)°")
-                
-                // Update the video orientation based on the interface orientation
-                let requiredAngles: [CGFloat] = [0, 90, 180, 270]
-                let supportsRotation = requiredAngles.allSatisfy { angle in
-                    connection.isVideoRotationAngleSupported(angle)
-                }
-                
-                if supportsRotation {
-                    // Set rotation angle based on current interface orientation
-                    switch currentInterfaceOrientation {
-                    case .portrait:
-                        connection.videoRotationAngle = 90
-                    case .portraitUpsideDown:
-                        connection.videoRotationAngle = 270
-                    case .landscapeLeft:
-                        connection.videoRotationAngle = 0
-                    case .landscapeRight:
-                        connection.videoRotationAngle = 180
-                    default:
-                        connection.videoRotationAngle = 90
-                    }
-                    print("DEBUG: Set recording connection rotation angle to: \(connection.videoRotationAngle)°")
-                }
-            }
-        }
+// MARK: - CustomPreviewViewDelegate (NEW)
+extension CameraViewModel: CustomPreviewViewDelegate {
+    func customPreviewViewDidAddVideoOutput(_ previewView: CameraPreviewView.CustomPreviewView) {
+        orientationLogger.debug("Delegate: CustomPreviewView did add video output. Applying initial orientation.")
+        // Now that we know the output exists, apply the initial orientation
+        // REMOVED: Calls to applyCurrentOrientationToConnections are no longer needed
+        // applyCurrentOrientationToConnections()
+    }
+}
+
+// MARK: - VideoFormatServiceDelegate
+
+extension CameraViewModel: VideoFormatServiceDelegate {
+    func getCurrentFrameRate() -> Double? {
+        return selectedFrameRate
     }
     
-    func fileOutput(_ output: AVCaptureFileOutput,
-                    didFinishRecordingTo outputFileURL: URL,
-                    from connections: [AVCaptureConnection],
-                    error: Error?) {
-        isRecording = false
-        
-        if let error = error {
-            print("Recording failed: \(error.localizedDescription)")
-            DispatchQueue.main.async {
-                self.error = .recordingFailed
-                self.isProcessingRecording = false
-            }
-            return
-        }
-        
-        PHPhotoLibrary.requestAuthorization { [weak self] status in
-            guard status == .authorized else {
-                DispatchQueue.main.async {
-                    self?.error = .savingFailed
-                    self?.isProcessingRecording = false
-                    print("Photo library access denied")
-                }
-                return
-            }
-            
-            PHPhotoLibrary.shared().performChanges({
-                let options = PHAssetResourceCreationOptions()
-                options.shouldMoveFile = true
-                let creationRequest = PHAssetCreationRequest.forAsset()
-                creationRequest.addResource(with: .video,
-                                            fileURL: outputFileURL,
-                                            options: options)
-            }) { success, error in
-                DispatchQueue.main.async {
-                    if success {
-                        print("Video saved to photo library")
-                        self?.recordingFinished = true
-                    } else {
-                        print("Error saving video: \(String(describing: error))")
-                        self?.error = .savingFailed
-                    }
-                    self?.isProcessingRecording = false
-                }
-            }
-        }
+    func getCurrentResolution() -> CameraViewModel.Resolution? {
+        return selectedResolution
     }
-}
-
-private extension Double {
-    func clamped(to range: ClosedRange<Double>) -> Double {
-        return min(max(self, range.lowerBound), range.upperBound)
+    
+    func didUpdateFrameRate(_ frameRate: Double) {
+        // Optionally update UI or state if needed when frame rate changes
+        logger.info("Delegate notified: Frame rate updated to \(frameRate) fps")
     }
 }
 
 extension CameraError {
     static func configurationFailed(message: String = "Camera configuration failed") -> CameraError {
         return .custom(message: message)
+    }
+}
+
+// MARK: - CameraSetupServiceDelegate
+
+extension CameraViewModel: CameraSetupServiceDelegate {
+    func didUpdateSessionStatus(_ status: Status) {
+        DispatchQueue.main.async {
+            self.status = status
+        }
+    }
+    
+    func didInitializeCamera(device: AVCaptureDevice) {
+        self.device = device
+        exposureService.setDevice(device)
+        recordingService.setDevice(device)
+        cameraDeviceService.setDevice(device)
+        videoFormatService.setDevice(device)
+        
+        // Initialize available lenses
+        availableLenses = CameraLens.availableLenses()
+    }
+    
+    func didStartRunning(_ isRunning: Bool) {
+        DispatchQueue.main.async {
+            self.isSessionRunning = isRunning
+        }
+    }
+}
+
+// MARK: - ExposureServiceDelegate
+
+extension CameraViewModel: ExposureServiceDelegate {
+    func didUpdateWhiteBalance(_ temperature: Float) {
+        DispatchQueue.main.async {
+            self.whiteBalance = temperature
+        }
+    }
+    
+    func didUpdateISO(_ iso: Float) {
+        DispatchQueue.main.async {
+            self.iso = iso
+        }
+    }
+    
+    func didUpdateShutterSpeed(_ speed: CMTime) {
+        DispatchQueue.main.async {
+            self.shutterSpeed = speed
+        }
+    }
+}
+
+// MARK: - RecordingServiceDelegate
+
+extension CameraViewModel: RecordingServiceDelegate {
+    func didStartRecording() {
+        // Handled by the isRecording property
+    }
+    
+    func didStopRecording() {
+        // Handled by the isRecording property
+    }
+    
+    func didFinishSavingVideo(thumbnail: UIImage?) {
+        DispatchQueue.main.async {
+            self.recordingFinished = true
+            self.lastRecordedVideoThumbnail = thumbnail
+        }
+    }
+    
+    func didUpdateProcessingState(_ isProcessing: Bool) {
+        DispatchQueue.main.async {
+            self.isProcessingRecording = isProcessing
+        }
+    }
+}
+
+// MARK: - CameraDeviceServiceDelegate
+
+extension CameraViewModel: CameraDeviceServiceDelegate {
+    func didUpdateCurrentLens(_ lens: CameraLens) {
+        logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
+        // Update properties on the main thread
+        DispatchQueue.main.async {
+            self.currentLens = lens
+            self.lastLensSwitchTimestamp = Date() // Trigger preview update
+            self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
+        }
+    }
+    
+    func didUpdateZoomFactor(_ factor: CGFloat) {
+        logger.debug("Delegate: didUpdateZoomFactor called with \(factor)")
+        DispatchQueue.main.async {
+            self.currentZoomFactor = factor
+        }
     }
 }
 

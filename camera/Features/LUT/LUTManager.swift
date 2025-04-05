@@ -1,8 +1,11 @@
 import SwiftUI
 import CoreImage
 import UniformTypeIdentifiers
+import os
 
 class LUTManager: ObservableObject {
+    
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
     
     @Published var currentLUTFilter: CIFilter?
     private var dimension: Int = 0
@@ -262,20 +265,27 @@ class LUTManager: ObservableObject {
         }
     }
     
-    // Applies the LUT to the given CIImage using a freshly created filter instance
+    // Applies the LUT to the given CIImage using the current filter instance
     func applyLUT(to image: CIImage) -> CIImage? {
-        guard let cubeData = self.cubeData else { return nil }
-        
-        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
-        
-        let params: [String: Any] = [
-            "inputCubeDimension": cubeDimension,
-            "inputCubeData": cubeData,
-            "inputColorSpace": colorSpace as Any, // Explicit cast to Any
-            kCIInputImageKey: image
-        ]
-        
-        return CIFilter(name: "CIColorCube", parameters: params)?.outputImage
+        logger.trace("--> applyLUT called") // Use trace for frequent calls
+
+        // Check if a valid LUT filter is currently configured
+        guard let filter = self.currentLUTFilter else {
+            logger.trace("    [applyLUT] No currentLUTFilter set. Returning original image.") // Use trace
+            return image // Return original image if no LUT is active
+        }
+
+        // Apply the existing filter to the new image
+        filter.setValue(image, forKey: kCIInputImageKey)
+
+        // Return the output image
+        let outputImage = filter.outputImage
+        if outputImage != nil {
+            logger.trace("    [applyLUT] Successfully applied existing LUT filter.") // Use trace
+        } else {
+            logger.warning("    [applyLUT] Failed: Existing CIFilter outputImage was nil.") // Use warning
+        }
+        return outputImage
     }
     
     // Creates a basic programmatic LUT when no files are available

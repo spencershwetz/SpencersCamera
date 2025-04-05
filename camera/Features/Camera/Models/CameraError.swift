@@ -9,6 +9,8 @@ enum CameraError: Error, Identifiable {
     case whiteBalanceError
     case unauthorized
     case sessionFailedToStart
+    case deviceUnavailable
+    case invalidDeviceInput
     case custom(message: String)
     
     var id: String { description }
@@ -31,8 +33,12 @@ enum CameraError: Error, Identifiable {
             return "Camera access denied. Please allow camera access in Settings."
         case .sessionFailedToStart:
             return "Failed to start camera session"
+        case .deviceUnavailable:
+            return "Requested camera device is not available"
+        case .invalidDeviceInput:
+            return "Cannot add camera device input to session"
         case .custom(let message):
             return message
         }
     }
-} 
+}
