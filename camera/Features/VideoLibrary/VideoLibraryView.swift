@@ -24,6 +24,7 @@ struct VideoLibraryView: View {
                     )
                 } else {
                     VideosGridView(videos: viewModel.videos, selectedVideo: $viewModel.selectedVideo)
+                        .padding(.top, 44)
                 }
             }
             .navigationTitle("My Videos")

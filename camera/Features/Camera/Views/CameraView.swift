@@ -278,23 +278,27 @@ struct CameraView: View {
                 .foregroundColor(.white)
         }
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
-            print("DEBUG: [ORIENTATION-DEBUG] library fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
+            print("DEBUG: [ORIENTATION-DEBUG] library fullScreenCover onDismiss scheduled - setting AppDelegate.isVideoLibraryPresented = false")
             AppDelegate.isVideoLibraryPresented = false // Lock back to portrait
 
-            // Re-apply portrait lock when dismissing library
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                let orientations: UIInterfaceOrientationMask = [.portrait]
-                let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-                
-                print("DEBUG: Returning to portrait after library")
-                windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                    print("DEBUG: Portrait return result: \(error.localizedDescription)")
-                }
-                
-                for window in windowScene.windows {
-                    window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                }
-            }
+            // Delay orientation change to allow dismissal animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Add 0.5 second delay
+                 print("DEBUG: [ORIENTATION-DEBUG] Executing delayed onDismiss logic for library")
+                 // Re-apply portrait lock when dismissing library
+                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                     let orientations: UIInterfaceOrientationMask = [.portrait]
+                     let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
+                     
+                     print("DEBUG: Returning to portrait after library (delayed)")
+                     windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                         print("DEBUG: Portrait return result: \(error.localizedDescription)")
+                     }
+                     
+                     for window in windowScene.windows {
+                         window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+                     }
+                 }
+             }
         }) {
             // Allow landscape mode within the library view
             OrientationFixView(allowsLandscapeMode: true) {
