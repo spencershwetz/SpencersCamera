@@ -41,10 +41,17 @@ class CameraDeviceService {
     }
     
     private func configureSession(for newDevice: AVCaptureDevice, lens: CameraLens) throws {
+        // === ADDED: Store existing audio input ===
+        let audioInput = session.inputs.first(where: { $0 is AVCaptureDeviceInput && ($0 as! AVCaptureDeviceInput).device.hasMediaType(.audio) }) as? AVCaptureDeviceInput
+        if audioInput != nil {
+            logger.info("🎤 Preserving existing audio input.")
+        }
+        // =========================================
+
         // Remove existing inputs and outputs
         session.inputs.forEach { session.removeInput($0) }
         
-        // Add new input
+        // Add new VIDEO input
         let newInput = try AVCaptureDeviceInput(device: newDevice)
         guard session.canAddInput(newInput) else {
             logger.error("❌ Cannot add input for \(newDevice.localizedName)")
@@ -54,6 +61,18 @@ class CameraDeviceService {
         session.addInput(newInput)
         videoDeviceInput = newInput
         device = newDevice
+
+        // === ADDED: Re-add audio input ===
+        if let audioInput = audioInput {
+            if session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                logger.info("🎤 Re-added preserved audio input.")
+            } else {
+                logger.warning("🎤 Could not re-add preserved audio input.")
+                // Optionally throw an error or handle differently
+            }
+        }
+        // ================================
         
         // Configure the new device
         try newDevice.lockForConfiguration()
