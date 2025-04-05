@@ -232,11 +232,12 @@ class CameraDeviceService {
             
             logger.info("✅ Successfully switched to \(lens.rawValue)× lens")
             
-        } catch {
-            logger.error("❌ Failed to switch lens: \(error.localizedDescription)")
-            session.commitConfiguration()
+        } catch let specificError as CameraError {
+            logger.error("❌ Failed to switch lens: \(specificError.description)")
+            session.commitConfiguration() // Always commit to end configuration block
             
-            // Try to recover by returning to wide angle
+            // REMOVED: Automatic recovery attempt
+            /*
             if lens != .wide {
                 logger.info("🔄 Attempting to recover by switching to wide angle")
                 switchToLens(.wide)
@@ -246,11 +247,31 @@ class CameraDeviceService {
                     self?.delegate?.didEncounterError(.configurationFailed)
                 }
             }
+            */
+           
+            // Propagate the specific error
+            DispatchQueue.main.async { [weak self] in
+                 self?.delegate?.didEncounterError(specificError)
+            }
             
             if wasRunning {
-                session.startRunning()
-            }
-        }
+                 logger.info("▶️ Attempting to restart session after failed lens switch...")
+                 session.startRunning()
+             }
+        } catch {
+             logger.error("❌ Failed to switch lens with unexpected error: \(error.localizedDescription)")
+             session.commitConfiguration() // Always commit to end configuration block
+             
+             // Propagate a generic configuration error for unexpected errors
+             DispatchQueue.main.async { [weak self] in
+                 self?.delegate?.didEncounterError(.configurationFailed(message: "Lens switch failed: \(error.localizedDescription)"))
+             }
+             
+             if wasRunning {
+                 logger.info("▶️ Attempting to restart session after failed lens switch...")
+                 session.startRunning()
+             }
+         }
     }
     
     private func setDigitalZoom(to factor: CGFloat, on device: AVCaptureDevice) {
@@ -399,8 +420,12 @@ class CameraDeviceService {
             // We don't need to remove/re-add the input if we're just changing format/settings on the *same* device.
             // But we do need to call the configuration logic for the current device.
             logger.info("🔧 Calling internal configureSession logic for device: \(currentDevice.localizedName)")
-            try configureSession(for: currentDevice, lens: .wide) // We need a lens, but it's less critical here if device is same
-            // TODO: Revisit if passing .wide is always correct here, or if we need current lens state.
+            
+            // Determine the actual lens enum case corresponding to the current physical device
+            let currentActualLens = CameraLens.allCases.first { $0.deviceType == currentDevice.deviceType } ?? .wide
+            logger.info("🔧 Determined current physical lens for reconfiguration: \(currentActualLens.rawValue)x")
+            
+            try configureSession(for: currentDevice, lens: currentActualLens) // Pass the determined actual lens
             
             logger.info("⚙️ Committing session configuration block.")
             session.commitConfiguration()
