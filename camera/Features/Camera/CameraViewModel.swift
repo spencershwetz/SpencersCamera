@@ -95,44 +95,56 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 return
             }
             
+            // Capture necessary values before the Task
+            let logEnabled = self.isAppleLogEnabled
+            let currentLensVal = self.currentLens.rawValue
+            let formatService = self.videoFormatService // Assume services are Sendable or actors
+            let deviceService = self.cameraDeviceService // Assume services are Sendable or actors
+            let logger = self.logger // Logger is Sendable
+
             Task {
-                let currentLensValue = self.currentLens.rawValue // Capture before async operation
-                self.logger.info("🚀 Starting Task to configure Apple Log to \(self.isAppleLogEnabled) for lens: \(currentLensValue)x")
+                logger.info("🚀 Starting Task to configure Apple Log to \(logEnabled) for lens: \(currentLensVal)x")
                 do {
                     // Update the service state first
-                    self.videoFormatService.setAppleLogEnabled(self.isAppleLogEnabled)
+                    formatService?.setAppleLogEnabled(logEnabled) // Use captured value
                     
                     // Asynchronously configure the format
-                    if self.isAppleLogEnabled {
-                        self.logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
-                        try await self.videoFormatService.configureAppleLog() // Modify this to NOT start/stop session
-                        self.logger.info("✅ Successfully completed configureAppleLog() device preparation.")
+                    if logEnabled {
+                        logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.configureAppleLog() // Use captured service
+                        logger.info("✅ Successfully completed configureAppleLog() device preparation.")
                     } else {
-                        self.logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
-                        try await self.videoFormatService.resetAppleLog() // Modify this to NOT start/stop session
-                        self.logger.info("✅ Successfully completed resetAppleLog() device preparation.")
+                        logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.resetAppleLog() // Use captured service
+                        logger.info("✅ Successfully completed resetAppleLog() device preparation.")
                     }
                     
                     // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
-                    self.logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
-                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
-                    self.logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
+                    logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
+                    guard let deviceService = deviceService else { throw CameraError.setupFailed }
+                    try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
+                    logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
 
                     // Step 3: Explicitly re-apply color space (might be redundant but safe)
-                    self.logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reconfiguration...")
-                    try self.videoFormatService.reapplyColorSpaceSettings()
-                    self.logger.info("✅ Re-applied color space settings after reconfiguration.")
+                    logger.info("🎨 Calling videoFormatService.reapplyColorSpaceSettings() after reconfiguration...")
+                    guard let formatService = formatService else { throw CameraError.setupFailed }
+                    try formatService.reapplyColorSpaceSettings() // Use captured service
+                    logger.info("✅ Re-applied color space settings after reconfiguration.")
                     
-                    self.logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(self.isAppleLogEnabled)) successfully.")
+                    logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(logEnabled)) successfully.")
                 } catch let error as CameraError {
-                    self.logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
-                    DispatchQueue.main.async {
+                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
+                    // Update error on main thread
+                    Task { @MainActor in
                         self.error = error
                     }
                 } catch {
-                    self.logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
+                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
                     let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
+                    // Update error on main thread
+                    Task { @MainActor in
                         self.error = wrappedError
                     }
                 }
@@ -512,8 +524,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @MainActor
     func startRecording() async {
         guard !isRecording, status == .running, let device = self.device else {
-            let deviceStatus = device != nil ? "available" : "nil"
-            logger.warning("Start recording called but conditions not met. isRecording: \\(isRecording), status: \\(String(describing: status)), device: \\(deviceStatus)")
+            // REMOVE: let deviceStatus = device != nil ? "available" : "nil"
+            // UPDATE: Corrected log message syntax
+            let deviceName = device?.localizedName ?? "nil"
+            logger.warning("Start recording called but conditions not met. isRecording: \\(isRecording), status: \\(String(describing: status)), device: \\(deviceName)")
             return
         }
         
@@ -773,25 +787,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Use UIDevice orientation
         let deviceOrientation = UIDevice.current.orientation
-        let targetAngle: CGFloat
+        // REMOVE: let targetAngle: CGFloat
 
         switch deviceOrientation {
         case .landscapeLeft:
-            targetAngle = 0
+            // REMOVE: targetAngle = 0
             orientationLogger.debug("    Device orientation: Landscape Left -> Target Angle: 0°")
         case .landscapeRight:
-            targetAngle = 180
+            // REMOVE: targetAngle = 180
             orientationLogger.debug("    Device orientation: Landscape Right -> Target Angle: 180°")
         case .portraitUpsideDown:
-            targetAngle = 270
+            // REMOVE: targetAngle = 270
             orientationLogger.debug("    Device orientation: Portrait Upside Down -> Target Angle: 270°")
         case .portrait:
-            targetAngle = 90
+            // REMOVE: targetAngle = 90
             orientationLogger.debug("    Device orientation: Portrait -> Target Angle: 90°")
         default: // Includes .unknown, .faceUp, .faceDown
             // Fallback to portrait if orientation is invalid or face up/down
-            targetAngle = 90
-            orientationLogger.debug("    Device orientation: \(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
+            // REMOVE: targetAngle = 90
+            orientationLogger.debug("    Device orientation: \\(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
         }
 
         // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView

@@ -269,6 +269,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Spencer's Camera";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "This app needs access to save recorded videos";
@@ -277,6 +278,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -306,6 +308,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Spencer's Camera";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access to record audio";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "This app needs access to save recorded videos";
@@ -314,6 +317,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

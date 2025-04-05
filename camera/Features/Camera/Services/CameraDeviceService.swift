@@ -96,7 +96,11 @@ class CameraDeviceService {
     
     func switchToLens(_ lens: CameraLens) {
         // Capture the interface orientation on the main thread before dispatching
-        let currentInterfaceOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
+        let activeScene = UIApplication.shared.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .compactMap { $0 as? UIWindowScene }
+            .first
+        let currentInterfaceOrientation = activeScene?.interfaceOrientation ?? .portrait
 
         cameraQueue.async { [weak self] in
             guard let self = self else { return }

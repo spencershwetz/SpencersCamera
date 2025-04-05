@@ -89,24 +89,19 @@ class RotatingViewController<Content: View>: UIViewController {
     func updateOrientation(_ orientation: UIDeviceOrientation) {
         logger.info("Updating UI transform for orientation: \\(orientation.rawValue) - \\(String(describing: orientation)). Invert: \\(invertRotation)")
         var transform: CGAffineTransform = .identity
-        var angleDegrees: CGFloat = 0
         
         switch orientation {
         case .landscapeLeft:
             transform = CGAffineTransform(rotationAngle: invertRotation ? CGFloat.pi / 2 : -CGFloat.pi / 2)
-            angleDegrees = invertRotation ? 90 : -90
         case .landscapeRight:
             transform = CGAffineTransform(rotationAngle: invertRotation ? -CGFloat.pi / 2 : CGFloat.pi / 2)
-            angleDegrees = invertRotation ? -90 : 90
         case .portraitUpsideDown:
             transform = CGAffineTransform(rotationAngle: CGFloat.pi)
-            angleDegrees = 180
         default: // .portrait, .unknown, .faceUp, .faceDown
             transform = .identity
-            angleDegrees = 0
         }
         
-        logger.info("Applying transform for \\(orientation.rawValue): Rotation \\(angleDegrees) degrees.")
+        logger.info("Applying transform for \\(orientation.rawValue).")
         UIView.animate(withDuration: 0.3) {
             self.hostingController.view.transform = transform
         }

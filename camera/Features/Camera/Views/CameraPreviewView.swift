@@ -30,7 +30,6 @@ struct CameraPreviewView: UIViewRepresentable {
         customPreview.delegate = viewModel
         
         // Create container with explicit bounds
-        let screen = UIScreen.main.bounds
         let container = RotationLockedContainer(contentView: customPreview)
         
         // Store reference to this container in the view model for LUT processing
@@ -507,7 +506,6 @@ struct CameraPreviewView: UIViewRepresentable {
             // Use the extent of the processed image, which includes rotation
             let originalWidth = CVPixelBufferGetWidth(pixelBuffer)
             let originalHeight = CVPixelBufferGetHeight(pixelBuffer)
-            let targetRect = CGRect(x: 0, y: 0, width: originalWidth, height: originalHeight)
             
             uiViewLogger.trace("    [captureOutput] Frame: \(frameNumber). Filter applied. Creating CGImage.")
             guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else {

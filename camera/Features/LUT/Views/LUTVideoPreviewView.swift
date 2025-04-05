@@ -109,8 +109,7 @@ struct LUTVideoPreviewView: UIViewRepresentable {
         }
         
         @objc func deviceOrientationDidChange() {
-            let currentOrientation = UIDevice.current.orientation
-            coordinatorLogger.info("Device orientation changed notification received. New orientation: \\(currentOrientation.rawValue) - \\(String(describing: currentOrientation))")
+            coordinatorLogger.info("Device orientation changed notification received. New orientation: \\(UIDevice.current.orientation.rawValue) - \\(String(describing: UIDevice.current.orientation))")
             
             // Ensure the preview stays fixed in portrait
             DispatchQueue.main.async { [weak self] in
@@ -139,9 +138,8 @@ struct LUTVideoPreviewView: UIViewRepresentable {
                            from connection: AVCaptureConnection) {
             // Ensure connection orientation stays fixed to 90 degrees (portrait)
             if connection.isVideoRotationAngleSupported(90) && connection.videoRotationAngle != 90 {
-                let currentAngle = connection.videoRotationAngle
                 connection.videoRotationAngle = 90
-                coordinatorLogger.info("Reset video connection angle from \\(currentAngle)° to portrait (90°) in captureOutput")
+                coordinatorLogger.info("Reset video connection angle from \\(connection.videoRotationAngle)° to portrait (90°) in captureOutput")
             } else if !connection.isVideoRotationAngleSupported(90) {
                 coordinatorLogger.warning("Video connection does not support 90° rotation in captureOutput.")
             }
