@@ -144,19 +144,6 @@ struct CameraView: View {
                     print("DEBUG: LUT filter removed")
                 }
             }
-            .onChange(of: viewModel.currentLens) { oldValue, newValue in
-                // When lens changes, ensure LUT overlay maintains correct orientation
-                if showLUTPreview && viewModel.lutManager.currentLUTFilter != nil {
-                    // Access the preview view and update its LUT overlay orientation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let container = viewModel.owningView,
-                           let preview = container.viewWithTag(100) as? CameraPreviewView.CustomPreviewView {
-                            preview.updateLUTOverlayOrientation()
-                            print("DEBUG: Updated LUT overlay orientation after lens change")
-                        }
-                    }
-                }
-            }
             .alert(item: $viewModel.error) { error in
                 Alert(
                     title: Text("Error"),
@@ -203,47 +190,52 @@ struct CameraView: View {
     }
     
     private var cameraPreview: some View {
-        GeometryReader { geometry in
-            Group {
-                if viewModel.isSessionRunning {
-                    // Camera is running - show camera preview
-                    CameraPreviewView(
-                        session: viewModel.session,
-                        lutManager: viewModel.lutManager,
-                        viewModel: viewModel
-                    )
-                    .ignoresSafeArea()
-                    .frame(
-                        width: geometry.size.width * 0.9,
-                        height: geometry.size.height * 0.75 * 0.9
-                    )
-                    .padding(.top, geometry.safeAreaInsets.top + 60)
-                    .clipped()
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .topLeading) {
-                        if isDebugEnabled {
-                            debugOverlay
-                                .padding(.top, geometry.safeAreaInsets.top + 70)
-                                .padding(.leading, 20)
+        Group {
+            if viewModel.isSessionRunning {
+                // Check if previewVideoOutput is available before creating the view
+                if let previewOutput = viewModel.previewVideoOutput {
+                    MetalCameraPreviewView(session: viewModel.session, 
+                                           viewModel: viewModel, 
+                                           lutManager: viewModel.lutManager, 
+                                           previewVideoOutput: previewOutput) // Pass the output
+                        .ignoresSafeArea()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .topLeading) {
+                            if isDebugEnabled {
+                                debugOverlay
+                                    .padding(.top, 60)
+                                    .padding(.leading, 20)
+                            }
                         }
-                    }
                 } else {
-                    // Show loading or error state
+                    // Show an error or loading state if the preview output isn't ready
                     VStack {
-                        Text("Starting camera...")
+                        Text("Camera Error")
                             .font(.headline)
+                            .foregroundColor(.red)
+                        Text("Preview output unavailable.")
+                            .font(.subheadline)
                             .foregroundColor(.white)
-                        
-                        if viewModel.status == .failed, let error = viewModel.error {
-                            Text("Error: \(error.description)")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .padding()
-                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black)
                 }
+            } else {
+                // Show loading or error state
+                VStack {
+                    Text("Starting camera...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    if viewModel.status == .failed, let error = viewModel.error {
+                        Text("Error: \(error.description)")
+                            .font(.subheadline)
+                            .foregroundColor(.red)
+                            .padding()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
             }
         }
     }

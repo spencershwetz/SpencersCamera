@@ -14,26 +14,31 @@ class CameraSetupService {
     private var session: AVCaptureSession
     private weak var delegate: CameraSetupServiceDelegate?
     private var videoDeviceInput: AVCaptureDeviceInput?
+    private var previewVideoOutput: AVCaptureVideoDataOutput?
+    
+    var currentVideoDeviceInput: AVCaptureDeviceInput? {
+        return videoDeviceInput
+    }
     
     init(session: AVCaptureSession, delegate: CameraSetupServiceDelegate) {
         self.session = session
         self.delegate = delegate
     }
     
-    func setupSession() throws {
+    func setupSession() throws -> AVCaptureVideoDataOutput? {
         logger.info("Setting up camera session")
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         session.beginConfiguration()
         
-        // Start with wide angle camera
+        defer { session.commitConfiguration() }
+        
         guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                     for: .video,
                                                     position: .back) else {
             logger.error("No camera device available")
             delegate?.didEncounterError(.cameraUnavailable)
             delegate?.didUpdateSessionStatus(.failed)
-            session.commitConfiguration()
-            return
+            return nil
         }
         
         logger.info("Found camera device: \(videoDevice.localizedName)")
@@ -47,25 +52,39 @@ class CameraSetupService {
                 logger.info("Added video input to session")
             } else {
                 logger.error("Failed to add video input to session")
-            }
-            
-            if let audioDevice = AVCaptureDevice.default(for: .audio),
-               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
-                logger.info("Added audio input to session")
+                throw CameraError.setupFailed
             }
             
             delegate?.didInitializeCamera(device: videoDevice)
             
         } catch {
-            logger.error("Error setting up camera: \(error.localizedDescription)")
+            logger.error("Error setting up video input: \(error.localizedDescription)")
             delegate?.didEncounterError(.setupFailed)
-            session.commitConfiguration()
-            return
+            throw error
         }
         
-        session.commitConfiguration()
+        if let audioDevice = AVCaptureDevice.default(for: .audio),
+           let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+           session.canAddInput(audioInput) {
+            session.addInput(audioInput)
+            logger.info("Added audio input to session")
+        } else {
+             logger.warning("Could not add audio input to session.")
+        }
+        
+        let previewOutput = AVCaptureVideoDataOutput()
+        previewOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        previewOutput.alwaysDiscardsLateVideoFrames = true
+        
+        if session.canAddOutput(previewOutput) {
+            session.addOutput(previewOutput)
+            self.previewVideoOutput = previewOutput
+            logger.info("Added PREVIEW video data output to session.")
+        } else {
+            logger.error("Could not add PREVIEW video data output to session.")
+            delegate?.didEncounterError(.setupFailed)
+            return nil
+        }
         
         if session.canSetSessionPreset(.hd4K3840x2160) {
             session.sessionPreset = .hd4K3840x2160
@@ -75,8 +94,9 @@ class CameraSetupService {
             logger.info("Using 1080p preset")
         }
         
-        // Request camera permissions if needed
         checkCameraPermissionsAndStart()
+        
+        return previewVideoOutput
     }
     
     private func checkCameraPermissionsAndStart() {

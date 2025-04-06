@@ -5,6 +5,7 @@ import VideoToolbox
 import CoreVideo
 import os.log
 import CoreImage
+import UIKit
 import CoreMedia
 import WatchConnectivity
 
@@ -20,10 +21,7 @@ extension AVCaptureDevice.Format {
     }
 }
 
-class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
-    // Add property to track the view containing the camera preview
-    weak var owningView: UIView?
-    
+class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, CameraSetupServiceDelegate {
     // Flashlight manager
     private let flashlightManager = FlashlightManager()
     private var settingsObserver: NSObjectProtocol?
@@ -51,7 +49,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @Published var shutterSpeed: CMTime = CMTimeMake(value: 1, timescale: 60)
     @Published var isRecording = false {
         didSet {
-            NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+            NotificationCenter.default.post(name: .recordingStateChanged, object: nil)
             
             // Handle flashlight state based on recording state
             let settings = SettingsModel()
@@ -82,7 +80,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
+    @Published var isAppleLogEnabled = true {
         didSet {
             print("\n=== Apple Log Toggle ===")
             print("🔄 Status: \(status)")
@@ -96,49 +94,43 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 return
             }
             
-            // Capture necessary values before the Task
             let logEnabled = self.isAppleLogEnabled
             let currentLensVal = self.currentLens.rawValue
-            let formatService = self.videoFormatService // Assume services are Sendable or actors
-            let deviceService = self.cameraDeviceService // Assume services are Sendable or actors
-            let logger = self.logger // Logger is Sendable
+            let formatService = self.videoFormatService
+            let deviceService = self.cameraDeviceService
+            let logger = self.logger
 
             Task {
                 logger.info("🚀 Starting Task to configure Apple Log to \(logEnabled) for lens: \(currentLensVal)x")
                 do {
-                    // Update the service state first
-                    formatService?.setAppleLogEnabled(logEnabled) // Use captured value
+                    formatService?.setAppleLogEnabled(logEnabled)
                     
-                    // Asynchronously configure the format
                     if logEnabled {
                         logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
                         guard let formatService = formatService else { throw CameraError.setupFailed }
-                        try await formatService.configureAppleLog() // Use captured service
+                        try await formatService.configureAppleLog()
                         logger.info("✅ Successfully completed configureAppleLog() device preparation.")
                     } else {
                         logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
                         guard let formatService = formatService else { throw CameraError.setupFailed }
-                        try await formatService.resetAppleLog() // Use captured service
+                        try await formatService.resetAppleLog()
                         logger.info("✅ Successfully completed resetAppleLog() device preparation.")
                     }
                     
-                    // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
                     logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
                     guard let deviceService = deviceService else { throw CameraError.setupFailed }
-                    try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
+                    try await deviceService.reconfigureSessionForCurrentDevice()
                     logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
 
                     logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(logEnabled)) successfully.")
                 } catch let error as CameraError {
                     logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
-                    // Update error on main thread
                     Task { @MainActor in
                         self.error = error
                     }
                 } catch {
                     logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
                     let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
-                    // Update error on main thread
                     Task { @MainActor in
                         self.error = wrappedError
                     }
@@ -152,6 +144,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     let session = AVCaptureSession()
     private var device: AVCaptureDevice?
+    var previewVideoOutput: AVCaptureVideoDataOutput? // Store the preview output
     
     // Video recording properties
     private var assetWriter: AVAssetWriter?
@@ -344,8 +337,34 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         super.init()
         print("\n=== Camera Initialization ===")
         
-        // Initialize services
-        setupServices()
+        // Initialize services with self as delegate where needed
+        self.cameraSetupService = CameraSetupService(session: session, delegate: self)
+        self.videoFormatService = VideoFormatService(session: session, delegate: self) 
+        // Pass videoFormatService to CameraDeviceService initializer
+        self.cameraDeviceService = CameraDeviceService(session: session, videoFormatService: self.videoFormatService, delegate: self)
+        self.recordingService = RecordingService(session: session, delegate: self)
+        self.exposureService = ExposureService(delegate: self)
+        
+        // Call setup session and store the preview output
+        do {
+            self.previewVideoOutput = try cameraSetupService.setupSession()
+            if previewVideoOutput == nil {
+                 logger.error("Setup session completed but did not return a preview video output.")
+                 // Handle error appropriately - perhaps set status to failed
+                 self.status = .failed
+                 self.error = .setupFailed
+            } else {
+                 logger.info("✅ Setup session completed successfully, preview output obtained.")
+            }
+        } catch let error as CameraError {
+            logger.error("Camera setup failed: \(error.description)")
+            self.error = error
+            self.status = .failed
+        } catch {
+             logger.error("Camera setup failed with unexpected error: \(error.localizedDescription)")
+            self.error = .setupFailed // Generic setup error
+            self.status = .failed
+        }
         
         // Add observer for flashlight settings changes
         settingsObserver = NotificationCenter.default.addObserver(
@@ -374,32 +393,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         }
         
-        do {
-            try cameraSetupService.setupSession()
-            
-            if let device = device {
-                print("📊 Device Capabilities:")
-                print("- Name: \(device.localizedName)")
-                print("- Model ID: \(device.modelID)")
-                
-                isAppleLogSupported = device.formats.contains { format in
-                    format.supportedColorSpaces.contains(.appleLog)
-                }
-                print("\n✅ Apple Log Support: \(isAppleLogSupported)")
-                
-                // Set initial Apple Log state based on current color space
-                isAppleLogEnabled = device.activeColorSpace == .appleLog
-                
-                print("Initial Apple Log Enabled state based on activeColorSpace: \(isAppleLogEnabled)")
-                print("=== End Initialization ===\n")
-            }
-            
-            if let device = device {
-                defaultFormat = device.activeFormat
-            }
-        } catch {
-            self.error = .setupFailed
-            print("Failed to setup session: \(error)")
+        // Set default format if device was initialized successfully
+        if let initialDevice = self.device {
+             defaultFormat = initialDevice.activeFormat
+             print("Stored default format: \(defaultFormat?.description ?? "None")")
+        } else {
+             print("Could not store default format: device was not initialized.")
         }
         
         // Add orientation change observer
@@ -430,6 +429,24 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Ensure app active state is set before sending initial context if possible
         // If init runs before scenePhase updates, initial context might show inactive
         sendStateToWatch()
+
+        // Initial check for Apple Log support
+        Task { @MainActor in // Ensure this runs on main thread
+            checkAppleLogSupport() // Removed unnecessary await
+             // Update initial isAppleLogEnabled based on activeColorSpace AFTER setup
+            // This DispatchQueue.main.async might be redundant if already on main from @MainActor Task
+            // but kept for safety unless performance becomes an issue.
+            DispatchQueue.main.async { 
+                if let format = self.device?.activeFormat, format.supportedColorSpaces.contains(.appleLog) {
+                    self.isAppleLogEnabled = (self.device?.activeColorSpace == .appleLog)
+                     print("Initial Apple Log Enabled state based on activeColorSpace: \(self.isAppleLogEnabled)")
+                } else {
+                     print("Initial Apple Log Enabled state set to false (not supported or format unavailable).")
+                    self.isAppleLogEnabled = false 
+                }
+            }
+        }
+         print("=== End Initialization ===\n")
     }
     
     deinit {
@@ -445,15 +462,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         flashlightManager.cleanup()
-    }
-    
-    private func setupServices() {
-        // Initialize services with self as delegate
-        cameraSetupService = CameraSetupService(session: session, delegate: self)
-        exposureService = ExposureService(delegate: self)
-        recordingService = RecordingService(session: session, delegate: self)
-        videoFormatService = VideoFormatService(session: session, delegate: self)
-        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -633,141 +641,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var successfulVideoFrames = 0
     private var failedVideoFrames = 0
     
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let assetWriter = assetWriter,
-              assetWriter.status == .writing else {
-            return
-        }
-        
-        // Handle video data
-        if output == videoDataOutput,
-           let assetWriterInput = assetWriterInput,
-           assetWriterInput.isReadyForMoreMediaData {
-            
-            videoFrameCount += 1
-            
-            // Log every 30 frames to avoid flooding
-            let shouldLog = videoFrameCount % 30 == 0
-            if shouldLog {
-                print("📽️ Processing video frame #\(videoFrameCount), writer status: \(assetWriter.status.rawValue)")
-            }
-            
-            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {
-                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-                    if let processedImage = applyLUT(to: ciImage, using: lutFilter),
-                       let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
-                        
-                        // Use original timing information
-                        var timing = CMSampleTimingInfo()
-                        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
-                        
-                        // Create format description for processed buffer
-                        var info: CMFormatDescription?
-                        let status = CMVideoFormatDescriptionCreateForImageBuffer(
-                            allocator: kCFAllocatorDefault,
-                            imageBuffer: processedPixelBuffer,
-                            formatDescriptionOut: &info
-                        )
-                        
-                        if status == noErr, let info = info,
-                           let newSampleBuffer = createSampleBuffer(
-                            from: processedPixelBuffer,
-                            formatDescription: info,
-                            timing: &timing
-                           ) {
-                            assetWriterInput.append(newSampleBuffer)
-                            successfulVideoFrames += 1
-                            if shouldLog {
-                                print("✅ Successfully appended processed frame #\(successfulVideoFrames)")
-                            }
-                        } else {
-                            failedVideoFrames += 1
-                            print("⚠️ Failed to create format description for processed frame #\(videoFrameCount), status: \(status)")
-                        }
-                    }
-                } else {
-                    // No LUT processing needed - use original sample buffer directly
-                    assetWriterInput.append(sampleBuffer)
-                    successfulVideoFrames += 1
-                    if shouldLog {
-                        print("✅ Successfully appended original frame #\(successfulVideoFrames)")
-                    }
-                }
-            }
-        }
-        
-        // Handle audio data
-        if output == audioDataOutput,
-           let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
-           audioInput.isReadyForMoreMediaData {
-            audioFrameCount += 1
-            audioInput.append(sampleBuffer)
-            if audioFrameCount % 100 == 0 {
-                print("🎵 Processed audio frame #\(audioFrameCount)")
-            }
+    @objc func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Check if the output is the PREVIEW output
+        if output == previewVideoOutput {
+            // This is the preview output - MetalCameraPreviewView's coordinator handles this.
+            // No action needed here in the ViewModel for preview frames.
+        } else {
+            // Log if we receive buffers from an unexpected output
+            // (RecordingService handles its own outputs internally)
+            logger.warning("ViewModel received sample buffer from unexpected output: \(output.description)")
         }
     }
-    
-    private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
-        var newPixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault,
-                           CVPixelBufferGetWidth(template),
-                           CVPixelBufferGetHeight(template),
-                           CVPixelBufferGetPixelFormatType(template),
-                           [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
-                           &newPixelBuffer)
-        
-        guard let outputBuffer = newPixelBuffer else { 
-            print("⚠️ Failed to create pixel buffer from CI image")
-            return nil 
-        }
-        
-        ciContext.render(ciImage, to: outputBuffer)
-        return outputBuffer
-    }
 
-    // Add helper property for tracking keyframes
-    private var lastKeyFrameTime: CMTime?
-
-    // Add helper method for creating sample buffers
-    private func createSampleBuffer(
-        from pixelBuffer: CVPixelBuffer,
-        formatDescription: CMFormatDescription,
-        timing: UnsafeMutablePointer<CMSampleTimingInfo>
-    ) -> CMSampleBuffer? {
-        var sampleBuffer: CMSampleBuffer?
-        let status = CMSampleBufferCreateForImageBuffer(
-            allocator: kCFAllocatorDefault,
-            imageBuffer: pixelBuffer,
-            dataReady: true,
-            makeDataReadyCallback: nil,
-            refcon: nil,
-            formatDescription: formatDescription,
-            sampleTiming: timing,
-            sampleBufferOut: &sampleBuffer
-        )
-        
-        if status != noErr {
-            print("⚠️ Failed to create sample buffer: \(status)")
-            return nil
-        }
-        
-        return sampleBuffer
-    }
-
-    private func getVideoTransform(for orientation: UIInterfaceOrientation) -> CGAffineTransform {
-        switch orientation {
-        case .portrait:
-            return CGAffineTransform(rotationAngle: .pi/2) // 90 degrees clockwise
-        case .portraitUpsideDown:
-            return CGAffineTransform(rotationAngle: -.pi/2) // 90 degrees counterclockwise
-        case .landscapeLeft: // USB on right
-            return CGAffineTransform(rotationAngle: .pi) // 180 degrees (was .identity)
-        case .landscapeRight: // USB on left
-            return .identity // No rotation (was .pi)
-        default:
-            return .identity
+    @objc func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Only log dropped frames from the preview output in the ViewModel
+        if output == previewVideoOutput {
+             logger.warning("ViewModel detected dropped preview frame")
+        } else {
+            // RecordingService handles dropped frames for its outputs internally.
+            logger.debug("ViewModel detected dropped frame from non-preview output: \(output.description)")
         }
     }
 
@@ -975,15 +867,61 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         wcLogger.info("Sent launch command to watch: \(message)")
     }
-}
 
-// MARK: - CustomPreviewViewDelegate (NEW)
-extension CameraViewModel: CustomPreviewViewDelegate {
-    func customPreviewViewDidAddVideoOutput(_ previewView: CameraPreviewView.CustomPreviewView) {
-        orientationLogger.debug("Delegate: CustomPreviewView did add video output. Applying initial orientation.")
-        // Now that we know the output exists, apply the initial orientation
-        // REMOVED: Calls to applyCurrentOrientationToConnections are no longer needed
-        // applyCurrentOrientationToConnections()
+    // MARK: - CameraSetupServiceDelegate
+
+    func didUpdateSessionStatus(_ status: CameraViewModel.Status) {
+        self.status = status
+    }
+
+    func didInitializeCamera(device: AVCaptureDevice) {
+        self.device = device
+         print("�� Set initial device in ViewModel: \(device.localizedName)")
+        
+        // Pass the initial device to other services that need it using their setDevice methods
+        self.cameraDeviceService.setDevice(device)
+        self.videoFormatService.setDevice(device)
+        self.exposureService.setDevice(device)
+        
+        // Set the video input for the CameraDeviceService
+        if let videoInput = self.cameraSetupService.currentVideoDeviceInput {
+            self.cameraDeviceService.setVideoDeviceInput(videoInput)
+        } else {
+            logger.error("Could not retrieve videoDeviceInput from CameraSetupService after initialization.")
+            // Handle this error case appropriately
+            // Set the error state directly on the ViewModel
+            self.error = .setupFailed 
+        }
+        
+        // Perform initial check for Apple Log support on the main thread
+        Task { @MainActor in
+            checkAppleLogSupport()
+        }
+    }
+
+    func didStartRunning(_ isRunning: Bool) {
+        self.isSessionRunning = isRunning
+         print("Camera session running: \(isRunning)")
+    }
+
+    // MARK: - Apple Log Support Check
+
+    @MainActor
+    private func checkAppleLogSupport() {
+        guard let currentDevice = self.device else {
+            logger.warning("Cannot check Apple Log support: device is nil.")
+            self.isAppleLogSupported = false
+            return
+        }
+        
+        let supported = currentDevice.formats.contains { format in
+            format.supportedColorSpaces.contains(.appleLog)
+        }
+        
+        if self.isAppleLogSupported != supported {
+            self.isAppleLogSupported = supported
+            logger.info("Apple Log Support Updated: \(supported)")
+        }
     }
 }
 
@@ -1010,30 +948,51 @@ extension CameraError {
     }
 }
 
-// MARK: - CameraSetupServiceDelegate
+// MARK: - Watch Connectivity
 
-extension CameraViewModel: CameraSetupServiceDelegate {
-    func didUpdateSessionStatus(_ status: Status) {
-        DispatchQueue.main.async {
-            self.status = status
+extension CameraViewModel: WCSessionDelegate {
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        // TODO: Implement activation handling within CameraViewModel or setup a proper manager
+        wcLogger.info("Watch Session activation completed: \(activationState.rawValue), Error: \(error?.localizedDescription ?? "None")")
+        // Send initial state upon activation
+        if activationState == .activated {
+            sendStateToWatch()
+        }
+    }
+
+    func sessionDidBecomeInactive(_ session: WCSession) {
+        // TODO: Implement inactivation handling if needed
+        wcLogger.info("Watch Session became inactive.")
+    }
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        // TODO: Implement deactivation handling; e.g., reactivate session
+        wcLogger.info("Watch Session deactivated. Attempting reactivation...")
+        session.activate() // Attempt to reactivate
+    }
+    
+    func sessionReachabilityDidChange(_ session: WCSession) {
+         // TODO: Implement reachability handling
+         wcLogger.info("Watch Session reachability changed: \(session.isReachable)")
+         // Send state if watch becomes reachable
+         if session.isReachable {
+            sendStateToWatch()
+         }
+     }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+        // Handle messages directly or pass to a handler method
+        wcLogger.info("Received direct message: \(message)")
+        // Example: Call the existing handler
+        Task { @MainActor in
+            handleWatchMessage(message)
         }
     }
     
-    func didInitializeCamera(device: AVCaptureDevice) {
-        self.device = device
-        exposureService.setDevice(device)
-        recordingService.setDevice(device)
-        cameraDeviceService.setDevice(device)
-        videoFormatService.setDevice(device)
-        
-        // Initialize available lenses
-        availableLenses = CameraLens.availableLenses()
-    }
-    
-    func didStartRunning(_ isRunning: Bool) {
-        DispatchQueue.main.async {
-            self.isSessionRunning = isRunning
-        }
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
+        // Handle context updates directly or pass to a handler method
+        wcLogger.info("Received application context: \(applicationContext)")
+        // TODO: Implement context handling if needed
     }
 }
 
@@ -1089,10 +1048,9 @@ extension CameraViewModel: RecordingServiceDelegate {
 extension CameraViewModel: CameraDeviceServiceDelegate {
     func didUpdateCurrentLens(_ lens: CameraLens) {
         logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
-        // Update properties on the main thread
         DispatchQueue.main.async {
             self.currentLens = lens
-            self.lastLensSwitchTimestamp = Date() // Trigger preview update
+            self.lastLensSwitchTimestamp = Date() 
             self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
         }
     }
@@ -1105,52 +1063,4 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
     }
 }
 
-// MARK: - WCSessionDelegate
-// Add delegate methods
-extension CameraViewModel: WCSessionDelegate {
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
-        if let error = error {
-            wcLogger.error("WCSession activation failed: \(error.localizedDescription)")
-            return
-        }
-        wcLogger.info("WCSession activation completed with state: \(activationState.rawValue)")
-        // Send current state when session becomes active
-        DispatchQueue.main.async {
-            // Make sure the app active state is potentially updated first if possible
-            self.sendStateToWatch()
-            self.sendLaunchCommandToWatch()
-        }
-    }
-
-    func sessionDidBecomeInactive(_ session: WCSession) {
-        wcLogger.info("WCSession did become inactive.")
-        // iOS only: Can attempt reactivation or wait for sessionDidDeactivate
-    }
-
-    func sessionDidDeactivate(_ session: WCSession) {
-        wcLogger.info("WCSession did deactivate.")
-        // iOS only: Reactivate the session to ensure connectivity.
-        session.activate()
-    }
-
-    func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
-        // Handle incoming message on the main thread
-        DispatchQueue.main.async { [weak self] in
-            self?.handleWatchMessage(message)
-            // Send a reply back to the watch immediately (can be empty)
-            replyHandler(["status": "received"])
-        }
-    }
-
-    func sessionReachabilityDidChange(_ session: WCSession) {
-        wcLogger.info("Watch reachability changed: \(session.isReachable)")
-        if session.isReachable {
-            // Send current state when watch becomes reachable
-             DispatchQueue.main.async {
-                 self.sendStateToWatch()
-                 self.sendLaunchCommandToWatch()
-             }
-        }
-    }
-}
 

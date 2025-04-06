@@ -8,6 +8,7 @@ class LUTManager: ObservableObject {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
     
     @Published var currentLUTFilter: CIFilter?
+    @Published var isLUTPreviewEnabled: Bool = true
     private var dimension: Int = 0
     @Published var selectedLUTURL: URL?
     @Published var recentLUTs: [String: URL]? = [:]
