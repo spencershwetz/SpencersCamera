@@ -6,12 +6,41 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0998FA2D2DA22D03000AB0DD /* SC Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0998FA222DA22D02000AB0DD /* SC Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0998FA2A2DA22D03000AB0DD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 09562D742D18A1EC009A9B07 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0998FA212DA22D02000AB0DD;
+			remoteInfo = "SC Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0998FA2C2DA22D03000AB0DD /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				0998FA2D2DA22D03000AB0DD /* SC Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		09562D7C2D18A1EC009A9B07 /* Spencer's Camera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Spencer's Camera.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0998FA222DA22D02000AB0DD /* SC Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "SC Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		09562DB12D18A28C009A9B07 /* Exceptions for "camera" folder in "Spencer's Camera" target */ = {
+		0998FA1D2DA22CD7000AB0DD /* Exceptions for "iPhoneApp" folder in "Spencer's Camera" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -21,12 +50,17 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		09562D7E2D18A1EC009A9B07 /* camera */ = {
+		09562D7E2D18A1EC009A9B07 /* iPhoneApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				09562DB12D18A28C009A9B07 /* Exceptions for "camera" folder in "Spencer's Camera" target */,
+				0998FA1D2DA22CD7000AB0DD /* Exceptions for "iPhoneApp" folder in "Spencer's Camera" target */,
 			);
-			path = camera;
+			path = iPhoneApp;
+			sourceTree = "<group>";
+		};
+		0998FA232DA22D02000AB0DD /* SC Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "SC Watch App";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -39,13 +73,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0998FA1F2DA22D02000AB0DD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		09562D732D18A1EC009A9B07 = {
 			isa = PBXGroup;
 			children = (
-				09562D7E2D18A1EC009A9B07 /* camera */,
+				09562D7E2D18A1EC009A9B07 /* iPhoneApp */,
+				0998FA232DA22D02000AB0DD /* SC Watch App */,
 				09562D7D2D18A1EC009A9B07 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				09562D7C2D18A1EC009A9B07 /* Spencer's Camera.app */,
+				0998FA222DA22D02000AB0DD /* SC Watch App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,19 +111,43 @@
 				09562D782D18A1EC009A9B07 /* Sources */,
 				09562D792D18A1EC009A9B07 /* Frameworks */,
 				09562D7A2D18A1EC009A9B07 /* Resources */,
+				0998FA2C2DA22D03000AB0DD /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0998FA2B2DA22D03000AB0DD /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				09562D7E2D18A1EC009A9B07 /* camera */,
+				09562D7E2D18A1EC009A9B07 /* iPhoneApp */,
 			);
 			name = "Spencer's Camera";
 			packageProductDependencies = (
 			);
 			productName = camera;
 			productReference = 09562D7C2D18A1EC009A9B07 /* Spencer's Camera.app */;
+			productType = "com.apple.product-type.application";
+		};
+		0998FA212DA22D02000AB0DD /* SC Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0998FA2E2DA22D03000AB0DD /* Build configuration list for PBXNativeTarget "SC Watch App" */;
+			buildPhases = (
+				0998FA1E2DA22D02000AB0DD /* Sources */,
+				0998FA1F2DA22D02000AB0DD /* Frameworks */,
+				0998FA202DA22D02000AB0DD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0998FA232DA22D02000AB0DD /* SC Watch App */,
+			);
+			name = "SC Watch App";
+			packageProductDependencies = (
+			);
+			productName = "SC Watch App";
+			productReference = 0998FA222DA22D02000AB0DD /* SC Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -90,11 +157,14 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
 					09562D7B2D18A1EC009A9B07 = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					0998FA212DA22D02000AB0DD = {
+						CreatedOnToolsVersion = 16.3;
 					};
 				};
 			};
@@ -113,12 +183,20 @@
 			projectRoot = "";
 			targets = (
 				09562D7B2D18A1EC009A9B07 /* Spencer's Camera */,
+				0998FA212DA22D02000AB0DD /* SC Watch App */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		09562D7A2D18A1EC009A9B07 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0998FA202DA22D02000AB0DD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +213,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0998FA1E2DA22D02000AB0DD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0998FA2B2DA22D03000AB0DD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0998FA212DA22D02000AB0DD /* SC Watch App */;
+			targetProxy = 0998FA2A2DA22D03000AB0DD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		09562D8D2D18A1EE009A9B07 /* Debug */ = {
@@ -266,10 +359,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"camera/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"iPhoneApp/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_FILE = iPhoneApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Spencer's Camera";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
@@ -306,10 +399,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"camera/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"iPhoneApp/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = camera/Info.plist;
+				INFOPLIST_FILE = iPhoneApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Spencer's Camera";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to record video";
@@ -339,6 +432,62 @@
 			};
 			name = Release;
 		};
+		0998FA2F2DA22D03000AB0DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SC;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.spencershwetz.spencerscamera;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.4;
+			};
+			name = Debug;
+		};
+		0998FA302DA22D03000AB0DD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = SC;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.spencershwetz.spencerscamera;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.4;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -356,6 +505,15 @@
 			buildConfigurations = (
 				09562D902D18A1EE009A9B07 /* Debug */,
 				09562D912D18A1EE009A9B07 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0998FA2E2DA22D03000AB0DD /* Build configuration list for PBXNativeTarget "SC Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0998FA2F2DA22D03000AB0DD /* Debug */,
+				0998FA302DA22D03000AB0DD /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
