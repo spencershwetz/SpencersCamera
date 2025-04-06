@@ -6,6 +6,7 @@ import CoreVideo
 import os.log
 import CoreImage
 import CoreMedia
+import WatchConnectivity
 
 extension CFString {
     var string: String {
@@ -159,7 +160,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var videoDataOutput: AVCaptureVideoDataOutput?
     private var audioDataOutput: AVCaptureAudioDataOutput?
     private var currentRecordingURL: URL?
-    private var recordingStartTime: CMTime?
+    private var recordingStartTime: Date?
     
     private var defaultFormat: AVCaptureDevice.Format?
     
@@ -334,6 +335,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Logger for orientation specific logs
     private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModelOrientation")
     
+    // Watch Connectivity properties
+    private var wcSession: WCSession?
+    private let wcLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "WatchConnectivity")
+    private var isAppCurrentlyActive = false // Track app active state
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -416,6 +422,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         updateShutterAngle(180.0)
         
         print("📱 LUT Loading: No default LUTs will be loaded")
+        
+        // Setup Watch Connectivity
+        setupWatchConnectivity()
+
+        // Send initial state to watch if connected
+        // Ensure app active state is set before sending initial context if possible
+        // If init runs before scenePhase updates, initial context might show inactive
+        sendStateToWatch()
     }
     
     deinit {
@@ -549,11 +563,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Start recording
         await recordingService.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
 
-        isRecording = true
+        // Set state AFTER recording service confirms start (ideally service would return success/time)
+        // For now, assume immediate start for simplicity
+        self.recordingStartTime = Date() // Store start Date
+        self.isRecording = true
         logger.info("Recording state set to true.")
         
         // Notify RotationLockedContainer about recording state change
         NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+        
+        // Update watch state
+        sendStateToWatch()
     }
     
     @MainActor
@@ -567,11 +587,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Stop recording
         await recordingService.stopRecording()
         
-        isRecording = false
+        self.isRecording = false
+        self.recordingStartTime = nil // Clear start time
         logger.info("Recording state set to false.")
         
         // Notify RotationLockedContainer about recording state change
         NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
+
+        // Update watch state
+        sendStateToWatch()
 
         // Re-apply fixed portrait orientation to connections after recording stops
         // REMOVED: No longer needed as applyCurrentOrientationToConnections is mostly empty and orientation is fixed in PreviewView
@@ -855,6 +879,87 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // ... other logic
         }
     }
+
+    // MARK: - Watch Connectivity
+
+    private func setupWatchConnectivity() {
+        if WCSession.isSupported() {
+            wcSession = WCSession.default
+            wcSession?.delegate = self
+            wcSession?.activate()
+            wcLogger.info("Watch Connectivity session activated.")
+        } else {
+            wcLogger.warning("Watch Connectivity is not supported on this device.")
+        }
+    }
+
+    private func sendStateToWatch() {
+        guard let session = wcSession, session.isReachable else {
+            // Log differently if app isn't active vs watch not reachable
+            if !(wcSession?.isReachable ?? false) {
+                    wcLogger.debug("Watch not reachable, skipping state update.")
+            } else {
+                    wcLogger.debug("Watch reachable but session not ready or app not active, skipping context send.")
+            }
+            return
+        }
+
+        // Build the context dictionary
+        var context: [String: Any] = [
+            "isRecording": isRecording,
+            "isAppActive": isAppCurrentlyActive,
+            "selectedFrameRate": selectedFrameRate
+        ]
+        
+        // Add start time only if recording
+        if isRecording, let startTime = recordingStartTime {
+            context["recordingStartTime"] = startTime.timeIntervalSince1970
+        }
+        
+        do {
+            try session.updateApplicationContext(context)
+            wcLogger.info("Sent application context to watch: \(context)")
+        } catch {
+            wcLogger.error("Error sending application context to watch: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - App Lifecycle State Update
+
+    func setAppActive(_ active: Bool) {
+        guard isAppCurrentlyActive != active else { return } // Avoid redundant updates
+        isAppCurrentlyActive = active
+        wcLogger.info("iOS App Active State changed: \(active)")
+        // Send updated state immediately
+        sendStateToWatch()
+    }
+
+    // MARK: - Camera Actions Triggered by Watch
+
+    @MainActor
+    private func handleWatchMessage(_ message: [String: Any]) {
+        wcLogger.info("Received message from watch: \(message)")
+        if let command = message["command"] as? String {
+            switch command {
+            case "startRecording":
+                // Ensure app is active before starting from watch
+                guard isAppCurrentlyActive else {
+                    wcLogger.warning("Received startRecording command but iOS app is not active. Ignoring.")
+                    return
+                }
+                Task {
+                    await startRecording()
+                }
+            case "stopRecording":
+                // Allow stopping even if app isn't technically active (might be in background)
+                Task {
+                    await stopRecording()
+                }
+            default:
+                wcLogger.warning("Received unknown command from watch: \(command)")
+            }
+        }
+    }
 }
 
 // MARK: - CustomPreviewViewDelegate (NEW)
@@ -981,6 +1086,53 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
         logger.debug("Delegate: didUpdateZoomFactor called with \(factor)")
         DispatchQueue.main.async {
             self.currentZoomFactor = factor
+        }
+    }
+}
+
+// MARK: - WCSessionDelegate
+// Add delegate methods
+extension CameraViewModel: WCSessionDelegate {
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if let error = error {
+            wcLogger.error("WCSession activation failed: \(error.localizedDescription)")
+            return
+        }
+        wcLogger.info("WCSession activation completed with state: \(activationState.rawValue)")
+        // Send current state when session becomes active
+        DispatchQueue.main.async {
+            // Make sure the app active state is potentially updated first if possible
+            self.sendStateToWatch()
+        }
+    }
+
+    func sessionDidBecomeInactive(_ session: WCSession) {
+        wcLogger.info("WCSession did become inactive.")
+        // iOS only: Can attempt reactivation or wait for sessionDidDeactivate
+    }
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        wcLogger.info("WCSession did deactivate.")
+        // iOS only: Reactivate the session to ensure connectivity.
+        session.activate()
+    }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
+        // Handle incoming message on the main thread
+        DispatchQueue.main.async { [weak self] in
+            self?.handleWatchMessage(message)
+            // Send a reply back to the watch immediately (can be empty)
+            replyHandler(["status": "received"])
+        }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        wcLogger.info("Watch reachability changed: \(session.isReachable)")
+        if session.isReachable {
+            // Send current state when watch becomes reachable
+             DispatchQueue.main.async {
+                 self.sendStateToWatch()
+             }
         }
     }
 }

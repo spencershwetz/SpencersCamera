@@ -16,6 +16,9 @@ struct cameraApp: App {
     // Create a StateObject for the CameraViewModel
     @StateObject private var cameraViewModel = CameraViewModel()
     
+    // Get the scene phase
+    @Environment(\.scenePhase) private var scenePhase
+    
     init() {
         // REMOVED: Redundant appearance settings, handled by WindowGroup content and modifiers.
         /*
@@ -73,6 +76,24 @@ struct cameraApp: App {
                     window.rootViewController?.view.layoutIfNeeded()
                 }
                 */
+            }
+        }
+        // Use onChange to monitor scene phase changes
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            switch newPhase {
+            case .active:
+                print("iOS App Phase: Active")
+                cameraViewModel.setAppActive(true)
+            case .inactive:
+                print("iOS App Phase: Inactive")
+                cameraViewModel.setAppActive(false)
+            case .background:
+                print("iOS App Phase: Background")
+                cameraViewModel.setAppActive(false)
+                // Optionally stop session when going to background if needed
+            @unknown default:
+                print("iOS App Phase: Unknown")
+                cameraViewModel.setAppActive(false)
             }
         }
     }

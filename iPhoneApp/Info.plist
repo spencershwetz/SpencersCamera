@@ -11,5 +11,7 @@
 	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>WKWatchKitApp</key>
+	<true/>
 </dict>
 </plist>
