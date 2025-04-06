@@ -15,20 +15,41 @@ struct ContentView: View {
     private let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
     @State private var elapsedTimeString: String = "00:00:00:00"
     
+    // --- Helper properties to read from latestContext ---
+    private var isRecording: Bool {
+        connectivityService.latestContext["isRecording"] as? Bool ?? false
+    }
+    
+    private var isAppActive: Bool {
+        connectivityService.latestContext["isAppActive"] as? Bool ?? false
+    }
+    
+    private var recordingStartTime: Date? {
+        if let startTimeInterval = connectivityService.latestContext["recordingStartTime"] as? TimeInterval {
+            return Date(timeIntervalSince1970: startTimeInterval)
+        }
+        return nil
+    }
+    
+    private var frameRate: Double {
+        connectivityService.latestContext["selectedFrameRate"] as? Double ?? 30.0
+    }
+    // --- End helper properties ---
+
     var body: some View {
         VStack {
             // Conditional layout based on connection and active state
-            if isConnectedAndActive {
+            if isConnectedAndActive { // Uses computed property reading from context
                 // Show full controls when connected and active
                 Button(action: {
                     connectivityService.toggleRecording()
                 }) {
                     ZStack {
                         Circle()
-                            .fill(connectivityService.isRecording ? Color.red : Color.white.opacity(0.8))
+                            .fill(isRecording ? Color.red : Color.white.opacity(0.8)) // Read from computed property
                             .frame(width: 80, height: 80)
                         
-                        if connectivityService.isRecording {
+                        if isRecording { // Read from computed property
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(Color.white)
                                 .frame(width: 30, height: 30)
@@ -42,8 +63,8 @@ struct ContentView: View {
                 .buttonStyle(PlainButtonStyle())
                 
                 // Display Elapsed Time or Ready Text
-                Text(buttonStatusText)
-                    .font(connectivityService.isRecording ? .title2 : .body) // Make timecode larger
+                Text(buttonStatusText) // Uses computed property reading from context
+                    .font(isRecording ? .title2 : .body) // Read from computed property
                     .minimumScaleFactor(0.5) // Allow text to shrink if needed
                     .lineLimit(1)
                     .padding(.top, 5)
@@ -51,7 +72,7 @@ struct ContentView: View {
             } else {
                 // Show only the prompt when disconnected or inactive
                 Spacer() // Pushes text towards center vertically
-                Text(buttonStatusText) // Shows "Open Spencer's Camera..."
+                Text(buttonStatusText) // Uses computed property reading from context
                     .multilineTextAlignment(.center)
                     .padding()
                 Spacer()
@@ -66,15 +87,15 @@ struct ContentView: View {
     
     // Computed properties for status display
     private var isConnectedAndActive: Bool {
-        // Reachable check is implicit in isCompanionAppActive handling in the service
-        connectivityService.isCompanionAppActive
+        // Use the computed property derived from context
+        isAppActive
     }
     
     // Computed property for the text below the button
     private var buttonStatusText: String {
         if !isConnectedAndActive {
             return "Open Spencer's Camera on your iPhone"
-        } else if connectivityService.isRecording && connectivityService.recordingStartTime != nil {
+        } else if isRecording && recordingStartTime != nil { // Use computed properties
             // Return elapsed time when recording
             return elapsedTimeString
         } else {
@@ -85,7 +106,8 @@ struct ContentView: View {
     
     // Function to update the elapsed time string
     private func updateElapsedTime() {
-        guard connectivityService.isRecording, let startTime = connectivityService.recordingStartTime else {
+        // Use computed properties to access state
+        guard isRecording, let startTime = recordingStartTime else {
             // Reset if not recording or start time is nil
             if elapsedTimeString != "00:00:00:00" { // Avoid redundant state updates
                  elapsedTimeString = "00:00:00:00"
@@ -103,8 +125,9 @@ struct ContentView: View {
         
         // Calculate fractional seconds and frame count
         let fractionalSeconds = elapsedTimeInterval.truncatingRemainder(dividingBy: 1)
-        let frameRate = connectivityService.frameRate > 0 ? connectivityService.frameRate : 30.0 // Use default if 0
-        let frame = Int(fractionalSeconds * frameRate)
+        // Use computed property for frame rate
+        let currentFrameRate = frameRate > 0 ? frameRate : 30.0 // Use default if 0
+        let frame = Int(fractionalSeconds * currentFrameRate)
         
         elapsedTimeString = String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, frame)
     }

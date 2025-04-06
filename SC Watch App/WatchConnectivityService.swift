@@ -7,23 +7,33 @@ class WatchConnectivityService: NSObject, WCSessionDelegate, ObservableObject {
     
     static let shared = WatchConnectivityService()
     
-    // Published properties for the UI to observe
-    @Published var isRecording: Bool = false
-    @Published var isReachable: Bool = false
-    @Published var isCompanionAppActive: Bool = false
-    @Published var recordingStartTime: Date? = nil
-    @Published var frameRate: Double = 30.0 // Store frame rate, default to 30
+    // Single published property for the latest received context
+    @Published var latestContext: [String: Any]
+    
+    // Removed individual @Published properties:
+    // @Published var isRecording: Bool = false
+    // @Published var isReachable: Bool = false
+    // @Published var isCompanionAppActive: Bool = false
+    // @Published var recordingStartTime: Date? = nil
+    // @Published var frameRate: Double = 30.0
     
     private var session: WCSession?
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.watchapp", category: "WatchConnectivityService")
     
     private override init() {
+        // Initialize latestContext with received context or empty dictionary
+        if WCSession.isSupported() {
+            self.latestContext = WCSession.default.receivedApplicationContext
+        } else {
+            self.latestContext = [:]
+        }
+        
         super.init()
         if WCSession.isSupported() {
             session = WCSession.default
             session?.delegate = self
             session?.activate()
-            logger.info("WCSession activated on watch.")
+            logger.info("WCSession activated on watch. Initial context: \(self.latestContext)")
         } else {
             logger.warning("WCSession not supported on this watch device.")
         }
@@ -31,12 +41,15 @@ class WatchConnectivityService: NSObject, WCSessionDelegate, ObservableObject {
     
     // Send start/stop command to iPhone
     func toggleRecording() {
-        guard let session = session, session.isReachable, isCompanionAppActive else {
+        let isAppActive = latestContext["isAppActive"] as? Bool ?? false
+        let isRecordingNow = latestContext["isRecording"] as? Bool ?? false
+
+        guard let session = session, session.isReachable, isAppActive else {
             logger.warning("Cannot send command: iPhone not reachable or companion app not active.")
             return
         }
         
-        let command = isRecording ? "stopRecording" : "startRecording"
+        let command = isRecordingNow ? "stopRecording" : "startRecording"
         let message = ["command": command]
         
         logger.info("Sending message to iPhone: \(message)")
@@ -54,96 +67,46 @@ class WatchConnectivityService: NSObject, WCSessionDelegate, ObservableObject {
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         if let error = error {
             logger.error("Watch WCSession activation failed: \(error.localizedDescription)")
+            // Update context to empty on activation failure
+            DispatchQueue.main.async { self.latestContext = [:] }
             return
         }
         logger.info("Watch WCSession activation completed with state: \(activationState.rawValue)")
         DispatchQueue.main.async {
-            self.isReachable = session.isReachable
-            // Request initial context update upon activation
-            self.requestContextUpdateFromPhone()
+             // Update latestContext with received context on activation
+            self.latestContext = session.receivedApplicationContext
+            self.logger.info("Updated latestContext on activation: \(self.latestContext)")
+            // No need to request context, just rely on received context
         }
     }
     
     func sessionReachabilityDidChange(_ session: WCSession) {
         logger.info("iPhone reachability changed: \(session.isReachable)")
-        DispatchQueue.main.async {
-             self.isReachable = session.isReachable
-             if !session.isReachable {
-                 // Reset states if phone becomes unreachable
-                 self.isCompanionAppActive = false
-                 self.isRecording = false
-                 self.recordingStartTime = nil
-             } else {
-                 // Request context when becoming reachable again
-                 self.requestContextUpdateFromPhone()
+        if !session.isReachable {
+             // Clear context if phone becomes unreachable to signify outdated state
+             DispatchQueue.main.async { 
+                 self.latestContext = [:] 
+                 self.logger.info("Cleared latestContext as iPhone became unreachable.")
+             }
+        } else {
+             // When becoming reachable, update with the potentially already received context
+             DispatchQueue.main.async { 
+                 self.latestContext = session.receivedApplicationContext
+                 self.logger.info("Updated latestContext on becoming reachable: \(self.latestContext)")
              }
         }
     }
     
     // Receive application context updates from iPhone
     func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
-        logger.info("Received application context from iPhone: \(applicationContext)")
+        logger.info("Received application context update from iPhone: \(applicationContext)")
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            let newRecordingStatus = applicationContext["isRecording"] as? Bool ?? false
-            let newAppActiveStatus = applicationContext["isAppActive"] as? Bool ?? false
-            var newStartTime: Date? = nil
-            // Default frame rate if not provided
-            var newFrameRate = self.frameRate // Keep current if key is missing
-
-            if let startTimeInterval = applicationContext["recordingStartTime"] as? TimeInterval {
-                newStartTime = Date(timeIntervalSince1970: startTimeInterval)
-            }
-            
-            // Update frame rate
-            if let receivedFrameRate = applicationContext["selectedFrameRate"] as? Double {
-                 newFrameRate = receivedFrameRate
-            }
-            
-            // Update properties only if they changed to avoid redundant UI updates
-            if self.isRecording != newRecordingStatus {
-                self.isRecording = newRecordingStatus
-                self.logger.info("Updated isRecording state to: \(newRecordingStatus)")
-            }
-            if self.isCompanionAppActive != newAppActiveStatus {
-                self.isCompanionAppActive = newAppActiveStatus
-                self.logger.info("Updated isCompanionAppActive state to: \(newAppActiveStatus)")
-            }
-            if self.recordingStartTime != newStartTime {
-                self.recordingStartTime = newStartTime
-                self.logger.info("Updated recordingStartTime to: \(String(describing: newStartTime))")
-            }
-            if self.frameRate != newFrameRate {
-                self.frameRate = newFrameRate
-                self.logger.info("Updated frameRate to: \(newFrameRate)")
-            }
-            
-             // If app becomes inactive, ensure recording state is also false
-            if !newAppActiveStatus {
-                if self.isRecording {
-                    self.isRecording = false
-                    self.logger.info("Companion app inactive, setting recording state to false.")
-                }
-                if self.recordingStartTime != nil {
-                    self.recordingStartTime = nil
-                    self.logger.info("Companion app inactive, clearing start time.")
-                }
-            }
+            self?.latestContext = applicationContext
+            self?.logger.info("Updated latestContext: \(String(describing: self?.latestContext))")
         }
     }
     
-    // Helper to request context (e.g., when watch app launches or becomes reachable)
-    private func requestContextUpdateFromPhone() {
-         guard let session = session, session.isReachable else {
-             logger.debug("Request context update skipped: iPhone not reachable.")
-             return
-         }
-         // Send an empty message; the iOS side can reply with current context or trigger a context update
-         // For now, we rely on the iOS app sending context when it becomes active or changes state.
-         // Alternatively, the iOS app could handle a specific "requestContext" message.
-         logger.info("Relying on iOS app to send context update.")
-    }
+    // Removed private func requestContextUpdateFromPhone()
     
     // Required delegate methods for iOS compatibility (can be empty on watchOS)
     #if os(iOS)
