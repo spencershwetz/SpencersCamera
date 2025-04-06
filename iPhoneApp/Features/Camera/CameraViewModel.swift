@@ -960,6 +960,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         }
     }
+
+    // MARK: - Helper to send launch command
+
+    private func sendLaunchCommandToWatch() {
+        guard let session = wcSession, session.isReachable else {
+            wcLogger.debug("Watch not reachable, skipping launch command send.")
+            return
+        }
+
+        let message = ["command": "launchApp"]
+        session.sendMessage(message, replyHandler: nil) { [weak self] error in
+            self?.wcLogger.error("Error sending launch command to watch: \(error.localizedDescription)")
+        }
+        wcLogger.info("Sent launch command to watch: \(message)")
+    }
 }
 
 // MARK: - CustomPreviewViewDelegate (NEW)
@@ -1103,6 +1118,7 @@ extension CameraViewModel: WCSessionDelegate {
         DispatchQueue.main.async {
             // Make sure the app active state is potentially updated first if possible
             self.sendStateToWatch()
+            self.sendLaunchCommandToWatch()
         }
     }
 
@@ -1132,6 +1148,7 @@ extension CameraViewModel: WCSessionDelegate {
             // Send current state when watch becomes reachable
              DispatchQueue.main.async {
                  self.sendStateToWatch()
+                 self.sendLaunchCommandToWatch()
              }
         }
     }

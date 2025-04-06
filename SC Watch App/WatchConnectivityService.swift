@@ -150,4 +150,16 @@ class WatchConnectivityService: NSObject, WCSessionDelegate, ObservableObject {
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
     #endif
+
+    func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
+        if let command = message["command"] as? String {
+            if command == "launchApp" {
+                logger.info("⌚️ Received launchApp command from iPhone. App should activate.")
+                // No specific action needed here, receiving the message triggers activation
+            }
+
+            // Acknowledge receipt
+            replyHandler(["status": "message received"])
+        }
+    }
 } 
