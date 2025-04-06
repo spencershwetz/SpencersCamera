@@ -11,7 +11,8 @@
 	<true/>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	<key>WKWatchKitApp</key>
-	<true/>
+	<!-- REMOVED: WKWatchKitApp key as per build error -->
+	<!-- <key>WKWatchKitApp</key> -->
+	<!-- <true/> -->
 </dict>
 </plist>
