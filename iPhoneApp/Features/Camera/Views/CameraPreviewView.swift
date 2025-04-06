@@ -148,17 +148,32 @@ struct CameraPreviewView: UIViewRepresentable {
             }
         }
         
-        deinit {
+        // Move detachment logic to a separate function, mark with @MainActor
+        @MainActor
+        private func detachVolumeHandler() {
             if #available(iOS 17.2, *) {
-                // Store a weak reference to volumeButtonHandler before deinit
-                let handler = volumeButtonHandler
-                let view = self
-                Task { @MainActor in
-                    handler?.detachFromView(view)
+                if let handler = volumeButtonHandler {
+                    handler.detachFromView(self)
+                    volumeButtonHandler = nil // Clear the reference after detaching
+                    print("DEBUG: Detached volume handler in willMove(toSuperview: nil)")
                 }
-                // Clear the reference
-                volumeButtonHandler = nil
             }
+        }
+
+        // Call detachment when view is removed from superview
+        override func willMove(toSuperview newSuperview: UIView?) {
+            super.willMove(toSuperview: newSuperview)
+            if newSuperview == nil {
+                // View is being removed
+                detachVolumeHandler()
+            }
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+            // Detachment is now handled in willMove(toSuperview:)
+            // REMOVED: Task-based detachment logic
+            print("DEBUG: RotationLockedContainer deinit completed") // Added log
         }
         
         @objc private func handleRecordingStateChange() {
