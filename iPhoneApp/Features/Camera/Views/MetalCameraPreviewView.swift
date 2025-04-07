@@ -373,6 +373,18 @@ struct MetalCameraPreviewView: UIViewRepresentable {
             // Store the latest pixel buffer
             currentPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
 
+            // ++ ZOOM LOG ++ 
+            if let pb = currentPixelBuffer {
+                let width = CVPixelBufferGetWidth(pb)
+                let height = CVPixelBufferGetHeight(pb)
+                let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                // Log dimensions less frequently to avoid spam
+                if timestamp.seconds.truncatingRemainder(dividingBy: 1.0) < 0.05 { // Log approx once per second
+                    print("ZOOM_LOG: [Preview Pipeline] Received buffer: \\(width)x\\(height) at time \\(timestamp.seconds)")
+                }
+            }
+            // ++ END ZOOM LOG ++ 
+
             // Request a redraw for the next display cycle
             // Ensure this happens only after currentPixelBuffer is set
             DispatchQueue.main.async {

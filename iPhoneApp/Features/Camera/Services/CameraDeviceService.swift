@@ -374,13 +374,20 @@ class CameraDeviceService {
             
             logger.debug("Slider zoom: Staying on \(currentLens.rawValue)x. Ramping to relative factor \(zoomFactorClamped) (Target: \(factor)")
             
+            // Log before ramping
+            let zoomBeforeRamp = currentDevice.videoZoomFactor
+            logger.debug("ZOOM_LOG: [Slider] Zoom BEFORE ramp on \(currentDevice.localizedName): \(zoomBeforeRamp)")
+
             // Use ramp for smooth slider adjustments ON THE SAME LENS
             currentDevice.ramp(toVideoZoomFactor: zoomFactorClamped, withRate: 30.0) // Increased rate for faster slider response
+
+            // Log after starting ramp (note: this reads the *target* value of the ramp)
+            let zoomAfterRampStart = currentDevice.videoZoomFactor
+            logger.debug("ZOOM_LOG: [Slider] Zoom AFTER ramp start on \(currentDevice.localizedName): \(zoomAfterRampStart) (Targeting: \(zoomFactorClamped))")
 
             // Update the overall zoom factor in the delegate immediately
             // Use the unclamped target factor for UI consistency
             self.delegate?.didUpdateZoomFactor(factor)
-            // self.lastZoomFactor = zoomFactorClamped // Keep track of the actual device zoom
 
             currentDevice.unlockForConfiguration()
         } catch {

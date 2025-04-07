@@ -181,12 +181,21 @@ class RecordingService: NSObject {
             // Get active format
             let format = device.activeFormat
             
+            // ++ ZOOM LOG ++ 
+            let currentDeviceZoom = device.videoZoomFactor
+            logger.info("ZOOM_LOG: [Recording Start] Device zoom factor BEFORE writer setup: \\(currentDeviceZoom)")
+            // ++ END ZOOM LOG ++
+
             // Now safely get dimensions
             guard let dimensions = format.dimensions else {
                 logger.error("Could not get dimensions from active format: \(format)")
                 throw CameraError.configurationFailed
             }
             
+            // ++ ZOOM LOG ++ 
+            logger.info("ZOOM_LOG: [Recording Start] AssetWriter dimensions being configured: \\(dimensions.width)x\\(dimensions.height) (from activeFormat)")
+            // ++ END ZOOM LOG ++
+
             // Set dimensions based on the native format dimensions
             let videoWidth = dimensions.width
             let videoHeight = dimensions.height
@@ -550,6 +559,15 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                     }
                 } else {
                     // No LUT processing needed - use original sample buffer directly
+                    
+                    // ++ ZOOM LOG ++ 
+                    let width = CVPixelBufferGetWidth(pixelBuffer)
+                    let height = CVPixelBufferGetHeight(pixelBuffer)
+                    if shouldLog {
+                         logger.debug("ZOOM_LOG: [Recording Pipeline] Received buffer (NO BAKE IN): \\(width)x\\(height) frame #\\(self.videoFrameCount)")
+                    }
+                    // ++ END ZOOM LOG ++
+                    
                     assetWriterInput.append(sampleBuffer)
                     successfulVideoFrames += 1
                     if shouldLog {
