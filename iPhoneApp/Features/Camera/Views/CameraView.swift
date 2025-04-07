@@ -194,7 +194,7 @@ struct CameraView: View {
                                            previewVideoOutput: previewOutput)
                         .frame(width: previewWidth, height: previewHeight) // Apply calculated frame
                         .cornerRadius(12)
-                        .padding(.top, geometry.safeAreaInsets.top) // Position just below safe area (removed + 10)
+                        .padding(.top, geometry.safeAreaInsets.top)
                         .clipped()
                         .overlay(alignment: .topLeading) {
                             if isDebugEnabled {
