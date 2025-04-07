@@ -180,27 +180,22 @@ struct CameraView: View {
     }
     
     private func cameraPreview(geometry: GeometryProxy) -> some View {
-        // Log calculated frame size
+        // Calculate frame size based on geometry
         let previewWidth = geometry.size.width * 0.9
-        let previewHeight = geometry.size.height * 0.75 * 0.9
+        let previewHeight = geometry.size.height * 0.75 * 0.9 // Relative height like older code
         let _ = print("CameraPreview Calculated Frame - Width: \(previewWidth), Height: \(previewHeight), Top Safe Area: \(geometry.safeAreaInsets.top)")
-        
+
         return Group {
             if viewModel.isSessionRunning {
-                // Check if previewVideoOutput is available before creating the view
                 if let previewOutput = viewModel.previewVideoOutput {
                     MetalCameraPreviewView(session: viewModel.session, 
                                            viewModel: viewModel, 
                                            lutManager: viewModel.lutManager, 
-                                           previewVideoOutput: previewOutput) // Pass the output
-                        .frame(
-                            width: previewWidth,
-                            height: previewHeight
-                        )
+                                           previewVideoOutput: previewOutput)
+                        .frame(width: previewWidth, height: previewHeight) // Apply calculated frame
                         .cornerRadius(12)
-                        .padding(.top, geometry.safeAreaInsets.top + 60)
+                        .padding(.top, geometry.safeAreaInsets.top) // Position just below safe area (removed + 10)
                         .clipped()
-                        .frame(maxWidth: .infinity)
                         .overlay(alignment: .topLeading) {
                             if isDebugEnabled {
                                 debugOverlay
