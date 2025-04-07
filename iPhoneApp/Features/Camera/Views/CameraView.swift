@@ -7,6 +7,7 @@ import AVFoundation
 struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
     @EnvironmentObject var settings: SettingsModel
+    @EnvironmentObject var orientationManager: OrientationManager
 
     // Use the shared instance with @ObservedObject
     @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
@@ -152,7 +153,8 @@ struct CameraView: View {
                 )
             }
             .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
-                // Reset orientation lock when settings is dismissed
+                // REMOVED: Reset orientation lock when settings is dismissed
+                /*
                 print("DEBUG: [ORIENTATION-DEBUG] settings fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
                 AppDelegate.isVideoLibraryPresented = false
                 
@@ -169,6 +171,7 @@ struct CameraView: View {
                         window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
                     }
                 }
+                */
             }) {
                 SettingsView(
                     lutManager: viewModel.lutManager,
@@ -256,8 +259,8 @@ struct CameraView: View {
     
     private var videoLibraryButton: some View {
         Button {
-            print("DEBUG: [ORIENTATION-DEBUG] Library button tapped - setting AppDelegate.isVideoLibraryPresented = true")
-            AppDelegate.isVideoLibraryPresented = true // Allow landscape for library
+            // UPDATE: Use OrientationManager to allow landscape
+            orientationManager.updateOrientationMask(.all)
             isShowingVideoLibrary = true
         } label: {
             Image(systemName: "photo.stack")
@@ -270,6 +273,10 @@ struct CameraView: View {
                 .foregroundColor(.white)
         }
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
+            // UPDATE: Use OrientationManager to reset to portrait
+            orientationManager.updateOrientationMask(.portrait)
+            // REMOVED: Old code resetting AppDelegate flag and forcing geometry update
+            /*
             print("DEBUG: [ORIENTATION-DEBUG] library fullScreenCover onDismiss scheduled - setting AppDelegate.isVideoLibraryPresented = false")
             AppDelegate.isVideoLibraryPresented = false // Lock back to portrait
 
@@ -291,38 +298,38 @@ struct CameraView: View {
                      }
                  }
              }
+             */
         }) {
-            // Allow landscape mode within the library view
-            OrientationFixView(allowsLandscapeMode: true) {
-                VideoLibraryView(dismissAction: { isShowingVideoLibrary = false })
-            }
+            VideoLibraryView(dismissAction: { isShowingVideoLibrary = false })
         }
     }
     
     private var settingsButton: some View {
-        RotatingView(orientationViewModel: orientationViewModel) {
-            Button(action: {
-                isShowingSettings = true
-            }) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.6))
-                        .frame(width: 60, height: 60)
-                    
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.white)
-                }
+        Button(action: {
+            // UPDATE: Use OrientationManager to allow landscape
+            orientationManager.updateOrientationMask(.all)
+            isShowingSettings = true
+        }) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: 60, height: 60)
+                
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white)
             }
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 3.0)
-                    .onEnded { _ in
-                        withAnimation {
-                            isDebugEnabled.toggle()
-                        }
-                    }
-            )
         }
+        .rotateWithDeviceOrientation(using: orientationViewModel)
+        .frame(width: 60, height: 60)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 3.0)
+                .onEnded { _ in
+                    withAnimation {
+                        isDebugEnabled.toggle()
+                    }
+                }
+        )
     }
     
     private var recordButton: some View {
@@ -405,6 +412,8 @@ struct CameraView: View {
                     viewModel.status = viewModel.session.isRunning ? .running : .failed
                     viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
                     print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
+                    // Ensure default orientation is set when session starts
+                    orientationManager.updateOrientationMask(.portrait)
                 }
             }
         }
@@ -432,6 +441,8 @@ struct CameraView: View {
         
         // Disable device orientation notifications
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        // Reset orientation when session stops
+        orientationManager.updateOrientationMask(.portrait)
     }
 }
 

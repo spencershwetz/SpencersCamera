@@ -1,27 +1,20 @@
 import UIKit
 import SwiftUI
 
-/// A UIViewController that restricts orientation and hosts the camera preview
+/// A UIViewController that hosts the camera preview (orientation managed by SwiftUI modifiers)
 class OrientationFixViewController: UIViewController {
     private let contentView: UIView
-    private(set) var allowsLandscapeMode: Bool
     private var hasAppliedInitialOrientation = false
     
-    init(rootView: UIView, allowLandscape: Bool = false) {
+    init(rootView: UIView) {
         self.contentView = rootView
-        self.allowsLandscapeMode = allowLandscape
         super.init(nibName: nil, bundle: nil)
         
         // Set black background color
         self.view.backgroundColor = .black
         
-        // Configure modal presentation style based on landscape allowance
-        if !allowsLandscapeMode {
-            self.modalPresentationStyle = .fullScreen
-            print("DEBUG: OrientationFixViewController initializing with portrait-only mode")
-        } else {
-            print("DEBUG: OrientationFixViewController initializing with all orientations allowed")
-        }
+        self.modalPresentationStyle = .fullScreen
+        print("DEBUG: OrientationFixViewController initializing")
     }
     
     required init?(coder: NSCoder) {
@@ -51,14 +44,8 @@ class OrientationFixViewController: UIViewController {
         // Set background to black
         view.backgroundColor = .black
         
-        // Apply orientation settings
-        if !allowsLandscapeMode {
-            enforcePortraitOrientation()
-            print("DEBUG: OrientationFixViewController viewWillAppear - enforcing portrait mode")
-        } else {
-            enableAllOrientations()
-            print("DEBUG: OrientationFixViewController viewWillAppear - allowing all orientations")
-        }
+        enforcePortraitOrientation()
+        print("DEBUG: OrientationFixViewController viewWillAppear - enforcing portrait mode")
         
         // Set black background for all parent views
         setBlackBackgroundForAllParentViews()
@@ -72,11 +59,7 @@ class OrientationFixViewController: UIViewController {
         
         // Apply orientation settings again after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if !self.allowsLandscapeMode {
-                self.enforcePortraitOrientation()
-            } else {
-                self.enableAllOrientations()
-            }
+            self.enforcePortraitOrientation()
         }
     }
     
@@ -103,17 +86,9 @@ class OrientationFixViewController: UIViewController {
         print("DEBUG: Enforcing portrait orientation")
     }
     
-    private func enableAllOrientations() {
-        // Allow all orientations
-        print("DEBUG: Enabling all orientations")
-    }
-    
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if allowsLandscapeMode {
-            return .all
-        } else {
-            return .portrait
-        }
+        // Always return portrait as this ViewController hosts the main camera UI
+        return .portrait
     }
     
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
@@ -159,16 +134,9 @@ extension UIViewController {
 /// A SwiftUI wrapper for the orientation fix view controller
 struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
     var content: Content
-    var allowsLandscapeMode: Bool
     
-    init(allowsLandscapeMode: Bool = false, @ViewBuilder content: () -> Content) {
+    init(@ViewBuilder content: () -> Content) {
         self.content = content()
-        self.allowsLandscapeMode = allowsLandscapeMode
-        
-        // Set AppDelegate flag if we're initializing with landscape allowed
-        if allowsLandscapeMode {
-            AppDelegate.isVideoLibraryPresented = true
-        }
     }
     
     func makeUIViewController(context: Context) -> OrientationFixViewController {
@@ -183,14 +151,18 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
         hostingController.view.backgroundColor = .black
         
         // Create and return the orientation fix view controller
-        return OrientationFixViewController(rootView: contentView, allowLandscape: allowsLandscapeMode)
+        return OrientationFixViewController(rootView: contentView)
     }
     
     func updateUIViewController(_ uiViewController: OrientationFixViewController, context: Context) {
+        // REMOVED: No updates needed here anymore based on landscape mode.
+        // The SwiftUI .supportedInterfaceOrientations modifier handles allowed orientations.
+        /*
         // If we allow landscape, ensure orientation is updated
         if allowsLandscapeMode {
             AppDelegate.isVideoLibraryPresented = true
             uiViewController.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
+        */
     }
 } 

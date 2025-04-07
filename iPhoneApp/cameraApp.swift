@@ -15,6 +15,8 @@ struct cameraApp: App {
     
     // Create a StateObject for the CameraViewModel
     @StateObject private var cameraViewModel = CameraViewModel()
+    // ADD: Shared OrientationManager instance
+    @StateObject private var orientationManager = OrientationManager.shared
     
     // Get the scene phase
     @Environment(\.scenePhase) private var scenePhase
@@ -47,14 +49,16 @@ struct cameraApp: App {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                // Wrap CameraView in OrientationFixView for strict orientation control
-                OrientationFixView {
+                // REMOVED: OrientationFixView wrapper
+                // OrientationFixView {
                     // Pass the viewModel instance to CameraView
                     CameraView(viewModel: cameraViewModel)
-                }
+                // }
             }
             .ignoresSafeArea(.all, edges: .all) // Use standard modifier
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            // ADD: Inject OrientationManager into the environment
+            .environmentObject(orientationManager)
             // ADD: Hide status bar at app level
             .hideStatusBar()
             .preferredColorScheme(.dark) // Force dark mode at the SwiftUI level

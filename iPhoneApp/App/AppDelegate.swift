@@ -9,14 +9,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Logger for AppDelegate
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppDelegateOrientation")
 
-    // MARK: - Orientation Lock Properties
-    
+    // ADD: Access to the shared OrientationManager
+    private let orientationManager = OrientationManager.shared
+
+    // MARK: - Orientation Lock Properties - REMOVED
+    /*
     /// Static variable to track view controllers that need landscape support
     static var landscapeEnabledViewControllers: [String] = []
     
     // Track if the video library is currently being presented
     static var isVideoLibraryPresented: Bool = false
-    
+    */
     // Track whether status bar should be hidden
     static var shouldHideStatusBar: Bool = true
     
@@ -71,66 +74,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
     }
     
-    // MARK: - Orientation Support
+    // MARK: - Orientation Support - RE-IMPLEMENTED
     
-    /// Handle orientation lock dynamically based on the current view controller
+    /// Handle orientation lock dynamically based on the current state from OrientationManager
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        logger.debug("Querying supported interface orientations.")
-        // If video library is flagged as presented, always allow landscape
-        if AppDelegate.isVideoLibraryPresented {
-            logger.info("Video library is presented. Allowing Portrait and Landscape Left/Right.")
-            return [.portrait, .landscapeLeft, .landscapeRight]
-        }
-        
-        // Get the top view controller
-        if let topViewController = window?.rootViewController?.topMostViewController() {
-            let vcName = String(describing: type(of: topViewController))
-            logger.debug("Top view controller identified: \(vcName)")
-            
-            // Check if this is a presentation controller that contains our view
-            if vcName.contains("PresentationHostingController") {
-                // For SwiftUI presentation controllers, we need to check their content
-                if let childController = topViewController.children.first {
-                    let childName = String(describing: type(of: childController))
-                    logger.debug("PresentationHostingController contains child: \(childName)")
-                    
-                    // Check if the child controller is allowed to use landscape
-                    if AppDelegate.landscapeEnabledViewControllers.contains(where: { childName.contains($0) }) {
-                        logger.info("Child controller \(childName) allows landscape. Allowing Portrait and Landscape Left/Right.")
-                        return [.portrait, .landscapeLeft, .landscapeRight]
-                    } else {
-                        logger.info("Child controller \(childName) does not require landscape. Locking to Portrait.")
-                        return .portrait
-                    }
-                } else {
-                    logger.warning("PresentationHostingController has no children. Locking to Portrait.")
-                    return .portrait
-                }
-            }
-            
-            // Check if the current view controller allows landscape
-            if let orientationViewController = topViewController as? OrientationFixViewController {
-                // Use property from our custom view controller
-                if orientationViewController.allowsLandscapeMode {
-                    logger.info("OrientationFixViewController allows landscape. Allowing Portrait and Landscape Left/Right.")
-                    return [.portrait, .landscapeLeft, .landscapeRight]
-                }
-            }
-            
-            // Check the VC name against our list
-            if AppDelegate.landscapeEnabledViewControllers.contains(where: { vcName.contains($0) }) {
-                logger.info("    [Orientation] Top VC '\(vcName)' allows landscape via static list. Allowing All.")
-                return [.portrait, .landscapeLeft, .landscapeRight]
-            }
-            
-            logger.info("    [Orientation] No special case matched for VC '\(vcName)'. Locking to Portrait.")
-        } else {
-            logger.warning("    [Orientation] Could not determine top view controller. Locking to Portrait as fallback.")
-        }
-        
-        // Default to portrait only
-        logger.info("    [Orientation] Defaulting to Portrait only.")
-        return .portrait
+        logger.debug("Querying supported interface orientations from OrientationManager.")
+        // Read the current desired mask from the manager
+        let mask = orientationManager.currentOrientationMask
+        logger.info("AppDelegate returning orientation mask: \(mask == .portrait ? "Portrait" : "All")")
+        return mask
     }
 }
 
