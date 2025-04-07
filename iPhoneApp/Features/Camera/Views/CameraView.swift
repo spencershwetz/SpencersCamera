@@ -49,7 +49,7 @@ struct CameraView: View {
                     // REMOVED: .edgesIgnoringSafeArea(.all) <- This caused GeometryReader to ignore safe area
                 
                 // Log geometry before calling cameraPreview
-                let _ = print("CameraView Geometry - Size: \(geometry.size), Top Safe Area: \(geometry.safeAreaInsets.top)")
+                let _ = print("CameraView Geometry - Size: \(geometry.size), Top Safe Area: \(geometry.safeAreaInsets.top), Bottom Safe Area: \(geometry.safeAreaInsets.bottom)")
                 
                 // Camera preview with LUT
                 cameraPreview(geometry: geometry)
@@ -63,6 +63,7 @@ struct CameraView: View {
                 // Lens selection with zoom slider
                 VStack {
                     Spacer()
+                    let _ = print("CameraView: Checking availableLenses. Count = \(viewModel.availableLenses.count). IsEmpty = \(viewModel.availableLenses.isEmpty)")
                     if !viewModel.availableLenses.isEmpty {
                         ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
                             .padding(.horizontal)

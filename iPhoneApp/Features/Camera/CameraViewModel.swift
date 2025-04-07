@@ -430,6 +430,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // If init runs before scenePhase updates, initial context might show inactive
         sendStateToWatch()
 
+        // ADD: Populate available lenses
+        self.availableLenses = CameraLens.availableLenses()
+        logger.info("📸 Populated available lenses: \(self.availableLenses.map { $0.rawValue + "x" })")
+
         // Initial check for Apple Log support
         Task { @MainActor in // Ensure this runs on main thread
             checkAppleLogSupport() // Removed unnecessary await
