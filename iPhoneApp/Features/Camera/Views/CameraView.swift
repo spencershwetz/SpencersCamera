@@ -184,19 +184,22 @@ struct CameraView: View {
         // Calculate frame size based on geometry
         let previewWidth = geometry.size.width * 0.9
         let previewHeight = geometry.size.height * 0.75 * 0.9 // Relative height like older code
-        let _ = print("CameraPreview Calculated Frame - Width: \(previewWidth), Height: \(previewHeight), Top Safe Area: \(geometry.safeAreaInsets.top)")
+        let topSafeArea = geometry.safeAreaInsets.top
+        let _ = print("CameraPreview Func - Width: \(previewWidth), Height: \(previewHeight), Top Safe Area for Padding: \(topSafeArea)")
 
         return Group {
             if viewModel.isSessionRunning {
                 if let previewOutput = viewModel.previewVideoOutput {
-                    MetalCameraPreviewView(session: viewModel.session, 
-                                           viewModel: viewModel, 
-                                           lutManager: viewModel.lutManager, 
+                    MetalCameraPreviewView(session: viewModel.session,
+                                           viewModel: viewModel,
+                                           lutManager: viewModel.lutManager,
                                            previewVideoOutput: previewOutput)
                         .frame(width: previewWidth, height: previewHeight) // Apply calculated frame
                         .cornerRadius(12)
-                        .padding(.top, geometry.safeAreaInsets.top)
                         .clipped()
+                        .background(GeometryReader { previewGeo in
+                            Color.clear.onAppear { print("MetalCameraPreview Frame in CameraView: \(previewGeo.frame(in: .named("CameraViewCoordSpace")))") }
+                        })
                         .overlay(alignment: .topLeading) {
                             if isDebugEnabled {
                                 debugOverlay
@@ -235,6 +238,7 @@ struct CameraView: View {
                 .background(Color.black)
             }
         }
+        .coordinateSpace(name: "CameraViewCoordSpace")
     }
     
     private var debugOverlay: some View {
