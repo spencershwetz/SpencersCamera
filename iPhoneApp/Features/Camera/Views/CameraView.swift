@@ -63,14 +63,11 @@ struct CameraView: View {
                 // Lens selection with zoom slider
                 VStack {
                     Spacer()
-                        .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
-                    
                     if !viewModel.availableLenses.isEmpty {
                         ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
-                            .padding(.bottom, 20)
+                            .padding(.horizontal)
+                            .padding(.bottom, 120)
                     }
-                    
-                    Spacer()
                 }
                 .zIndex(99)
                 
@@ -186,7 +183,7 @@ struct CameraView: View {
         // Log calculated frame size
         let previewWidth = geometry.size.width * 0.9
         let previewHeight = geometry.size.height * 0.75 * 0.9
-        let _ = print("CameraPreview Calculated Frame - Width: \(previewWidth), Height: \(previewHeight)")
+        let _ = print("CameraPreview Calculated Frame - Width: \(previewWidth), Height: \(previewHeight), Top Safe Area: \(geometry.safeAreaInsets.top)")
         
         return Group {
             if viewModel.isSessionRunning {
@@ -196,18 +193,18 @@ struct CameraView: View {
                                            viewModel: viewModel, 
                                            lutManager: viewModel.lutManager, 
                                            previewVideoOutput: previewOutput) // Pass the output
-                        .ignoresSafeArea()
                         .frame(
                             width: previewWidth,
                             height: previewHeight
                         )
+                        .cornerRadius(12)
+                        .padding(.top, geometry.safeAreaInsets.top + 60)
                         .clipped()
                         .frame(maxWidth: .infinity)
-                        // Removed top padding to allow preview to go to the top edge
                         .overlay(alignment: .topLeading) {
                             if isDebugEnabled {
                                 debugOverlay
-                                    .padding(.top, 60)
+                                    .padding(.top, geometry.safeAreaInsets.top + 70)
                                     .padding(.leading, 20)
                             }
                         }
