@@ -35,8 +35,9 @@ struct CameraView: View {
             queue: .main
         ) { _ in
             print("DEBUG: App became active - re-enforcing camera orientation")
-            // We CANNOT reference viewModel directly here - it causes the error
-            // Instead, we'll handle this in onAppear or through a dedicated @State property
+            // Call the function to set the orientation lock when the app becomes active
+            // Directly access the shared instance to avoid environment object issues in closure
+            OrientationManager.shared.updateOrientationMask(.portrait)
         }
     }
     
@@ -98,9 +99,13 @@ struct CameraView: View {
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
+                // Set the orientation lock when the view appears
+                setCameraOrientationLock()
                 startSession()
             }
             .onDisappear {
+                // Unlock orientation when leaving the camera view - REMOVED as it conflicts with modal dismissals
+                // orientationManager.updateOrientationMask(.all)
                 stopSession()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
@@ -153,25 +158,8 @@ struct CameraView: View {
                 )
             }
             .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
-                // REMOVED: Reset orientation lock when settings is dismissed
-                /*
-                print("DEBUG: [ORIENTATION-DEBUG] settings fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
-                AppDelegate.isVideoLibraryPresented = false
-                
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    let orientations: UIInterfaceOrientationMask = [.portrait]
-                    let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-                    
-                    print("DEBUG: Returning to portrait after settings")
-                    windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                        print("DEBUG: Portrait return result: \(error.localizedDescription)")
-                    }
-                    
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
-                */
+                // ADDED: Reset orientation lock when settings is dismissed
+                orientationManager.updateOrientationMask(.portrait)
             }) {
                 SettingsView(
                     lutManager: viewModel.lutManager,
@@ -442,6 +430,11 @@ struct CameraView: View {
         // Disable device orientation notifications
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         // Reset orientation when session stops
+        orientationManager.updateOrientationMask(.portrait)
+    }
+
+    // Function to set the camera view's orientation lock
+    private func setCameraOrientationLock() {
         orientationManager.updateOrientationMask(.portrait)
     }
 }
