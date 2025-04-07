@@ -168,7 +168,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     let availableFrameRates: [Double] = [23.976, 24.0, 25.0, 29.97, 30.0]
     
     private var orientationObserver: NSObjectProtocol?
-    @Published private(set) var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
+    @Published var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
     
     private let processingQueue = DispatchQueue(
         label: "com.camera.processing",

@@ -43,14 +43,16 @@ struct CameraView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
+            ZStack(alignment: .top) {
                 // Background
                 Color.black
-                    .edgesIgnoringSafeArea(.all)
+                    // REMOVED: .edgesIgnoringSafeArea(.all) <- This caused GeometryReader to ignore safe area
+                
+                // Log geometry before calling cameraPreview
+                let _ = print("CameraView Geometry - Size: \(geometry.size), Top Safe Area: \(geometry.safeAreaInsets.top)")
                 
                 // Camera preview with LUT
-                cameraPreview
-                    .edgesIgnoringSafeArea(.all)
+                cameraPreview(geometry: geometry)
                 
                 // Function buttons overlay
                 FunctionButtonsView(viewModel: viewModel, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
@@ -180,8 +182,13 @@ struct CameraView: View {
         }
     }
     
-    private var cameraPreview: some View {
-        Group {
+    private func cameraPreview(geometry: GeometryProxy) -> some View {
+        // Log calculated frame size
+        let previewWidth = geometry.size.width * 0.9
+        let previewHeight = geometry.size.height * 0.75 * 0.9
+        let _ = print("CameraPreview Calculated Frame - Width: \(previewWidth), Height: \(previewHeight)")
+        
+        return Group {
             if viewModel.isSessionRunning {
                 // Check if previewVideoOutput is available before creating the view
                 if let previewOutput = viewModel.previewVideoOutput {
@@ -190,7 +197,13 @@ struct CameraView: View {
                                            lutManager: viewModel.lutManager, 
                                            previewVideoOutput: previewOutput) // Pass the output
                         .ignoresSafeArea()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(
+                            width: previewWidth,
+                            height: previewHeight
+                        )
+                        .clipped()
+                        .frame(maxWidth: .infinity)
+                        // Removed top padding to allow preview to go to the top edge
                         .overlay(alignment: .topLeading) {
                             if isDebugEnabled {
                                 debugOverlay

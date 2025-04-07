@@ -47,7 +47,7 @@ struct cameraApp: App {
         WindowGroup {
             // Add background color to root view
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black
                 
                 // REMOVED: OrientationFixView wrapper
                 // OrientationFixView {
@@ -55,7 +55,6 @@ struct cameraApp: App {
                     CameraView(viewModel: cameraViewModel)
                 // }
             }
-            .ignoresSafeArea(.all, edges: .all) // Use standard modifier
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             // ADD: Inject OrientationManager into the environment
             .environmentObject(orientationManager)

@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import MetalKit
 import CoreImage.CIFilterBuiltins
+import Combine
 
 extension Notification.Name {
     static let recordingStateChanged = Notification.Name("recordingStateChangedNotification")
@@ -61,6 +62,10 @@ struct MetalCameraPreviewView: UIViewRepresentable {
         
         // Add property to hold the intermediate render target texture
         private var renderTargetTexture: MTLTexture?
+        
+        // Store current orientation and subscriber
+        private var currentOrientation: UIInterfaceOrientation = .portrait
+        private var orientationSubscriber: AnyCancellable?
 
         init(parent: MetalCameraPreviewView, session: AVCaptureSession, viewModel: CameraViewModel, lutManager: LUTManager, previewVideoOutput: AVCaptureVideoDataOutput) {
             print("DEBUG: MetalCameraPreviewView.Coordinator init")
@@ -77,6 +82,16 @@ struct MetalCameraPreviewView: UIViewRepresentable {
             }
 
             NotificationCenter.default.addObserver(self, selector: #selector(handleRecordingStateChange), name: .recordingStateChanged, object: nil)
+            
+            // Subscribe to orientation changes from ViewModel
+            orientationSubscriber = viewModel.$currentInterfaceOrientation
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] newOrientation in
+                    print("DEBUG: Coordinator received orientation update: \(newOrientation.rawValue)")
+                    self?.currentOrientation = newOrientation
+                }
+
+            print("Coordinator init - ViewModel Orientation: \(currentOrientation.rawValue)")
         }
 
         deinit {
@@ -230,6 +245,8 @@ struct MetalCameraPreviewView: UIViewRepresentable {
 
         @MainActor
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+            // Log drawable size changes
+            print("MetalCoordinator - drawableSizeWillChange: \(size)")
             recordingBorderLayer?.frame = view.bounds
             print("DEBUG: mtkView drawableSizeWillChange: \(size)")
             // Invalidate the render target texture when size changes
@@ -238,6 +255,7 @@ struct MetalCameraPreviewView: UIViewRepresentable {
 
         @MainActor
         func draw(in view: MTKView) {
+            // Check if paused
             guard let currentDrawable = view.currentDrawable,
                   let commandBuffer = commandQueue.makeCommandBuffer(),
                   // renderPassDescriptor is not needed for CIContext rendering + blit
@@ -246,25 +264,36 @@ struct MetalCameraPreviewView: UIViewRepresentable {
                 return
             }
 
+            // Log the actual drawable size being used for rendering
+            print("MetalCoordinator - draw(in:) - Drawable Size: \(view.drawableSize)")
+
             // 1. Create CIImage from Pixel Buffer
             // This automatically handles different pixel formats (YUV, BGRA)
-            let sourceImage = CIImage(cvPixelBuffer: lastPixelBuffer)
+            let ciImage = CIImage(cvPixelBuffer: lastPixelBuffer)
+            
+            // 2. Apply Orientation Correction
+            let orientedImage = ciImage // Use the image directly from the buffer
 
-            // 2. Apply LUT if available
-            let finalImage: CIImage
-            if let lutFilter = parent.lutManager.currentLUTFilter {
-                lutFilter.setValue(sourceImage, forKey: kCIInputImageKey)
+            // ++ ADD Vertical Flip Transform ++
+            // CIImage origin is bottom-left, Metal texture origin is top-left.
+            // Apply a vertical flip transform before rendering.
+            let flipTransform = CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -orientedImage.extent.height)
+            let finalInputImage = orientedImage.transformed(by: flipTransform)
+
+            // 3. Apply LUT Filter (if enabled and available)
+            var finalImage = finalInputImage // Start with the flipped image
+            if viewModel.lutManager.isLUTPreviewEnabled, let lutFilter = viewModel.lutManager.currentLUTFilter {
+                // Apply LUT to the *flipped* image
+                lutFilter.setValue(finalInputImage, forKey: kCIInputImageKey)
                 if let outputImage = lutFilter.outputImage {
                     finalImage = outputImage
                 } else {
                     print("Warning: LUT filter applied but produced nil output image.")
-                    finalImage = sourceImage // Fallback to source if LUT fails
+                    finalImage = finalInputImage // Fallback to source if LUT fails
                 }
-            } else {
-                finalImage = sourceImage // No LUT to apply
             }
 
-            // 3. Ensure Intermediate Texture exists and is correctly configured
+            // 4. Ensure Intermediate Texture exists and is correctly configured
             if renderTargetTexture == nil || 
                renderTargetTexture?.width != currentDrawable.texture.width ||
                renderTargetTexture?.height != currentDrawable.texture.height ||
@@ -295,7 +324,7 @@ struct MetalCameraPreviewView: UIViewRepresentable {
                  return
             }
 
-            // 4. Render final CIImage to the Intermediate Texture
+            // 5. Render final CIImage to the Intermediate Texture
             let destinationColorSpace = CGColorSpaceCreateDeviceRGB()
 
             // Render using CIContext
@@ -303,14 +332,14 @@ struct MetalCameraPreviewView: UIViewRepresentable {
             // CIImage has a color space assigned (which CIImage(cvPixelBuffer:) often does)
             // and the destination color space is different.
             ciContext.render(
-                finalImage,
+                finalImage, // Render the potentially LUT-applied and flipped image
                 to: targetTexture,
                 commandBuffer: commandBuffer,
-                bounds: finalImage.extent, // Use finalImage extent for source bounds
+                bounds: CGRect(x: 0, y: 0, width: targetTexture.width, height: targetTexture.height), // <-- Use CGRect from texture dimensions
                 colorSpace: destinationColorSpace
             )
 
-            // 5. Blit from Intermediate Texture to Drawable Texture
+            // 6. Blit from Intermediate Texture to Drawable Texture
             guard let blitEncoder = commandBuffer.makeBlitCommandEncoder() else {
                 print("Coordinator Error: Failed to create blit command encoder.")
                 commandBuffer.commit() // Commit before returning
@@ -330,7 +359,7 @@ struct MetalCameraPreviewView: UIViewRepresentable {
             )
             blitEncoder.endEncoding()
 
-            // 6. Present the drawable
+            // 7. Present the drawable
             commandBuffer.present(currentDrawable)
             commandBuffer.commit()
             // print("DEBUG: draw(in:) - Frame drawn and committed")
@@ -381,6 +410,22 @@ class CustomMTKView: MTKView {
         } else {
             self.backgroundColor = .black
              print("DEBUG: Set black background via UIView backgroundColor")
+        }
+    }
+}
+
+// Add helper extension for orientation conversion
+extension UIInterfaceOrientation {
+    var exifOrientation: Int32 {
+        switch self {
+        case .portrait: return 6 // Rotated 90 CW
+        case .portraitUpsideDown: return 8 // Rotated 270 CW
+        case .landscapeLeft: return 3 // Rotated 180
+        case .landscapeRight: return 1 // Default orientation (0 rotation)
+        case .unknown:
+            return 1 // Default if unknown
+        @unknown default:
+            return 1 // Default for future cases
         }
     }
 }
