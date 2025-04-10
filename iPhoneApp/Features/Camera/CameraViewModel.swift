@@ -278,7 +278,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     @Published var lutManager = LUTManager()
-    private var ciContext = CIContext()
+    let lutProcessor = LUTProcessor()
     
     // Add flag to lock orientation updates during recording
     private var recordingOrientationLocked = false
@@ -452,6 +452,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         cameraSetupService = CameraSetupService(session: session, delegate: self)
         exposureService = ExposureService(delegate: self)
         recordingService = RecordingService(session: session, delegate: self)
+        recordingService.setLUTProcessor(self.lutProcessor)
         videoFormatService = VideoFormatService(session: session, delegate: self)
         cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
     }
@@ -547,7 +548,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
-        recordingService.setLUTManager(lutManager)
+        lutProcessor.setLogEnabled(self.isAppleLogEnabled)
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         recordingService.setVideoConfiguration(
@@ -633,100 +634,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var successfulVideoFrames = 0
     private var failedVideoFrames = 0
     
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let assetWriter = assetWriter,
-              assetWriter.status == .writing else {
-            return
-        }
-        
-        // Handle video data
-        if output == videoDataOutput,
-           let assetWriterInput = assetWriterInput,
-           assetWriterInput.isReadyForMoreMediaData {
-            
-            videoFrameCount += 1
-            
-            // Log every 30 frames to avoid flooding
-            let shouldLog = videoFrameCount % 30 == 0
-            if shouldLog {
-                print("📽️ Processing video frame #\(videoFrameCount), writer status: \(assetWriter.status.rawValue)")
-            }
-            
-            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                if let lutFilter = tempLUTFilter ?? lutManager.currentLUTFilter {
-                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-                    if let processedImage = applyLUT(to: ciImage, using: lutFilter),
-                       let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
-                        
-                        // Use original timing information
-                        var timing = CMSampleTimingInfo()
-                        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
-                        
-                        // Create format description for processed buffer
-                        var info: CMFormatDescription?
-                        let status = CMVideoFormatDescriptionCreateForImageBuffer(
-                            allocator: kCFAllocatorDefault,
-                            imageBuffer: processedPixelBuffer,
-                            formatDescriptionOut: &info
-                        )
-                        
-                        if status == noErr, let info = info,
-                           let newSampleBuffer = createSampleBuffer(
-                            from: processedPixelBuffer,
-                            formatDescription: info,
-                            timing: &timing
-                           ) {
-                            assetWriterInput.append(newSampleBuffer)
-                            successfulVideoFrames += 1
-                            if shouldLog {
-                                print("✅ Successfully appended processed frame #\(successfulVideoFrames)")
-                            }
-                        } else {
-                            failedVideoFrames += 1
-                            print("⚠️ Failed to create format description for processed frame #\(videoFrameCount), status: \(status)")
-                        }
-                    }
-                } else {
-                    // No LUT processing needed - use original sample buffer directly
-                    assetWriterInput.append(sampleBuffer)
-                    successfulVideoFrames += 1
-                    if shouldLog {
-                        print("✅ Successfully appended original frame #\(successfulVideoFrames)")
-                    }
-                }
-            }
-        }
-        
-        // Handle audio data
-        if output == audioDataOutput,
-           let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
-           audioInput.isReadyForMoreMediaData {
-            audioFrameCount += 1
-            audioInput.append(sampleBuffer)
-            if audioFrameCount % 100 == 0 {
-                print("🎵 Processed audio frame #\(audioFrameCount)")
-            }
-        }
-    }
-    
-    private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
-        var newPixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault,
-                           CVPixelBufferGetWidth(template),
-                           CVPixelBufferGetHeight(template),
-                           CVPixelBufferGetPixelFormatType(template),
-                           [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
-                           &newPixelBuffer)
-        
-        guard let outputBuffer = newPixelBuffer else { 
-            print("⚠️ Failed to create pixel buffer from CI image")
-            return nil 
-        }
-        
-        ciContext.render(ciImage, to: outputBuffer)
-        return outputBuffer
-    }
-
     // Add helper property for tracking keyframes
     private var lastKeyFrameTime: CMTime?
 

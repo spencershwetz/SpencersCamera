@@ -18,7 +18,7 @@ class RecordingService: NSObject {
     private weak var delegate: RecordingServiceDelegate?
     private var session: AVCaptureSession
     private var device: AVCaptureDevice?
-    private var lutManager: LUTManager?
+    private var lutProcessor: LUTProcessor?
     private var isAppleLogEnabled = false
     private var isBakeInLUTEnabled = true // Default to true to maintain backward compatibility
     
@@ -36,7 +36,6 @@ class RecordingService: NSObject {
     private var selectedResolution: CameraViewModel.Resolution = .uhd
     private var selectedCodec: CameraViewModel.VideoCodec = .hevc
     private var processingQueue: DispatchQueue
-    private var ciContext = CIContext()
     
     // Statistics for debugging
     private var videoFrameCount = 0
@@ -60,8 +59,8 @@ class RecordingService: NSObject {
         self.device = device
     }
     
-    func setLUTManager(_ lutManager: LUTManager) {
-        self.lutManager = lutManager
+    func setLUTProcessor(_ processor: LUTProcessor) {
+        self.lutProcessor = processor
     }
     
     func setAppleLogEnabled(_ enabled: Bool) {
@@ -435,35 +434,6 @@ class RecordingService: NSObject {
         }
     }
     
-    // Process image with LUT filter if available
-    func applyLUT(to image: CIImage) -> CIImage? {
-        guard let lutFilter = lutManager?.currentLUTFilter else {
-            return image
-        }
-        
-        lutFilter.setValue(image, forKey: kCIInputImageKey)
-        return lutFilter.outputImage
-    }
-    
-    // Helper method for creating pixel buffers from CIImage
-    private func createPixelBuffer(from ciImage: CIImage, with template: CVPixelBuffer) -> CVPixelBuffer? {
-        var newPixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault,
-                           CVPixelBufferGetWidth(template),
-                           CVPixelBufferGetHeight(template),
-                           CVPixelBufferGetPixelFormatType(template),
-                           [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary,
-                           &newPixelBuffer)
-        
-        guard let outputBuffer = newPixelBuffer else {
-            logger.warning("Failed to create pixel buffer from CI image")
-            return nil
-        }
-        
-        ciContext.render(ciImage, to: outputBuffer)
-        return outputBuffer
-    }
-    
     // Helper method for creating sample buffers
     private func createSampleBuffer(
         from pixelBuffer: CVPixelBuffer,
@@ -515,10 +485,16 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                if isBakeInLUTEnabled, let lutManager = lutManager, lutManager.currentLUTFilter != nil {
-                    let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-                    if let processedImage = applyLUT(to: ciImage),
-                       let processedPixelBuffer = createPixelBuffer(from: processedImage, with: pixelBuffer) {
+                var finalSampleBuffer: CMSampleBuffer? = sampleBuffer // Default to original
+                
+                // Check if LUT processing is enabled and possible
+                if isBakeInLUTEnabled, let lutProcessor = lutProcessor {
+                    // Ensure the processor's log state matches the recording setting
+                    lutProcessor.setLogEnabled(self.isAppleLogEnabled)
+                    
+                    // Attempt to process the pixel buffer
+                    if let processedPixelBuffer = lutProcessor.processPixelBuffer(pixelBuffer) {
+                        // Successfully processed, create a new sample buffer with processed data
                         
                         // Use original timing information
                         var timing = CMSampleTimingInfo()
@@ -538,23 +514,44 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                             formatDescription: info,
                             timing: &timing
                            ) {
-                            assetWriterInput.append(newSampleBuffer)
-                            successfulVideoFrames += 1
+                            finalSampleBuffer = newSampleBuffer // Use the new processed buffer
                             if shouldLog {
-                                logger.debug("Successfully appended processed frame #\(self.successfulVideoFrames)")
+                                logger.trace("Using processed pixel buffer for frame #\(self.videoFrameCount)")
                             }
                         } else {
                             failedVideoFrames += 1
-                            logger.warning("Failed to create format description for processed frame #\(self.videoFrameCount)")
+                            logger.warning("Failed to create format description or sample buffer for processed frame #\(self.videoFrameCount), using original.")
+                            // Fallback to original buffer if creation fails
+                            finalSampleBuffer = sampleBuffer
                         }
+                    } else {
+                        // processPixelBuffer returned nil, meaning no filter was applied or it failed.
+                        // Use the original sample buffer.
+                        if shouldLog {
+                            logger.trace("No LUT processing applied for frame #\(self.videoFrameCount), using original.")
+                        }
+                        finalSampleBuffer = sampleBuffer
                     }
                 } else {
-                    // No LUT processing needed - use original sample buffer directly
-                    assetWriterInput.append(sampleBuffer)
+                    // Bake-in is disabled or LUT processor is not available
+                    if shouldLog {
+                         logger.trace("LUT Bake-in disabled or processor unavailable for frame #\(self.videoFrameCount), using original.")
+                    }
+                    finalSampleBuffer = sampleBuffer
+                }
+                
+                // Append the appropriate sample buffer (original or processed)
+                if let bufferToAppend = finalSampleBuffer {
+                    assetWriterInput.append(bufferToAppend)
                     successfulVideoFrames += 1
                     if shouldLog {
-                        logger.debug("Successfully appended original frame #\(self.successfulVideoFrames)")
+                        logger.debug("Successfully appended frame #\(self.successfulVideoFrames) (processed: \(bufferToAppend !== sampleBuffer))")
                     }
+                } else {
+                     // This case should theoretically not happen based on the logic above
+                     // but added as a safeguard.
+                     failedVideoFrames += 1
+                     logger.error("Error: finalSampleBuffer was nil for frame #\(self.videoFrameCount). Skipping append.")
                 }
             }
         }

@@ -9,6 +9,7 @@ private let lutPreviewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, 
 struct LUTVideoPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
+    let lutProcessor: LUTProcessor
     let viewModel: CameraViewModel
     
     func makeUIView(context: Context) -> LUTPreviewView {
@@ -63,14 +64,11 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: LUTPreviewView, context: Context) {
-        // Update LUT filter in processor if it changed
-        context.coordinator.lutProcessor.setLUTFilter(lutManager.currentLUTFilter)
-        
         // Update LOG mode in processor if it changed
         context.coordinator.lutProcessor.setLogEnabled(viewModel.isAppleLogEnabled)
         
-        // Update the preview view's LUT status
-        uiView.isLUTEnabled = lutManager.currentLUTFilter != nil
+        // Update the preview view's LUT status based on the processor's filter state
+        uiView.isLUTEnabled = context.coordinator.lutProcessor.currentLUTFilter != nil
         
         // Ensure preview layer orientation is fixed
         uiView.ensureFixedOrientation()
@@ -82,26 +80,23 @@ struct LUTVideoPreviewView: UIViewRepresentable {
     }
     
     func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+        Coordinator(parent: self, lutProcessor: self.lutProcessor)
     }
     
     class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let parent: LUTVideoPreviewView
         var session: AVCaptureSession?
         weak var previewView: LUTPreviewView?
-        let lutProcessor = LUTProcessor()
+        let lutProcessor: LUTProcessor
         private let coordinatorLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTCoordinatorOrientation")
         
         // Track the current device orientation to detect landscape transitions
         private var lastDeviceOrientation: UIDeviceOrientation = .portrait
         
-        init(parent: LUTVideoPreviewView) {
+        init(parent: LUTVideoPreviewView, lutProcessor: LUTProcessor) {
             self.parent = parent
+            self.lutProcessor = lutProcessor
             super.init()
-            
-            // Initialize the LUT processor with the current LUT filter
-            lutProcessor.setLUTFilter(parent.lutManager.currentLUTFilter)
-            lutProcessor.setLogEnabled(parent.viewModel.isAppleLogEnabled)
         }
         
         deinit {
@@ -144,8 +139,8 @@ struct LUTVideoPreviewView: UIViewRepresentable {
                 coordinatorLogger.warning("Video connection does not support 90° rotation in captureOutput.")
             }
             
-            // Only process if LUT is enabled
-            if parent.lutManager.currentLUTFilter != nil {
+            // Only process if LUT filter is set in the shared processor
+            if lutProcessor.currentLUTFilter != nil {
                 // Get the pixel buffer from the sample buffer
                 guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
                     coordinatorLogger.error("Failed to get pixel buffer from sample buffer in captureOutput")
@@ -155,7 +150,7 @@ struct LUTVideoPreviewView: UIViewRepresentable {
                 // Create a CIImage from the pixel buffer
                 let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
                 
-                // Process the image with the LUT
+                // Process the image with the shared LUT processor
                 if let processedImage = lutProcessor.processImage(ciImage),
                    let cgImage = lutProcessor.createCGImage(from: processedImage) {
                     // Update the preview view with the processed frame

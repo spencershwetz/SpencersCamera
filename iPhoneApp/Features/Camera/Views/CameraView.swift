@@ -210,6 +210,7 @@ struct CameraView: View {
                     CameraPreviewView(
                         session: viewModel.session,
                         lutManager: viewModel.lutManager,
+                        lutProcessor: viewModel.lutProcessor,
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()

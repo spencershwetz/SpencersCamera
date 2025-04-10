@@ -13,6 +13,7 @@ protocol CustomPreviewViewDelegate: AnyObject {
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
+    let lutProcessor: LUTProcessor
     let viewModel: CameraViewModel
     
     // Logger for CameraPreviewView
@@ -24,6 +25,7 @@ struct CameraPreviewView: UIViewRepresentable {
         let customPreview = CustomPreviewView(frame: .zero, // Use zero initially, frame set by container
                                               session: session,
                                               lutManager: lutManager,
+                                              lutProcessor: lutProcessor,
                                               viewModel: viewModel)
         
         // Set the delegate AFTER creating the view
@@ -264,6 +266,7 @@ struct CameraPreviewView: UIViewRepresentable {
         private var dataOutput: AVCaptureVideoDataOutput?
         private let session: AVCaptureSession
         private var lutManager: LUTManager
+        let lutProcessor: LUTProcessor
         var viewModel: CameraViewModel
         weak var delegate: CustomPreviewViewDelegate? // Add delegate property
         private let customPreviewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CustomPreviewView") // Logger for this class
@@ -279,9 +282,10 @@ struct CameraPreviewView: UIViewRepresentable {
         // Logger for the deprecated UIView
         private let uiViewLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewUIView")
         
-        init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
+        init(frame: CGRect, session: AVCaptureSession, lutManager: LUTManager, lutProcessor: LUTProcessor, viewModel: CameraViewModel) {
             self.session = session
             self.lutManager = lutManager
+            self.lutProcessor = lutProcessor
             self.viewModel = viewModel
             self.previewLayer = AVCaptureVideoPreviewLayer()
             super.init(frame: frame)
