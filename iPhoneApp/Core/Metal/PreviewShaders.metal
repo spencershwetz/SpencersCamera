@@ -68,9 +68,9 @@ fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
     // YCbCr to RGB conversion matrix for Rec.2020 (Video Range)
     // Assumes Y is in [16/255, 235/255] and Cb/Cr are in [16/255, 240/255] shifted to center around 0.5 for unorm textures
     // Adjust Y, Cb, Cr ranges from unorm [0, 1] back to their nominal video ranges centered around 0 or 0.5
-    float Y = y;                      // Already [0, 1]
-    float Cb = cbcr.x - 0.5;          // Map [0, 1] -> [-0.5, 0.5]
-    float Cr = cbcr.y - 0.5;          // Map [0, 1] -> [-0.5, 0.5]
+    float Y = y;                      // Already [0, 1] -> maps to Y' [0, 1]
+    float Cb = cbcr.x - 0.5;          // Map [0, 1] -> [-0.5, 0.5] (Use .x for Cb)
+    float Cr = cbcr.y - 0.5;          // Map [0, 1] -> [-0.5, 0.5] (Use .y for Cr)
     
     // Rec.2020 Color Conversion Constants (approximations)
     const float3x3 yuvToRgbMatrix = float3x3(\

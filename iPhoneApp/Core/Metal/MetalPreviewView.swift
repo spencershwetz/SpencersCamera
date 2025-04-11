@@ -163,11 +163,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             
             // Create Chroma (CbCr) texture (Plane 1)
             // Note: Chroma dimensions are half width/height for 4:2:0
+            let chromaTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rg8Unorm,  // <--- CHANGE: Use 8-bit per component format (2 bytes total)
+                width: width,           
+                height: height,
+                mipmapped: false
+            )
             var chromaTextureRef: CVMetalTexture?
             let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
-                .rg16Unorm, // 16-bit two channel for 10-bit CbCr
-                width, height, 1, // Use full width for 4:2:2 Chroma, Plane index 1
+                .rg8Unorm, // <--- FIX: Pass the correct pixel format here
+                width, height, 1, // Plane index 1 for Chroma
                 &chromaTextureRef
             )
             
@@ -180,6 +186,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef)
             chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
             bgraTexture = nil // Ensure BGRA texture is nil
+            
+            if let chromaTex = chromaTexture {
+                logger.debug("Creating Chroma Texture (x422): Width=\(width), Height=\(height)")
+                let lumaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+                let chromaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
+                let expectedChromaBytesPerRow = width * 2 // <--- CHANGE: rg8Unorm = 2 channels * 8 bits = 16 bits = 2 bytes per pixel
+                logger.debug("Luma BytesPerRow=\(lumaBytesPerRow)")
+                logger.debug("Chroma BytesPerRow (Reported)=\(chromaBytesPerRow), Expected=\(expectedChromaBytesPerRow)")
+                
+                let chromaRegion = MTLRegionMake2D(0, 0, width, height)
+            }
             
         } else {
             logger.error("Unsupported pixel format: \(formatStr) (\(pixelFormat))")
