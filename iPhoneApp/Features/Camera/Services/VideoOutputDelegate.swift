@@ -34,18 +34,29 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             logger.debug("--> captureOutput frame \(VideoOutputDelegate.frameCounter)")
         }
         
+        // Check if pixel buffer exists, don't need the variable itself
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            if isLoggingFrame {
-                logger.warning("    [captureOutput] Could not get pixel buffer from sample buffer")
-            }
+            logger.error("Failed to get pixel buffer from sample buffer")
             return
         }
         
         // Process the frame in the viewModel
         // IMPORTANT: Log what processVideoFrame does with the buffer, especially regarding orientation
         if isLoggingFrame {
-             logger.debug("    [captureOutput] Calling viewModel.processVideoFrame...")
+            logger.debug("    [captureOutput] Calling viewModel.processVideoFrame...")
         }
+
+        // --- START COMMENT OUT BUFFER LOG ---
+        // // Log the pixel buffer format less frequently
+        // if isLoggingFrame {
+        //     let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        //     let mediaTypeUInt = CMFormatDescriptionGetMediaType(CMSampleBufferGetFormatDescription(sampleBuffer)!)
+        //     let mediaTypeStr = FourCCString(mediaTypeUInt) // Convert media type code
+        //     let formatStr = FourCCString(pixelFormat) // Convert pixel format code
+        //     logger.debug("    [captureOutput] Processing pixel buffer: Format=\(formatStr) (\(pixelFormat)), MediaType=\(mediaTypeStr) (\(mediaTypeUInt))")
+        // }
+        // --- END COMMENT OUT BUFFER LOG ---
+
         if viewModel.processVideoFrame(sampleBuffer) != nil {
             if isLoggingFrame {
                 logger.debug("    [captureOutput] viewModel.processVideoFrame succeeded.")

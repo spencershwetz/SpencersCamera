@@ -166,7 +166,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             var lumaTextureRef: CVMetalTexture?
             let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
-                .r16Unorm, // 16-bit single channel for 10-bit luma
+                .r16Unorm, // Use 16-bit single channel for 10-bit luma
                 CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
                 CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
                 0, // Plane index 0
@@ -177,7 +177,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             var chromaTextureRef: CVMetalTexture?
             let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
-                .rg16Unorm, // 16-bit per component for 10-bit chroma
+                .rg16Unorm, // Use 16-bit 2-channel for 10-bit chroma
                 CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
                 CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
                 1, // Plane index 1 for Chroma
@@ -190,19 +190,16 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 return
             }
             
-            lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef)
+            // Assign the textures correctly
+            lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef) 
             chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
             bgraTexture = nil // Ensure BGRA texture is nil
             
-            if let chromaTex = chromaTexture {
-                logger.debug("Creating Chroma Texture (x422): Width=\(width), Height=\(height)")
-                let lumaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-                let chromaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-                logger.debug("Luma BytesPerRow=\(lumaBytesPerRow)")
-                logger.debug("Chroma BytesPerRow=\(chromaBytesPerRow)")
-                
-                let chromaRegion = MTLRegionMake2D(0, 0, width, height)
-            }
+            // --- Code related to chromaTex and chromaRegion remains commented out --- 
+            // // Update internal textures - No need for chromaTex or chromaRegion variables
+            // self.textureY = yTexture
+            // self.textureCbCr = cbcrTexture
+            // ... etc ...
             
         } else {
             logger.error("Unsupported pixel format: \(formatStr) (\(pixelFormat))")
