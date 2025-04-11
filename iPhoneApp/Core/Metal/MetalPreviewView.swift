@@ -10,6 +10,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private var renderPipelineState: MTLRenderPipelineState!
     private var textureCache: CVMetalTextureCache!
     private var currentTexture: MTLTexture?
+    private var inFlightSemaphore = DispatchSemaphore(value: 3) // Triple buffer
     
     // Keep track of the owning MTKView
     private weak var mtkView: MTKView?
@@ -43,9 +44,14 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         // Setup render pipeline
         setupRenderPipeline()
         
+        // Configure MTKView
         mtkView.delegate = self
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.framebufferOnly = true
+        mtkView.preferredFramesPerSecond = 60
+        mtkView.enableSetNeedsDisplay = false // Use continuous rendering
+        mtkView.isPaused = false
+        
         logger.info("MetalPreviewView initialized with device: \(self.device.name)")
     }
     
@@ -98,13 +104,15 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         }
         
         currentTexture = texture
-        mtkView?.draw()
+        // Let MTKView handle drawing in its render loop
     }
     
     // MARK: - MTKViewDelegate
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         logger.debug("MTKView size changed to: \(String(describing: size))")
+        // Flush texture cache when size changes
+        CVMetalTextureCacheFlush(textureCache, 0)
     }
     
     func draw(in view: MTKView) {
@@ -114,8 +122,18 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             return
         }
         
-        guard let commandBuffer = commandQueue.makeCommandBuffer(),
-              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+        // Wait for a maximum of 1/60th of a second for the next buffer
+        _ = inFlightSemaphore.wait(timeout: .now() + .milliseconds(16))
+        
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            inFlightSemaphore.signal()
+            return
+        }
+        
+        commandBuffer.label = "Preview Frame"
+        
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            inFlightSemaphore.signal()
             return
         }
         
@@ -123,6 +141,10 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         renderEncoder.setFragmentTexture(texture, index: 0)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
+        
+        commandBuffer.addScheduledHandler { [weak self] _ in
+            self?.inFlightSemaphore.signal()
+        }
         
         commandBuffer.present(currentDrawable)
         commandBuffer.commit()
