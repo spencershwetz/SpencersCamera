@@ -12,9 +12,6 @@ struct CameraPreviewView: UIViewRepresentable {
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewRepresentable")
-    
-    // Store the Metal delegate instance - make internal for initializer access
-    var metalPreviewDelegate: MetalPreviewView?
 
     func makeUIView(context: Context) -> MTKView {
         logger.info("makeUIView: Creating MTKView")
@@ -24,13 +21,34 @@ struct CameraPreviewView: UIViewRepresentable {
         mtkView.translatesAutoresizingMaskIntoConstraints = false
 
         // Create and assign the delegate
-        // The delegate init handles Metal device/queue setup
-        context.coordinator.metalDelegate = MetalPreviewView(mtkView: mtkView)
+        let metalDelegate = MetalPreviewView(mtkView: mtkView)
+        context.coordinator.metalDelegate = metalDelegate
         
-        // Pass necessary references TO the MetalPreviewView delegate if needed later
-        // For now, it only needs the MTKView which is passed during init.
+        // Set up video output
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.setSampleBufferDelegate(context.coordinator, queue: DispatchQueue(label: "com.spencershwetz.spencerscamera.videoQueue"))
         
-        // viewModel.owningView = mtkView // Maybe still needed? Re-evaluate later.
+        // Configure video output settings
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        
+        // Add output to session
+        session.beginConfiguration()
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+            
+            // Ensure connection orientation is correct
+            if let connection = videoOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    logger.info("Set video rotation angle to 90°")
+                }
+            }
+        } else {
+            logger.error("Could not add video output to session")
+        }
+        session.commitConfiguration()
         
         // Ensure initial layout
         mtkView.setNeedsLayout()
@@ -42,8 +60,6 @@ struct CameraPreviewView: UIViewRepresentable {
     
     func updateUIView(_ uiView: MTKView, context: Context) {
         logger.trace("updateUIView called.")
-        // Pass any necessary state updates to the Metal delegate if needed
-        // e.g., context.coordinator.metalDelegate?.updateLUT(lutManager.currentLUTTexture) // For later steps
     }
     
     func makeCoordinator() -> Coordinator {
@@ -51,14 +67,19 @@ struct CameraPreviewView: UIViewRepresentable {
         return Coordinator(parent: self)
     }
     
-    class Coordinator: NSObject {
+    class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var parent: CameraPreviewView
-        var metalDelegate: MetalPreviewView? // Store the Metal delegate
+        var metalDelegate: MetalPreviewView?
         
         init(parent: CameraPreviewView) {
             self.parent = parent
             super.init()
             parent.logger.info("Coordinator initialized.")
+        }
+        
+        func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+            // Pass the frame to our Metal preview
+            metalDelegate?.updateTexture(with: sampleBuffer)
         }
     }
 }

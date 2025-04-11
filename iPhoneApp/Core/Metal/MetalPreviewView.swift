@@ -7,10 +7,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "MetalPreviewView")
     private var device: MTLDevice!
     private var commandQueue: MTLCommandQueue!
+    private var renderPipelineState: MTLRenderPipelineState!
+    private var textureCache: CVMetalTextureCache!
+    private var currentTexture: MTLTexture?
     
     // Keep track of the owning MTKView
     private weak var mtkView: MTKView?
-
+    
     init(mtkView: MTKView) {
         super.init()
         self.mtkView = mtkView
@@ -28,50 +31,100 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         }
         self.commandQueue = newCommandQueue
         
+        // Create texture cache
+        var textureCache: CVMetalTextureCache?
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &textureCache)
+        guard let unwrappedTextureCache = textureCache else {
+            logger.critical("Could not create texture cache")
+            fatalError("Could not create texture cache")
+        }
+        self.textureCache = unwrappedTextureCache
+        
+        // Setup render pipeline
+        setupRenderPipeline()
+        
         mtkView.delegate = self
-        mtkView.colorPixelFormat = .bgra8Unorm // Common format for previews
-        mtkView.framebufferOnly = true // Optimize if not sampling the drawable
+        mtkView.colorPixelFormat = .bgra8Unorm
+        mtkView.framebufferOnly = true
         logger.info("MetalPreviewView initialized with device: \(self.device.name)")
+    }
+    
+    private func setupRenderPipeline() {
+        guard let library = device.makeDefaultLibrary() else {
+            logger.critical("Could not create Metal library")
+            fatalError("Could not create Metal library")
+        }
+        
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexShader")
+        pipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentShader")
+        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        
+        do {
+            renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        } catch {
+            logger.critical("Failed to create render pipeline state: \(error.localizedDescription)")
+            fatalError("Failed to create render pipeline state: \(error.localizedDescription)")
+        }
+    }
+    
+    func updateTexture(with sampleBuffer: CMSampleBuffer) {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            logger.warning("Could not get pixel buffer from sample buffer")
+            return
+        }
+        
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        
+        var textureRef: CVMetalTexture?
+        let result = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault,
+            textureCache,
+            pixelBuffer,
+            nil,
+            .bgra8Unorm,
+            width,
+            height,
+            0,
+            &textureRef
+        )
+        
+        guard result == kCVReturnSuccess,
+              let unwrappedTextureRef = textureRef,
+              let texture = CVMetalTextureGetTexture(unwrappedTextureRef) else {
+            logger.warning("Failed to create Metal texture from pixel buffer")
+            return
+        }
+        
+        currentTexture = texture
+        mtkView?.draw()
     }
     
     // MARK: - MTKViewDelegate
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        // Handle view size changes if needed (e.g., update projection matrix)
         logger.debug("MTKView size changed to: \(String(describing: size))")
     }
     
     func draw(in view: MTKView) {
-        // --- Step 1: Clear to Red --- 
-        guard let drawable: CAMetalDrawable = view.currentDrawable,
-              let renderPassDescriptor = view.currentRenderPassDescriptor else {
-            logger.warning("Could not get drawable or render pass descriptor")
+        guard let currentDrawable = view.currentDrawable,
+              let renderPassDescriptor = view.currentRenderPassDescriptor,
+              let texture = currentTexture else {
             return
         }
         
-        // Modify the clear color
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 1.0, green: 0.0, blue: 0.0, alpha: 1.0)
-        // Ensure load action is clear
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].storeAction = .store // Store the cleared result
-        
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            logger.warning("Could not create command buffer")
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
             return
         }
-        commandBuffer.label = "FrameCommandBuffer"
         
-        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            logger.warning("Could not create render command encoder")
-            return
-        }
-        renderEncoder.label = "FrameRenderEncoder"
-        
-        // No drawing commands needed yet, just clearing
-        
+        renderEncoder.setRenderPipelineState(renderPipelineState)
+        renderEncoder.setFragmentTexture(texture, index: 0)
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
         
-        commandBuffer.present(drawable)
+        commandBuffer.present(currentDrawable)
         commandBuffer.commit()
     }
 } 
