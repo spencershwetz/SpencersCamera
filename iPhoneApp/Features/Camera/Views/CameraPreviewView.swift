@@ -20,8 +20,8 @@ struct CameraPreviewView: UIViewRepresentable {
         mtkView.backgroundColor = .black // Set background
         mtkView.translatesAutoresizingMaskIntoConstraints = false
 
-        // Create and assign the delegate
-        let metalDelegate = MetalPreviewView(mtkView: mtkView)
+        // Create and assign the delegate, passing the lutManager
+        let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager)
         context.coordinator.metalDelegate = metalDelegate
         
         // Set up video output

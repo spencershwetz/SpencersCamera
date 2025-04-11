@@ -11,11 +11,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private var textureCache: CVMetalTextureCache!
     private var currentTexture: MTLTexture?
     private var inFlightSemaphore = DispatchSemaphore(value: 3) // Triple buffer
+    private let lutManager: LUTManager
     
     // Keep track of the owning MTKView
     private weak var mtkView: MTKView?
     
-    init(mtkView: MTKView) {
+    init(mtkView: MTKView, lutManager: LUTManager) {
+        self.lutManager = lutManager
         super.init()
         self.mtkView = mtkView
         
@@ -139,6 +141,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         renderEncoder.setRenderPipelineState(renderPipelineState)
         renderEncoder.setFragmentTexture(texture, index: 0)
+        
+        // Get and set the LUT texture at index 1
+        if let lutTexture = lutManager.currentLUTTexture {
+            renderEncoder.setFragmentTexture(lutTexture, index: 1)
+        } else {
+            // Handle case where LUT texture is nil (e.g., initial state or error)
+            // You might want a default identity texture here, or log a warning.
+            // For now, we might rely on the shader having a default behavior
+            // or the LUTManager ensuring a default identity texture exists.
+            logger.warning("Current LUT texture is nil in LUTManager.")
+            // Consider binding a default identity texture if available/necessary
+        }
+        
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
         

@@ -200,10 +200,22 @@ class LUTManager: ObservableObject {
             print("❌ LUTManager Error: Failed to copy or load LUT: \(error.localizedDescription)")
             
             // Try to load directly from the original location as a fallback
-            loadLUT(from: url)
-            DispatchQueue.main.async {
-                self.selectedLUTURL = url
-                completion(true)
+            // loadLUT(from: url) // Remove this recursive call
+            // Instead, load the data directly here if copying failed
+            do {
+                let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
+                self.setupLUTTexture(lutInfo: lutInfo)
+                self.setupLUTFilter(lutInfo: lutInfo) // Keep for CI pipeline if needed
+                DispatchQueue.main.async {
+                    self.selectedLUTURL = url
+                    self.addToRecentLUTs(url: url)
+                    completion(true)
+                }
+            } catch let loadError {
+                print("❌ LUTManager Error: Failed to load LUT directly from \(url.path): \(loadError.localizedDescription)")
+                DispatchQueue.main.async {
+                    completion(false)
+                }
             }
         }
     }
@@ -234,44 +246,57 @@ class LUTManager: ObservableObject {
         print("\n📊 LUTManager: Attempting to load LUT from URL: \(url.path)")
         print("📊 LUTManager: URL is file URL: \(url.isFileURL)")
         
+        // Start accessing security-scoped resource if needed
+        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if shouldStopAccessing {
+                url.stopAccessingSecurityScopedResource()
+                print("✅ LUTManager: Stopped accessing security-scoped resource for direct load")
+            }
+        }
+        
         // Verify file exists
         guard FileManager.default.fileExists(atPath: url.path) else {
-            print("❌ LUTManager Error: File does not exist at path: \(url.path)")
+            logger.error("File does not exist at path: \(url.path)")
             return
         }
         
-        print("📊 LUTManager: File exists: true")
+        logger.info("File exists: true")
         
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             if let fileSize = attributes[.size] as? NSNumber {
-                print("📊 LUTManager: File size: \(fileSize.intValue) bytes")
+                logger.info("File size: \(fileSize.intValue) bytes")
             }
             if let fileType = attributes[.type] as? String {
-                print("📊 LUTManager: File type: \(fileType)")
+                logger.info("File type: \(fileType)")
             }
         } catch {
-            print("⚠️ LUTManager Error: Could not read file attributes: \(error.localizedDescription)")
+            logger.warning("Could not get file attributes: \(error.localizedDescription)")
         }
         
         do {
-            // Direct access to load the LUT data
+            // Load data using CubeLUTLoader
             let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
-            print("✅ LUT data loaded from URL: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
+            logger.info("LUT data loaded: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
+            
+            // Setup Metal Texture
             setupLUTTexture(lutInfo: lutInfo)
-            setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
-            addToRecentLUTs(url: url)
+            
+            // Setup Core Image Filter (optional, keep if needed)
+            setupLUTFilter(lutInfo: lutInfo)
+            
             DispatchQueue.main.async {
                 self.selectedLUTURL = url
+                self.addToRecentLUTs(url: url)
+                self.logger.info("✅ Successfully loaded LUT from URL and configured.")
             }
-            print("✅ LUT successfully loaded and configured from URL")
-        } catch {
-            print("❌ LUTManager Error: Failed to load LUT from URL: \(error.localizedDescription)")
             
-            // Try a fallback approach for binary LUT files
-            if error.localizedDescription.contains("Invalid LUT format") || error.localizedDescription.contains("not properly formatted") {
-                print("🔄 Attempting fallback for binary LUT format...")
-                tryLoadBinaryLUT(from: url)
+        } catch {
+            logger.error("Failed to load LUT from URL \(url.path): \(error.localizedDescription)")
+            // Optionally: Fallback to identity LUT or show error
+            DispatchQueue.main.async {
+                 self.clearLUT() // Reset to identity on failure
             }
         }
     }
@@ -443,9 +468,14 @@ class LUTManager: ObservableObject {
     
     /// Clears the current LUT filter
     func clearLUT() {
-        currentLUTFilter = nil
-        selectedLUTURL = nil
-        print("✅ LUT filter cleared")
+        logger.info("Clearing current LUT and resetting to identity")
+        setupIdentityLUTTexture() // Reset texture to identity
+        // Also clear the CI filter if it's being managed
+        DispatchQueue.main.async {
+             self.currentLUTFilter = nil // Or set to an identity CI filter if needed
+             self.selectedLUTURL = nil
+             self.logger.info("LUT cleared, reset to identity texture.")
+         }
     }
     
     /// Alias for clearLUT() for more readable API
