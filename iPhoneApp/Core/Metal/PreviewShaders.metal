@@ -51,10 +51,10 @@ fragment float4 fragmentShaderRGB(RasterizerData in [[stage_in]],
     return float4(lutColor.rgb, originalColor.a);
 }
 
-// Fragment shader for YUV (specifically kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange)
+// Fragment shader for Apple Log YUV (specifically 'x422' BiPlanar format)
 fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
-                                texture2d<float, access::sample> yTexture [[texture(0)]],      // Luma plane (r16unorm)
-                                texture2d<float, access::sample> cbcrTexture [[texture(1)]], // Chroma plane (rg16unorm)
+                                texture2d<float, access::sample> yTexture [[texture(0)]],      // Luma (Y) plane (r16unorm)
+                                texture2d<float, access::sample> cbcrTexture [[texture(1)]],   // Chroma (CbCr) plane (rg16unorm)
                                 texture3d<float> lutTexture [[texture(2)]]) {   // LUT
 
     constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
@@ -62,33 +62,24 @@ fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
 
     // Sample Luma (Y) and Chroma (CbCr)
     float y = yTexture.sample(textureSampler, in.textureCoordinate).r;
-    // Chroma texture uses the same texture coordinates, Metal handles interpolation
     float2 cbcr = cbcrTexture.sample(textureSampler, in.textureCoordinate).rg;
-
-    // YCbCr to RGB conversion matrix for Rec.2020 (Video Range)
-    // Assumes Y is in [16/255, 235/255] and Cb/Cr are in [16/255, 240/255] shifted to center around 0.5 for unorm textures
-    // Adjust Y, Cb, Cr ranges from unorm [0, 1] back to their nominal video ranges centered around 0 or 0.5
-    float Y = y;                      // Already [0, 1] -> maps to Y' [0, 1]
-    float Cb = cbcr.x - 0.5;          // Map [0, 1] -> [-0.5, 0.5] (Use .x for Cb)
-    float Cr = cbcr.y - 0.5;          // Map [0, 1] -> [-0.5, 0.5] (Use .y for Cr)
     
-    // Rec.2020 Color Conversion Constants (approximations)
-    const float3x3 yuvToRgbMatrix = float3x3(\
-        float3(1.0,  0.0,      1.4746),    // R = Y + 1.4746 * Cr
-        float3(1.0, -0.16455, -0.57135), // G = Y - 0.16455 * Cb - 0.57135 * Cr
-        float3(1.0,  1.8814,   0.0)      // B = Y + 1.8814 * Cb
-    );
-
-    // Perform conversion
-    float3 rgb = yuvToRgbMatrix * float3(Y, Cb, Cr);
-
-    // IMPORTANT: The rgb values here represent the Apple Log signal encoded in Rec.2020.
-    // Since the LUT expects Apple Log input directly, use these RGB values.
-    float3 lutCoord = clamp(rgb, 0.0, 1.0); // Clamp to valid texture coordinates
-
-    // Sample the 3D LUT
-    float4 lutColor = lutTexture.sample(lutSampler, lutCoord);
-
-    // Return the color from the LUT, with alpha = 1.0
+    // Apple's x422 format uses BT.2020 color space with full range encoding
+    float Y = y;
+    float Cb = cbcr.r - 0.5;  // Center around zero
+    float Cr = cbcr.g - 0.5;  // Center around zero
+    
+    // Direct conversion from YUV to RGB using BT.2020 coefficients
+    // Manually expanded form of the matrix multiplication
+    float R = Y + 1.4746 * Cr;
+    float G = Y - 0.1646 * Cb - 0.5714 * Cr;
+    float B = Y + 1.8814 * Cb;
+    
+    // Ensure valid RGB values
+    float3 rgb = clamp(float3(R, G, B), 0.0, 1.0);
+    
+    // Sample the LUT with the RGB values
+    float4 lutColor = lutTexture.sample(lutSampler, rgb);
+    
     return float4(lutColor.rgb, 1.0);
 } 

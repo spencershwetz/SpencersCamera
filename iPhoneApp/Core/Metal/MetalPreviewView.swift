@@ -149,31 +149,38 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             lumaTexture = nil // Ensure YUV textures are nil
             chromaTexture = nil
             
-        } else if pixelFormat == 2016686642 {
+        } else if pixelFormat == 2016686642 { // 'x422' 10-bit Biplanar Apple Log format
+            logger.info("Handling Apple Log 'x422' 10-bit format")
             // --- Handle YUV 422 10-bit Bi-Planar (Apple Log 'x422') ---
+            
+            // Log detailed format information
+            logger.info("Apple Log Format details:")
+            for i in 0..<CVPixelBufferGetPlaneCount(pixelBuffer) {
+                let planeWidth = CVPixelBufferGetWidthOfPlane(pixelBuffer, i)
+                let planeHeight = CVPixelBufferGetHeightOfPlane(pixelBuffer, i)
+                let planeBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, i)
+                logger.info("  Plane \(i): Width=\(planeWidth), Height=\(planeHeight), BytesPerRow=\(planeBytesPerRow)")
+            }
             
             // Create Luma (Y) texture (Plane 0)
             var lumaTextureRef: CVMetalTexture?
             let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                 .r16Unorm, // 16-bit single channel for 10-bit luma
-                width, height, 0, // Plane index 0
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+                0, // Plane index 0
                 &lumaTextureRef
             )
             
             // Create Chroma (CbCr) texture (Plane 1)
-            // Note: Chroma dimensions are half width/height for 4:2:0
-            let chromaTextureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .rg8Unorm,  // <--- CHANGE: Use 8-bit per component format (2 bytes total)
-                width: width,           
-                height: height,
-                mipmapped: false
-            )
             var chromaTextureRef: CVMetalTexture?
             let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
-                .rg8Unorm, // <--- FIX: Pass the correct pixel format here
-                width, height, 1, // Plane index 1 for Chroma
+                .rg16Unorm, // 16-bit per component for 10-bit chroma
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+                1, // Plane index 1 for Chroma
                 &chromaTextureRef
             )
             
@@ -191,9 +198,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 logger.debug("Creating Chroma Texture (x422): Width=\(width), Height=\(height)")
                 let lumaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
                 let chromaBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-                let expectedChromaBytesPerRow = width * 2 // <--- CHANGE: rg8Unorm = 2 channels * 8 bits = 16 bits = 2 bytes per pixel
                 logger.debug("Luma BytesPerRow=\(lumaBytesPerRow)")
-                logger.debug("Chroma BytesPerRow (Reported)=\(chromaBytesPerRow), Expected=\(expectedChromaBytesPerRow)")
+                logger.debug("Chroma BytesPerRow=\(chromaBytesPerRow)")
                 
                 let chromaRegion = MTLRegionMake2D(0, 0, width, height)
             }
@@ -252,12 +258,14 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setRenderPipelineState(rgbPipelineState)
             renderEncoder.setFragmentTexture(texture, index: 0)    // BGRA texture
             renderEncoder.setFragmentTexture(lutTexture, index: 1) // LUT texture
+            logger.debug("Using RGB pipeline for BGRA format")
         } else if currentPixelFormat == 2016686642,
                   let yTexture = lumaTexture, let cbcrTexture = chromaTexture {
             renderEncoder.setRenderPipelineState(yuvPipelineState)
             renderEncoder.setFragmentTexture(yTexture, index: 0)    // Luma (Y) texture
             renderEncoder.setFragmentTexture(cbcrTexture, index: 1) // Chroma (CbCr) texture
             renderEncoder.setFragmentTexture(lutTexture, index: 2)   // LUT texture
+            logger.debug("Using YUV pipeline for Apple Log x422 format")
         } else {
             //logger.trace("No valid textures available for current format: \(FourCCString(currentPixelFormat))")
             // Don't draw anything if the textures for the current format aren't ready
