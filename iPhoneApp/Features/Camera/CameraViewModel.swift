@@ -546,6 +546,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Get current settings
         let settings = SettingsModel()
         
+        // Set the selected LUT filter onto the processor BEFORE configuring the recording service
+        logger.debug("Setting LUT filter for bake-in: \(self.lutManager.currentLUTFilter?.name ?? "None")")
+        lutProcessor.setLUTFilter(lutManager.currentLUTFilter)
+
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
         lutProcessor.setLogEnabled(self.isAppleLogEnabled)
@@ -559,10 +563,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Get current orientation angle for recording
         let connectionAngle = session.outputs.compactMap { $0.connection(with: .video) }.first?.videoRotationAngle ?? -1 // Use -1 to indicate not found
-        logger.info("Requesting recording start. Current primary video connection angle: \\(connectionAngle)° (This is passed but ignored by RecordingService)")
+        logger.info("Requesting recording start. Current primary video connection angle: \(connectionAngle)° (This is passed but ignored by RecordingService)")
 
-        // Start recording
-        await recordingService.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
+        // Inform the RecordingService about the Apple Log state *before* starting
+        recordingService?.setAppleLogEnabled(isAppleLogEnabled)
+        
+        // Explicitly set the Bake-in LUT state *before* starting recording
+        recordingService?.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        
+        // START RECORDING
+        await recordingService?.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
 
         // Set state AFTER recording service confirms start (ideally service would return success/time)
         // For now, assume immediate start for simplicity
@@ -733,7 +743,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         default: // Includes .unknown, .faceUp, .faceDown
             // Fallback to portrait if orientation is invalid or face up/down
             // REMOVE: targetAngle = 90
-            orientationLogger.debug("    Device orientation: \\(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
+            orientationLogger.debug("    Device orientation: \(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
         }
 
         // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView

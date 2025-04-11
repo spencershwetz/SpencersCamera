@@ -9,9 +9,10 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     let context: CIContext
     
     // Counter to limit debug logging
-    static var frameCounter = 0
+    private static var frameCounter: Int = 0
     
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "VideoOutputDelegate")
+    private let logFrequency = 1 // Log every frame for bake-in investigation
     
     init(lutManager: LUTManager, viewModel: CameraViewModel, context: CIContext) {
         self.lutManager = lutManager
@@ -24,79 +25,28 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
     
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         VideoOutputDelegate.frameCounter += 1
-        
-        // Determine if stream is established first
-        let isEstablishedStream = VideoOutputDelegate.frameCounter > 120
-        // Log less frequently after initial stream
-        let logFrequency = isEstablishedStream ? 300 : 60 // Log every 5s vs every 1s initially
         let isLoggingFrame = VideoOutputDelegate.frameCounter % logFrequency == 0
-
-        if isLoggingFrame {
-            logger.debug("--> captureOutput frame \(VideoOutputDelegate.frameCounter)")
-        }
         
-        // Revert back to guard let to make pixelBuffer available
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            logger.error("Failed to get pixel buffer from sample buffer")
+        guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { // Simple check is enough
+            if isLoggingFrame { logger.error("VIDEOUTPUT: Failed to get pixel buffer") }
             return
         }
         
-        // Create CIImage from the pixel buffer
-        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        var didApplyLUT = false
-
-        // If Apple Log is enabled, handle LOG processing
-        if viewModel.isAppleLogEnabled {
-            if isLoggingFrame {
-                logger.debug("    [captureOutput] Apple Log ENABLED")
-            }
-            // Potentially add more logs specific to LOG processing if needed
-        }
+        // --- Remove LUT Application Logic --- 
+        // No LUT processing needed in the delegate. 
+        // RecordingService handles bake-in based on its state.
+        // MetalPreview handles preview LUT via shaders.
         
-        // Apply LUT if available
-        if lutManager.currentLUTFilter != nil {
-            if isLoggingFrame {
-                logger.debug("    [captureOutput] Attempting to apply LUT filter...")
-            }
-            if let processedImage = lutManager.applyLUT(to: ciImage) {
-                ciImage = processedImage
-                didApplyLUT = true
-                if isLoggingFrame {
-                    logger.debug("    [captureOutput] ✅ LUT applied successfully by LUTManager")
-                }
-            } else if isLoggingFrame {
-                logger.error("    [captureOutput] ❌ LUT application FAILED (returned nil from LUTManager)")
-            }
-        } else if isLoggingFrame {
-             logger.debug("    [captureOutput] No LUT filter active.")
-        }
+        // --- Frame Processing ---
+        // Always pass the raw sample buffer to the view model.
+        if isLoggingFrame { logger.debug("VIDEOUTPUT: Calling viewModel.processVideoFrame...") }
+        viewModel.processVideoFrame(sampleBuffer) // Ignore return value warning
         
-        // Render the processed image back to the pixel buffer
-        // Note: This modifies the original pixelBuffer that might be used elsewhere!
-        // Consider if rendering to a *new* buffer is safer depending on viewModel.processVideoFrame usage.
-        if isLoggingFrame { 
-             logger.debug("    [captureOutput] Rendering CIImage (LUT applied: \(didApplyLUT)) back to CVPixelBuffer...")
-        }
-        context.render(ciImage, to: pixelBuffer)
-        if isLoggingFrame { 
-             logger.debug("    [captureOutput] Rendering finished.")
-        }
-
-        // Process the frame in the viewModel
-        // IMPORTANT: Log what processVideoFrame does with the buffer, especially regarding orientation
-        if isLoggingFrame {
-             logger.debug("    [captureOutput] Calling viewModel.processVideoFrame...")
-        }
-        if viewModel.processVideoFrame(sampleBuffer) != nil {
-            if isLoggingFrame {
-                logger.debug("    [captureOutput] viewModel.processVideoFrame succeeded.")
-            }
-        } else if isLoggingFrame {
-             logger.warning("    [captureOutput] viewModel.processVideoFrame returned nil.")
-        }
+        // --- Remove Metal Preview Update --- 
+        // This is handled elsewhere, likely triggered by the ViewModel.
         
         if isLoggingFrame {
-            logger.debug("<-- captureOutput finished frame \(VideoOutputDelegate.frameCounter)")
+             logger.debug("<-- captureOutput frame \\(VideoOutputDelegate.frameCounter)")
         }
     }
 } 
