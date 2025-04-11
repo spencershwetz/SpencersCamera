@@ -146,6 +146,8 @@ struct CameraView: View {
             }
             .onChange(of: viewModel.currentLens) { oldValue, newValue in
                 // When lens changes, ensure LUT overlay maintains correct orientation
+                // REMOVED: Old logic accessing CustomPreviewView via tag
+                /*
                 if showLUTPreview && viewModel.lutManager.currentLUTFilter != nil {
                     // Access the preview view and update its LUT overlay orientation
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -156,6 +158,7 @@ struct CameraView: View {
                         }
                     }
                 }
+                */
             }
             .alert(item: $viewModel.error) { error in
                 Alert(
@@ -210,7 +213,6 @@ struct CameraView: View {
                     CameraPreviewView(
                         session: viewModel.session,
                         lutManager: viewModel.lutManager,
-                        lutProcessor: viewModel.lutProcessor,
                         viewModel: viewModel
                     )
                     .ignoresSafeArea()

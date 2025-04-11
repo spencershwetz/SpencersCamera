@@ -884,16 +884,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 }
 
-// MARK: - CustomPreviewViewDelegate (NEW)
-extension CameraViewModel: CustomPreviewViewDelegate {
-    func customPreviewViewDidAddVideoOutput(_ previewView: CameraPreviewView.CustomPreviewView) {
-        orientationLogger.debug("Delegate: CustomPreviewView did add video output. Applying initial orientation.")
-        // Now that we know the output exists, apply the initial orientation
-        // REMOVED: Calls to applyCurrentOrientationToConnections are no longer needed
-        // applyCurrentOrientationToConnections()
-    }
-}
-
 // MARK: - VideoFormatServiceDelegate
 
 extension CameraViewModel: VideoFormatServiceDelegate {
