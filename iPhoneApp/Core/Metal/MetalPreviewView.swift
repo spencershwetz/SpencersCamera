@@ -265,6 +265,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setFragmentTexture(yTexture, index: 0)    // Luma (Y) texture
             renderEncoder.setFragmentTexture(cbcrTexture, index: 1) // Chroma (CbCr) texture
             renderEncoder.setFragmentTexture(lutTexture, index: 2)   // LUT texture
+            
+            // --- Pass isLUTActive uniform ---
+            var isLUTActive = lutManager.selectedLUTURL != nil // Check if a custom LUT is loaded
+            renderEncoder.setFragmentBytes(&isLUTActive, length: MemoryLayout<Bool>.size, index: 0) // Pass boolean to shader buffer 0
+            // --- End Pass isLUTActive ---
+            
             logger.debug("Using YUV pipeline for Apple Log x422 format")
         } else {
             //logger.trace("No valid textures available for current format: \(FourCCString(currentPixelFormat))")

@@ -47,6 +47,13 @@
 			);
 			target = 09562D7B2D18A1EC009A9B07 /* Spencer's Camera */;
 		};
+		09E5DE522DA97F9700A47E95 /* Exceptions for "Documentation" folder in "SC Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Apple_Log_Profile_White_Paper.pdf,
+			);
+			target = 0998FA212DA22D02000AB0DD /* SC Watch App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -61,6 +68,14 @@
 		0998FA232DA22D02000AB0DD /* SC Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "SC Watch App";
+			sourceTree = "<group>";
+		};
+		09E5DE512DA97F8F00A47E95 /* Documentation */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				09E5DE522DA97F9700A47E95 /* Exceptions for "Documentation" folder in "SC Watch App" target */,
+			);
+			path = Documentation;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -86,6 +101,7 @@
 		09562D732D18A1EC009A9B07 = {
 			isa = PBXGroup;
 			children = (
+				09E5DE512DA97F8F00A47E95 /* Documentation */,
 				09562D7E2D18A1EC009A9B07 /* iPhoneApp */,
 				0998FA232DA22D02000AB0DD /* SC Watch App */,
 				09562D7D2D18A1EC009A9B07 /* Products */,
@@ -142,6 +158,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				0998FA232DA22D02000AB0DD /* SC Watch App */,
+				09E5DE512DA97F8F00A47E95 /* Documentation */,
 			);
 			name = "SC Watch App";
 			packageProductDependencies = (
