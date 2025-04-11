@@ -2,12 +2,15 @@ import SwiftUI
 import CoreImage
 import UniformTypeIdentifiers
 import os
+import Metal
 
 class LUTManager: ObservableObject {
     
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
+    private let device: MTLDevice
     
     @Published var currentLUTFilter: CIFilter?
+    @Published var currentLUTTexture: MTLTexture?
     private var dimension: Int = 0
     @Published var selectedLUTURL: URL?
     @Published var recentLUTs: [String: URL]? = [:]
@@ -37,7 +40,99 @@ class LUTManager: ObservableObject {
     ]
     
     init() {
+        guard let metalDevice = MTLCreateSystemDefaultDevice() else {
+            fatalError("Metal is not supported on this device")
+        }
+        self.device = metalDevice
         loadRecentLUTs()
+        setupIdentityLUTTexture()
+    }
+    
+    // MARK: - Metal LUT Texture Setup
+    
+    private func createIdentityLUT(dimension: Int) -> (dimension: Int, data: [Float]) {
+        var lutData = [Float]()
+        lutData.reserveCapacity(dimension * dimension * dimension * 3)
+        
+        let scale = 1.0 / Float(dimension - 1)
+        
+        for b in 0..<dimension {
+            for g in 0..<dimension {
+                for r in 0..<dimension {
+                    lutData.append(Float(r) * scale) // R
+                    lutData.append(Float(g) * scale) // G
+                    lutData.append(Float(b) * scale) // B
+                }
+            }
+        }
+        
+        return (dimension: dimension, data: lutData)
+    }
+    
+    private func setupIdentityLUTTexture() {
+        let identityLUTInfo = createIdentityLUT(dimension: 32)
+        setupLUTTexture(lutInfo: identityLUTInfo)
+    }
+    
+    private func setupLUTTexture(lutInfo: (dimension: Int, data: [Float])) {
+        let dimension = lutInfo.dimension
+        logger.info("Setting up Metal LUT texture with dimension \(dimension)")
+        
+        // Create texture descriptor for 3D texture
+        let textureDescriptor = MTLTextureDescriptor()
+        textureDescriptor.textureType = .type3D
+        textureDescriptor.pixelFormat = .rgba32Float
+        textureDescriptor.width = dimension
+        textureDescriptor.height = dimension
+        textureDescriptor.depth = dimension
+        textureDescriptor.mipmapLevelCount = 1
+        textureDescriptor.usage = [MTLTextureUsage.shaderRead]
+        
+        guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
+            logger.error("Failed to create Metal texture for LUT")
+            return
+        }
+        logger.info("Successfully created Metal texture with dimensions \(dimension)x\(dimension)x\(dimension)")
+        
+        // Convert RGB data to RGBA format (adding alpha = 1.0)
+        var rgbaData = [Float]()
+        rgbaData.reserveCapacity(dimension * dimension * dimension * 4)
+        
+        for i in stride(from: 0, to: lutInfo.data.count, by: 3) {
+            rgbaData.append(lutInfo.data[i])     // R
+            rgbaData.append(lutInfo.data[i + 1]) // G
+            rgbaData.append(lutInfo.data[i + 2]) // B
+            rgbaData.append(1.0)                 // A
+        }
+        logger.info("Converted RGB to RGBA data: \(rgbaData.count) total values")
+        
+        // Calculate region and upload data
+        let region = MTLRegion(
+            origin: MTLOrigin(x: 0, y: 0, z: 0),
+            size: MTLSize(width: dimension, height: dimension, depth: dimension)
+        )
+        
+        let bytesPerRow = dimension * MemoryLayout<Float>.size * 4
+        let bytesPerImage = bytesPerRow * dimension
+        
+        texture.replace(
+            region: region,
+            mipmapLevel: 0,
+            slice: 0,
+            withBytes: rgbaData,
+            bytesPerRow: bytesPerRow,
+            bytesPerImage: bytesPerImage
+        )
+        
+        DispatchQueue.main.async {
+            self.currentLUTTexture = texture
+            self.logger.info("Successfully set currentLUTTexture")
+        }
+        
+        // Verify texture contents
+        let firstPixel = rgbaData.prefix(4)
+        let lastPixel = rgbaData.suffix(4)
+        logger.info("First RGBA pixel: \(Array(firstPixel)), Last RGBA pixel: \(Array(lastPixel))")
     }
     
     // MARK: - LUT Loading Methods
@@ -126,7 +221,8 @@ class LUTManager: ObservableObject {
             print("✅ LUT file found at: \(fileURL.path)")
             let lutInfo = try CubeLUTLoader.loadCubeFile(name: fileName)
             print("✅ LUT data loaded: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
-            setupLUTFilter(lutInfo: lutInfo)
+            setupLUTTexture(lutInfo: lutInfo)
+            setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
             addToRecentLUTs(url: fileURL)
             print("✅ LUT successfully loaded and configured")
         } catch let error {
@@ -158,24 +254,12 @@ class LUTManager: ObservableObject {
             print("⚠️ LUTManager Error: Could not read file attributes: \(error.localizedDescription)")
         }
         
-        // First try to read the file content preview
-        do {
-            let handle = try FileHandle(forReadingFrom: url)
-            defer { try? handle.close() }
-            if let data = try handle.readToEnd(), let preview = String(data: data.prefix(100), encoding: .utf8) {
-                print("📊 LUTManager: File content preview: \(preview.prefix(50))")
-            } else {
-                print("📊 LUTManager: Could not read file content preview (may be binary data)")
-            }
-        } catch {
-            print("⚠️ LUTManager Error: Failed to read file content preview: \(error.localizedDescription)")
-        }
-        
         do {
             // Direct access to load the LUT data
             let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
             print("✅ LUT data loaded from URL: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
-            setupLUTFilter(lutInfo: lutInfo)
+            setupLUTTexture(lutInfo: lutInfo)
+            setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
             addToRecentLUTs(url: url)
             DispatchQueue.main.async {
                 self.selectedLUTURL = url
@@ -199,33 +283,20 @@ class LUTManager: ObservableObject {
             let data = try Data(contentsOf: url)
             print("📊 Read \(data.count) bytes from binary LUT file")
             
-            // Create a basic identity LUT (no color changes) as fallback
-            let dimension = 32 // Standard dimension for basic LUTs
-            var lutData = [Float]()
-            
-            // Generate a basic identity LUT
-            for b in 0..<dimension {
-                for g in 0..<dimension {
-                    for r in 0..<dimension {
-                        let rf = Float(r) / Float(dimension - 1)
-                        let gf = Float(g) / Float(dimension - 1)
-                        let bf = Float(b) / Float(dimension - 1)
-                        lutData.append(rf)
-                        lutData.append(gf)
-                        lutData.append(bf)
-                    }
+            // Try to parse as binary data and create a LUT
+            if let lutInfo = try? parseBinaryLUTData(data) {
+                setupLUTTexture(lutInfo: lutInfo)
+                setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
+                addToRecentLUTs(url: url)
+                DispatchQueue.main.async {
+                    self.selectedLUTURL = url
                 }
+                print("✅ Successfully loaded binary LUT")
+            } else {
+                print("❌ Failed to parse binary LUT data")
             }
-            
-            // Setup the fallback LUT
-            setupLUTFilter(lutInfo: (dimension: dimension, data: lutData))
-            print("⚠️ Created fallback identity LUT with dimension \(dimension)")
-            DispatchQueue.main.async {
-                self.selectedLUTURL = url
-            }
-            addToRecentLUTs(url: url)
         } catch {
-            print("❌ Binary LUT fallback also failed: \(error.localizedDescription)")
+            print("❌ Failed to read binary LUT file: \(error.localizedDescription)")
         }
     }
     
@@ -380,5 +451,46 @@ class LUTManager: ObservableObject {
     /// Alias for clearLUT() for more readable API
     func clearCurrentLUT() {
         clearLUT()
+    }
+    
+    // MARK: - Binary LUT Parsing
+    
+    private func parseBinaryLUTData(_ data: Data) throws -> (dimension: Int, data: [Float]) {
+        // For binary LUTs, we'll assume a standard 32x32x32 dimension
+        // This is a common size that works well for most use cases
+        let dimension = 32
+        let expectedFloatCount = dimension * dimension * dimension * 3 // RGB values
+        
+        // Convert binary data to array of floats
+        var floatArray = [Float]()
+        floatArray.reserveCapacity(expectedFloatCount)
+        
+        // Try to interpret the data as an array of floats
+        let floatSize = MemoryLayout<Float>.size
+        for i in stride(from: 0, to: data.count, by: floatSize) {
+            if i + floatSize <= data.count {
+                let floatData = data.subdata(in: i..<(i + floatSize))
+                var float: Float = 0
+                _ = withUnsafeMutableBytes(of: &float) { floatData.copyBytes(to: $0) }
+                
+                // Ensure values are in 0-1 range
+                float = max(0, min(1, float))
+                floatArray.append(float)
+            }
+        }
+        
+        // If we don't have enough data for a complete LUT, throw an error
+        guard floatArray.count >= expectedFloatCount else {
+            throw NSError(domain: "LUTManager",
+                        code: 3,
+                        userInfo: [NSLocalizedDescriptionKey: "Insufficient data for binary LUT: found \(floatArray.count) values, expected \(expectedFloatCount)"])
+        }
+        
+        // Trim any extra data
+        if floatArray.count > expectedFloatCount {
+            floatArray = Array(floatArray.prefix(expectedFloatCount))
+        }
+        
+        return (dimension: dimension, data: floatArray)
     }
 }
