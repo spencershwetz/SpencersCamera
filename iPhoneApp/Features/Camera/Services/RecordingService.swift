@@ -4,6 +4,7 @@ import os.log
 import UIKit
 import CoreMedia
 import CoreImage
+import Metal
 
 protocol RecordingServiceDelegate: AnyObject {
     func didStartRecording()
@@ -18,7 +19,7 @@ class RecordingService: NSObject {
     private weak var delegate: RecordingServiceDelegate?
     private var session: AVCaptureSession
     private var device: AVCaptureDevice?
-    private var lutProcessor: LUTProcessor?
+    private var metalFrameProcessor: MetalFrameProcessor?
     private var isAppleLogEnabled = false
     private var isBakeInLUTEnabled = true // Default to true to maintain backward compatibility
     
@@ -59,8 +60,14 @@ class RecordingService: NSObject {
         self.device = device
     }
     
-    func setLUTProcessor(_ processor: LUTProcessor) {
-        self.lutProcessor = processor
+    func setMetalFrameProcessor(_ processor: MetalFrameProcessor?) {
+        self.metalFrameProcessor = processor
+        logger.info("MetalFrameProcessor instance \(processor != nil ? "set" : "cleared") in RecordingService.")
+    }
+    
+    func setLUTTextureForBakeIn(_ texture: MTLTexture?) {
+        self.metalFrameProcessor?.lutTexture = texture
+        logger.info("LUT Texture \(texture != nil ? "set" : "cleared") on MetalFrameProcessor for bake-in.")
     }
     
     func setAppleLogEnabled(_ enabled: Bool) {
@@ -485,71 +492,89 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                var finalSampleBuffer: CMSampleBuffer? = sampleBuffer // Default to original
+                var finalPixelBuffer: CVPixelBuffer? = pixelBuffer // Start with original buffer
+                var processed = false // Track if processing occurred
                 
-                // Check if LUT processing is enabled and possible
-                if isBakeInLUTEnabled, let lutProcessor = lutProcessor {
-                    // Ensure the processor's log state matches the recording setting
-                    lutProcessor.setLogEnabled(self.isAppleLogEnabled)
-                    
-                    // Attempt to process the pixel buffer
-                    if let processedPixelBuffer = lutProcessor.processPixelBuffer(pixelBuffer) {
-                        // Successfully processed, create a new sample buffer with processed data
-                        
-                        // Use original timing information
-                        var timing = CMSampleTimingInfo()
-                        CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
-                        
-                        // Create format description for processed buffer
-                        var info: CMFormatDescription?
-                        let status = CMVideoFormatDescriptionCreateForImageBuffer(
-                            allocator: kCFAllocatorDefault,
-                            imageBuffer: processedPixelBuffer,
-                            formatDescriptionOut: &info
-                        )
-                        
-                        if status == noErr, let info = info,
-                           let newSampleBuffer = createSampleBuffer(
-                            from: processedPixelBuffer,
-                            formatDescription: info,
-                            timing: &timing
-                           ) {
-                            finalSampleBuffer = newSampleBuffer // Use the new processed buffer
-                            if shouldLog {
-                                logger.trace("Using processed pixel buffer for frame #\(self.videoFrameCount)")
-                            }
-                        } else {
-                            failedVideoFrames += 1
-                            logger.warning("Failed to create format description or sample buffer for processed frame #\(self.videoFrameCount), using original.")
-                            // Fallback to original buffer if creation fails
-                            finalSampleBuffer = sampleBuffer
-                        }
+                // Check if LUT processing is enabled and possible with METAL
+                if isBakeInLUTEnabled, let processor = metalFrameProcessor {
+                    logger.trace("Attempting Metal LUT bake-in for frame #\(self.videoFrameCount)")
+                    // Attempt to process the pixel buffer using Metal
+                    if let processedMetalBuffer = processor.processPixelBuffer(pixelBuffer) {
+                        // Successfully processed with Metal
+                        finalPixelBuffer = processedMetalBuffer
+                        processed = true
+                         if shouldLog {
+                             logger.trace("Successfully processed frame #\(self.videoFrameCount) using Metal LUT bake-in.")
+                         }
                     } else {
-                        // processPixelBuffer returned nil, meaning no filter was applied or it failed.
-                        // Use the original sample buffer.
+                        // Metal processing failed or returned nil (e.g., no LUT set on processor)
+                        failedVideoFrames += 1
                         if shouldLog {
-                            logger.trace("No LUT processing applied for frame #\(self.videoFrameCount), using original.")
+                           logger.warning("Metal LUT processing failed or no LUT set for frame #\(self.videoFrameCount). Using original.")
                         }
-                        finalSampleBuffer = sampleBuffer
+                        finalPixelBuffer = pixelBuffer // Fallback to original
                     }
                 } else {
-                    // Bake-in is disabled or LUT processor is not available
+                    // Bake-in is disabled or Metal processor is not available
                     if shouldLog {
-                         logger.trace("LUT Bake-in disabled or processor unavailable for frame #\(self.videoFrameCount), using original.")
+                         logger.trace("Metal LUT Bake-in disabled or processor unavailable for frame #\(self.videoFrameCount), using original.")
                     }
+                    finalPixelBuffer = pixelBuffer // Use original
+                }
+                
+                // Create the final CMSampleBuffer (either original or processed)
+                guard let bufferToUse = finalPixelBuffer else {
+                    // This should not happen if finalPixelBuffer always starts as pixelBuffer
+                    failedVideoFrames += 1
+                    logger.error("Error: finalPixelBuffer was unexpectedly nil before creating sample buffer for frame #\(self.videoFrameCount). Skipping frame.")
+                    return
+                }
+                
+                // Create a new sample buffer ONLY if we processed or if timing/format might change
+                // For simplicity here, we always create a new one if processed, otherwise use original sampleBuffer.
+                var finalSampleBuffer: CMSampleBuffer? = sampleBuffer // Default to original sample buffer
+                
+                if processed {
+                    // We have a processed pixel buffer, need to create a new sample buffer
+                    var timing = CMSampleTimingInfo()
+                    CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
+                    
+                    var info: CMFormatDescription?
+                    let status = CMVideoFormatDescriptionCreateForImageBuffer(
+                        allocator: kCFAllocatorDefault,
+                        imageBuffer: bufferToUse, // Use the (potentially processed) pixel buffer
+                        formatDescriptionOut: &info
+                    )
+                    
+                    if status == noErr, let formatDesc = info,
+                       let newSampleBuffer = createSampleBuffer(
+                           from: bufferToUse, 
+                           formatDescription: formatDesc, 
+                           timing: &timing
+                       ) {
+                        finalSampleBuffer = newSampleBuffer
+                    } else {
+                        // Failed to create new sample buffer from processed pixel buffer
+                        failedVideoFrames += 1
+                        logger.warning("Failed to create new sample buffer from processed pixel buffer #\(self.videoFrameCount). Using original sample buffer.")
+                        finalSampleBuffer = sampleBuffer // Fallback to original sample buffer
+                        processed = false // Mark as not processed since we fell back
+                    }
+                } else {
+                    // No processing occurred, use the original sample buffer directly
                     finalSampleBuffer = sampleBuffer
                 }
                 
-                // Append the appropriate sample buffer (original or processed)
+                // Append the appropriate sample buffer 
                 if let bufferToAppend = finalSampleBuffer {
                     assetWriterInput.append(bufferToAppend)
                     successfulVideoFrames += 1
                     if shouldLog {
-                        logger.debug("Successfully appended frame #\(self.successfulVideoFrames) (processed: \(bufferToAppend !== sampleBuffer))")
+                        // Log whether the appended buffer was the result of processing
+                        logger.debug("Successfully appended frame #\(self.successfulVideoFrames) (processed: \(processed))") 
                     }
                 } else {
                      // This case should theoretically not happen based on the logic above
-                     // but added as a safeguard.
                      failedVideoFrames += 1
                      logger.error("Error: finalSampleBuffer was nil for frame #\(self.videoFrameCount). Skipping append.")
                 }

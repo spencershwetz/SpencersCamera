@@ -278,7 +278,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     @Published var lutManager = LUTManager()
-    let lutProcessor = LUTProcessor()
+    // let lutProcessor = LUTProcessor() // REMOVED old CI processor instance
+    let metalFrameProcessor = MetalFrameProcessor() // ADDED Metal processor instance
     
     // Add flag to lock orientation updates during recording
     private var recordingOrientationLocked = false
@@ -452,7 +453,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         cameraSetupService = CameraSetupService(session: session, delegate: self)
         exposureService = ExposureService(delegate: self)
         recordingService = RecordingService(session: session, delegate: self)
-        recordingService.setLUTProcessor(self.lutProcessor)
+        // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
+        recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
         videoFormatService = VideoFormatService(session: session, delegate: self)
         cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
     }
@@ -546,13 +548,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Get current settings
         let settings = SettingsModel()
         
-        // Set the selected LUT filter onto the processor BEFORE configuring the recording service
-        logger.debug("Setting LUT filter for bake-in: \(self.lutManager.currentLUTFilter?.name ?? "None")")
-        lutProcessor.setLUTFilter(lutManager.currentLUTFilter)
+        // Set the selected LUT TEXTURE onto the METAL processor BEFORE configuring the recording service
+        logger.debug("Setting Metal LUT texture for bake-in: \(self.lutManager.currentLUTTexture != nil ? "Available" : "None")")
+        recordingService.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
+        // lutProcessor.setLUTFilter(lutManager.currentLUTFilter) // <-- REMOVED old filter setting
 
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
-        lutProcessor.setLogEnabled(self.isAppleLogEnabled)
+        // lutProcessor.setLogEnabled(self.isAppleLogEnabled) // REMOVED old CI processor log setting
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         recordingService.setVideoConfiguration(
@@ -563,7 +566,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Get current orientation angle for recording
         let connectionAngle = session.outputs.compactMap { $0.connection(with: .video) }.first?.videoRotationAngle ?? -1 // Use -1 to indicate not found
-        logger.info("Requesting recording start. Current primary video connection angle: \(connectionAngle)° (This is passed but ignored by RecordingService)")
+        logger.info("Requesting recording start. Current primary video connection angle: \\(connectionAngle)° (This is passed but ignored by RecordingService)")
 
         // Inform the RecordingService about the Apple Log state *before* starting
         recordingService?.setAppleLogEnabled(isAppleLogEnabled)
@@ -743,7 +746,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         default: // Includes .unknown, .faceUp, .faceDown
             // Fallback to portrait if orientation is invalid or face up/down
             // REMOVE: targetAngle = 90
-            orientationLogger.debug("    Device orientation: \(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
+            orientationLogger.debug("    Device orientation: \\(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
         }
 
         // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView
