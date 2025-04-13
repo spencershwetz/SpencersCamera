@@ -2,39 +2,45 @@
 
 This list tracks potential improvements, refactoring tasks, and items to review in the Spencer's Camera codebase, prioritized by importance.
 
-## High Priority
+## Tasks
 
-- [ ] **Remove Unused LUT Processor (`LUTProcessor.swift`)**
-    - Verify no code paths reference `LUTProcessor.swift`.
-    - If unused, remove the file and related setup code.
-- [ ] **Evaluate/Remove `TestDynamicIslandOverlayView.swift`**
-    - Determine if the view is still needed for testing or active development.
-    - If not needed, remove the file.
+1.  [ ] **Remove Unused LUT Processor (`LUTProcessor.swift`)**
+    *   Verify no code paths reference `LUTProcessor.swift`.
+    *   If unused, remove the file and related setup code (e.g., in `CameraViewModel`).
 
-## Medium Priority
+2.  [ ] **Evaluate/Remove `TestDynamicIslandOverlayView.swift`**
+    *   Determine if the view is still needed for testing or active development.
+    *   If not needed, remove the file.
 
-- [ ] **Refactor Camera Preview View Abstraction**
-    - Review the `CameraPreviewView` -> `CameraPreviewImplementation` -> `MetalPreviewView` hierarchy.
-    - Investigate simplifying by merging `CameraPreviewImplementation` or having `CameraPreviewView` represent `MetalPreviewView` directly.
-- [ ] **Consolidate Orientation Logic**
-    - Review responsibilities of files in `Core/Orientation/`.
-    - Ensure a clear source of truth for orientation state.
-    - Simplify or remove redundant components/observers (check `CameraViewModel` for old observer code).
-- [ ] **Review Service Dependencies and Protocols**
-    - Ensure service delegate protocols are minimal and well-defined.
-    - Evaluate using Combine or async streams for state updates between services and `CameraViewModel` instead of multiple delegate callbacks.
+3.  [ ] **Refactor Camera Preview View Abstraction**
+    *   Review the `CameraPreviewView` -> `CameraPreviewImplementation` -> `MetalPreviewView` hierarchy.
+    *   Investigate simplifying by merging `CameraPreviewImplementation` or having `CameraPreviewView` represent `MetalPreviewView` directly.
 
-## Low Priority
+4.  [ ] **Consolidate Orientation Logic**
+    *   Review responsibilities of files in `Core/Orientation/` (`OrientationFixView`, `DeviceRotationViewModifier`, `DeviceOrientationViewModel`, `RotatingView`).
+    *   Ensure a clear source of truth for orientation state.
+    *   Simplify or remove redundant components/observers (check `CameraViewModel` for old observer code).
 
-- [ ] **Review AppDelegate Responsibilities**
-    - Identify logic in `AppDelegate.swift` that could be moved to the SwiftUI `App` struct or `ScenePhase`.
-    - Keep necessary UIKit integration points.
-- [ ] **Establish `UI` and `Resources` Directories**
-    - Create `iPhoneApp/UI/` and `iPhoneApp/Resources/` if intended for the structure.
-    - Populate or remove the empty `iPhoneApp/Core/Services/` directory based on plans.
-- [ ] **Refine Error Handling**
-    - Ensure robust error propagation from background tasks/async operations to the UI.
-    - Verify user-facing error messages are clear and appropriate.
-- [ ] **Review Watch Connectivity Robustness**
-    - Check `WatchConnectivityService.swift` and `CameraViewModel` for edge case handling (reachability, activation state).
-    - Ensure state synchronization and command handling are resilient. 
+5.  [ ] **Review Service Dependencies and Protocols**
+    *   Ensure service delegate protocols (`CameraSetupServiceDelegate`, `ExposureServiceDelegate`, etc.) are minimal and well-defined.
+    *   Evaluate using Combine or async streams for state updates between services and `CameraViewModel` instead of multiple delegate callbacks.
+    *   *Potential Dependency:* Changes might impact Error Handling (#8) and Watch Connectivity (#9) if they rely heavily on the current delegate pattern.
+
+6.  [ ] **Review AppDelegate Responsibilities**
+    *   Identify logic in `AppDelegate.swift` that could be moved to the SwiftUI `App` struct (`cameraApp.swift`) or `ScenePhase`.
+    *   Keep necessary UIKit integration points.
+    *   *Potential Dependency:* May affect service initialization timing/location (related to #5).
+
+7.  [ ] **Establish `UI` and `Resources` Directories**
+    *   Create `iPhoneApp/UI/` and `iPhoneApp/Resources/` if intended for the structure.
+    *   Populate or remove the empty `iPhoneApp/Core/Services/` directory based on plans.
+
+8.  [ ] **Refine Error Handling**
+    *   Ensure robust error propagation from background tasks/async operations (Services) to the UI (`CameraViewModel`).
+    *   Verify user-facing error messages (`CameraError.swift`) are clear and appropriate.
+    *   *Potential Dependency:* Depends on how services propagate errors (related to #5).
+
+9.  [ ] **Review Watch Connectivity Robustness**
+    *   Check `WatchConnectivityService.swift` and relevant parts of `CameraViewModel` for edge case handling (reachability, activation state, app active state).
+    *   Ensure state synchronization and command handling are resilient.
+    *   *Potential Dependency:* Depends on how state updates are received from services (related to #5). 
