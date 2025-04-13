@@ -4,82 +4,90 @@ This document outlines the technical specifications and requirements for the Spe
 
 ## Platform & Target
 
-*   **Target Platform**: iOS
+*   **Target Platform**: iOS & watchOS
 *   **Minimum iOS Version**: 18.0
-*   **Target Devices**: iPhone (with back cameras including Wide, potentially Ultra-Wide and Telephoto)
-*   **Watch App Target**: watchOS (version corresponding to iOS 18 compatibility, likely watchOS 11+)
-*   **Architecture**: MVVM (primarily)
-*   **UI Framework**: SwiftUI (primarily), UIKit (`UIViewControllerRepresentable`, `UIViewRepresentable`) used for bridging AVFoundation, MetalKit, and specific view controllers.
+*   **Minimum watchOS Version**: 11.0 (Implied for iOS 18 compatibility)
+*   **Target Devices**: 
+    *   iOS: iPhone models with Metal support and necessary camera hardware (Wide required, Ultra-Wide/Telephoto optional).
+    *   watchOS: Apple Watch models compatible with watchOS 11+.
+*   **Architecture**: MVVM (primarily), Service Layer for encapsulating framework interactions.
+*   **UI Framework**: SwiftUI (primarily), UIKit (`UIViewControllerRepresentable`, `UIViewRepresentable`, `AppDelegate`) for bridging AVFoundation, MetalKit, and specific view controllers/app lifecycle.
 
-## Core Features
+## Core Features & Implementation Details
 
 *   **Camera Control**: 
-    *   Access to back cameras (Wide, Ultra-Wide, Telephoto where available).
-    *   Lens switching (0.5x, 1x, 2x Digital, 5x).
-    *   Digital zoom control (smooth slider and discrete lens buttons).
-    *   Video recording in various formats.
-    *   Manual exposure controls (ISO, Shutter Speed/Angle).
-    *   Manual White Balance (Temperature, potentially Tint).
-    *   Focus (currently Continuous Auto Focus).
-*   **Video Recording Formats**: 
-    *   Resolutions: 4K UHD (3840x2160), HD (1920x1080), SD (1280x720).
-    *   Frame Rates: 23.976, 24, 25, 29.97, 30 fps.
-    *   Codecs: HEVC (H.265), Apple ProRes 422 HQ.
-    *   Color Spaces: Rec.709 (SDR), Apple Log (HDR).
+    *   Uses `AVCaptureSession` managed primarily within `CameraViewModel` and configured by `CameraSetupService`.
+    *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
+    *   Lens switching logic in `CameraDeviceService` handles physical switching (reconfiguring session) and digital zoom (setting `videoZoomFactor` on wide lens for 2x).
+    *   Format selection (Resolution, FPS, Color Space) managed by `VideoFormatService`, finding optimal `AVCaptureDevice.Format` based on requested criteria.
+    *   Manual Exposure/WB/Tint controls managed by `ExposureService`, locking device configuration and setting properties like `exposureMode`, `setExposureModeCustom(duration:iso:)`, `setWhiteBalanceModeLocked(with:)`.
+*   **Video Recording**: 
+    *   Handled by `RecordingService` using `AVAssetWriter`.
+    *   Video Input (`AVAssetWriterInput`): Configured with dimensions from active format, codec type (`.hevc` or `.proRes422HQ`), and compression properties (bitrate, keyframe interval, profile level, color primaries based on `isAppleLogEnabled`).
+    *   Audio Input (`AVAssetWriterInput`): Configured for Linear PCM (48kHz, 16-bit stereo).
+    *   Orientation: `CGAffineTransform` is applied to the video input based on device/interface orientation at the start of recording to ensure correct playback rotation.
+    *   Pixel Processing: Video frames (`CMSampleBuffer`) are received via delegate (`AVCaptureVideoDataOutputSampleBufferDelegate`). If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), the `CVPixelBuffer` is passed to `MetalFrameProcessor.processPixelBuffer` before being appended to the `AVAssetWriterInputPixelBufferAdaptor`.
+    *   Saving: Finished `.mov` file saved to `PHPhotoLibrary` using `PHPhotoLibrary.shared().performChanges`.
 *   **LUT (Look-Up Table) Support**: 
-    *   Import `.cube` files.
-    *   Apply LUT for real-time preview using Metal shaders.
-    *   Option to bake the LUT into the recorded video file using Metal compute shaders.
-    *   Manage recent LUTs.
+    *   `.cube` file parsing via `CubeLUTLoader` (text-based, handles comments, size, data, clamps values).
+    *   `LUTManager` stores loaded LUT data as both:
+        *   `currentLUTTexture`: A 3D `MTLTexture` (`rgba32Float`) for Metal pipeline.
+        *   `currentLUTFilter`: A `CIColorCube` filter for potential (though likely secondary) Core Image usage.
+    *   Preview Application: `MetalPreviewView` reads `currentLUTTexture` and applies it in `fragmentShaderYUV` or `fragmentShaderRGB`.
+    *   Bake-in Application: `RecordingService` passes `currentLUTTexture` to `MetalFrameProcessor`, which uses it in `applyLUTComputeRGB`/`applyLUTComputeYUV` kernels.
 *   **Watch App Remote Control**: 
-    *   Start/Stop recording on iPhone.
-    *   Display recording status (Ready, Recording).
-    *   Show elapsed recording time (including fractional seconds for frame count).
-    *   Prompt user to open iPhone app if not active/reachable.
+    *   Uses `WatchConnectivity` framework.
+    *   iPhone (`CameraViewModel`): Sends state (`isRecording`, `isAppActive`, `selectedFrameRate`, `recordingStartTime`) via `WCSession.updateApplicationContext(_:)`. Receives commands (`startRecording`, `stopRecording`) via `session(_:didReceiveMessage:replyHandler:)`.
+    *   Watch (`WatchConnectivityService`): Receives context via `session(_:didReceiveApplicationContext:)` and publishes `latestContext`. Sends commands via `WCSession.sendMessage(_:replyHandler:errorHandler:)`.
+    *   Watch `ContentView` observes `latestContext` and uses a `Timer` to calculate/display elapsed time from `recordingStartTime`.
 *   **Video Library**: 
-    *   Browse videos recorded by the app (or all videos) in the Photo Library.
-    *   View thumbnails and duration.
-    *   Play selected videos using `AVPlayer`.
-    *   Handle Photo Library authorization.
+    *   Uses `Photos` framework (`PHPhotoLibrary`, `PHAsset`, `PHImageManager`).
+    *   `VideoLibraryViewModel` fetches assets matching `mediaType = .video`, sorted by `creationDate`.
+    *   Uses `PHPhotoLibrary.requestAuthorization` for permissions.
+    *   Uses `PHPhotoLibraryChangeObserver` to refresh on library changes.
+    *   Uses `PHImageManager` to request thumbnails (`requestImage`) and `AVAsset`s for playback (`requestAVAsset`).
 *   **Orientation Handling**: 
-    *   Main camera interface remains fixed in portrait orientation.
-    *   Specific UI elements (buttons) rotate with device orientation.
-    *   Video recordings are saved with the correct orientation based on device orientation at the start of recording.
-    *   Video Library supports landscape orientation.
+    *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements.
+    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`.
+    *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed.
+    *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue`) based on device/interface orientation and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`.
 *   **Real-time Preview**: 
-    *   Uses `MetalKit` (`MTKView`) for efficient preview rendering.
-    *   Applies selected LUT in real-time via Metal fragment shaders.
+    *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
+    *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
+    *   Triple buffering managed via `DispatchSemaphore` in `MetalPreviewView`.
 *   **Recording Light**: 
-    *   Uses device torch (flashlight) as a visual indicator during recording.
-    *   Adjustable intensity.
-    *   Startup flashing sequence (3-2-1).
+    *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.
+    *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
+    *   Startup sequence implemented with `Task.sleep` for timing.
 
 ## Technical Requirements & Dependencies
 
-*   **AVFoundation**: Core framework for camera capture, session management, device control, recording (`AVAssetWriter`), and playback (`AVPlayer`).
-*   **SwiftUI**: Primary UI framework.
-*   **Combine**: Used for reactive programming, particularly in ViewModels and services (`@Published`, `ObservableObject`).
-*   **MetalKit / Metal**: Used for high-performance camera preview rendering and compute tasks (LUT application/bake-in).
-*   **CoreImage**: Used by `LUTManager` for creating `CIFilter` (`CIColorCube`) instances from LUT data (though primary application is Metal).
-*   **Photos**: Used by `VideoLibraryViewModel` to access and fetch video assets from the Photo Library (`PHPhotoLibrary`, `PHAsset`).
-*   **CoreData**: Used for persistence (though currently only the template `Persistence.swift` and `Item` entity exist).
-*   **WatchConnectivity**: Used for communication between the iPhone and Watch App (`WCSession`).
-*   **UniformTypeIdentifiers**: Used by `DocumentPicker` and `LUTManager` to define supported file types.
+*   **AVFoundation**: Capture, Session, Device Control, Recording, Playback.
+*   **SwiftUI**: UI, State Management (@State, @StateObject, @ObservedObject, @EnvironmentObject), View Lifecycle.
+*   **Combine**: Reactive state updates (@Published, ObservableObject, .sink).
+*   **MetalKit / Metal**: Preview Rendering (`MTKView`, `MTLRenderCommandEncoder`), Compute Shaders (`MTLComputeCommandEncoder`) for LUT bake-in, Texture Management (`MTLTexture`, `CVMetalTextureCache`).
+*   **CoreImage**: Potentially used by `LUTProcessor` (`CIFilter`, `CIColorCube`, `CIContext`). Shared `CIContext` provided.
+*   **Photos**: Video Library access (`PHPhotoLibrary`, `PHAsset`, `PHImageManager`, `PHPhotoLibraryChangeObserver`).
+*   **CoreData**: Persistence framework (currently unused beyond template).
+*   **WatchConnectivity**: iPhone-Watch communication (`WCSession`, `WCSessionDelegate`).
+*   **UniformTypeIdentifiers**: Defining supported document types (`.cube`).
+*   **os.log**: Basic logging framework used throughout.
 
 ## Hardware Features Used
 
-*   Back Camera(s) (Wide, Ultra-Wide, Telephoto)
-*   Microphone(s)
-*   Torch (Flashlight)
-*   Metal-capable GPU
-*   Volume Buttons (via `AVCaptureEventInteraction`)
+*   Back Camera(s) (requires `.builtInWideAngleCamera`, uses `.builtInUltraWideCamera`, `.builtInTelephotoCamera` if available).
+*   Microphone(s) (via `AVCaptureDevice.default(for: .audio)`).
+*   Torch (Flashlight) (via `AVCaptureDevice.hasTorch`, `.setTorchModeOn`).
+*   Metal-capable GPU.
+*   Volume Buttons (via `AVCaptureEventInteraction`, iOS 17.2+).
 
-## Key Technical Decisions (Observed)
+## Key Technical Decisions & Trade-offs
 
-*   **Metal for Preview/LUTs**: Using Metal instead of Core Image or `AVCaptureVideoPreviewLayer` directly allows for efficient real-time LUT application via shaders and compute capabilities for bake-in.
-*   **Fixed Portrait UI**: The main camera interface is locked to portrait, with specific elements rotating. This simplifies layout but requires careful management of recording orientation.
-*   **Service-Oriented Architecture (within CameraViewModel)**: `CameraViewModel` delegates specific tasks (setup, recording, format, device, exposure) to dedicated service classes, promoting separation of concerns.
-*   **Watch Connectivity for Remote**: Standard WatchConnectivity framework is used for basic remote control.
-*   **Direct Shader LUT Application**: LUTs are applied directly in Metal shaders for preview and compute kernels for bake-in, bypassing intermediate `CIFilter` application for performance.
+*   **Metal vs. Core Image for LUTs**: Chose Metal for primary preview/bake-in path likely for performance benefits and finer control over rendering pipeline compared to `CIFilter`, especially for compute tasks. Core Image (`LUTProcessor`) might be a legacy or fallback path.
+*   **Fixed Portrait UI**: Simplifies `CameraView` layout but necessitates complex orientation handling for rotating elements (`RotatingView`) and video metadata (`RecordingService`). Trade-off between UI simplicity and orientation complexity.
+*   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
+*   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
+*   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
+*   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
 
-*(This specification is based on initial observation and may require updates.)*
+*(This specification includes deeper implementation details.)*

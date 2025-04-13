@@ -1,34 +1,77 @@
-# ToDo & Technical Debt
+# Technical Tasks & Refactoring
 
-This file tracks potential improvements, refactoring tasks, technical debt, and items to review.
+This file tracks necessary technical improvements, refactoring tasks, technical debt, and items to review for the Spencer's Camera project.
 
-## Potential Tasks / Improvements
+1.  **Implement Testing Strategy**
+    *   **Description**: Create XCTest/XCUITest targets. Implement unit tests for ViewModels (mocking services), services (especially camera logic, format finding, LUT loading/parsing), and utilities. Implement UI tests for critical user flows (recording start/stop, changing settings, importing LUTs, navigating library).
+    *   **Priority**: High
+    *   **Files**: Requires new test targets and test files (`*Tests.swift`). Tests would target most existing Swift files.
+    *   **Dependencies**: Improved error handling (Task #3) and service decoupling (Task #6) would facilitate testing.
 
-*   **Core Data Usage**: The project includes Core Data setup (`Persistence.swift`, `camera.xcdatamodeld`), but it doesn't seem to be actively used for storing application data yet. Define entities and integrate Core Data for storing settings, LUT metadata, or other relevant information if needed.
-*   **Error Handling**: Enhance error handling throughout the app. While `CameraError` exists, ensure all potential errors from AVFoundation, Metal, File I/O, etc., are caught and presented gracefully to the user.
-*   **Audio Metering**: Implement audio level metering during recording.
-*   **Focus Control**: Add manual focus controls (e.g., tap-to-focus, focus peaking).
-*   **Exposure Control**: Add manual exposure bias control.
-*   **UI Refinements**: 
-    *   Improve layout constraints and responsiveness, especially around the Dynamic Island/notch area (`FunctionButtonsView`).
-    *   Refine animations for smoother transitions (e.g., zoom, settings presentation).
-*   **Watch App Features**: 
-    *   Display preview on watch (might be resource-intensive).
-    *   Allow changing basic settings (resolution, FPS) from the watch.
-*   **Testing**: Implement Unit Tests (XCTest) for ViewModels, services, and utilities. Implement UI Tests (XCUITest) for key user flows.
-*   **Accessibility**: Review and improve accessibility features (VoiceOver labels, dynamic type support).
-*   **Localization**: Add support for multiple languages.
-*   **Analytics/Logging**: Integrate a more robust logging/analytics framework for tracking usage and errors in production.
-*   **CI/CD**: Set up a Continuous Integration/Continuous Deployment pipeline.
+2.  **Review Orientation Handling Logic**
+    *   **Description**: Analyze the complex interaction between `AppDelegate`, `OrientationFixView`, `RotatingView`, `DeviceOrientationViewModel`, `CameraViewModel`, and `RecordingService` regarding UI rotation and video metadata orientation. Simplify if possible (e.g., can `OrientationFixView` handle all locking? Can `RecordingService` rely solely on `UIDeviceOrientation` at start?). Ensure consistency during recording and view transitions.
+    *   **Priority**: High
+    *   **Files**: `AppDelegate.swift`, `OrientationFixView.swift`, `RotatingView.swift`, `DeviceOrientationViewModel.swift`, `CameraViewModel.swift`, `RecordingService.swift`, `UIDeviceOrientation+Extensions.swift`.
+    *   **Dependencies**: May impact Task #4 (UI Refinements).
 
-## Technical Debt / Areas for Review
+3.  **Improve Error Handling & Presentation**
+    *   **Description**: Systematically review error handling paths. Ensure all potential errors (AVFoundation session/device config, Metal shader compilation/runtime, `AVAssetWriter` errors, File I/O, `PHPhotoLibrary` saving, WatchConnectivity) are caught, logged appropriately, and presented to the user in a non-disruptive way (e.g., subtle alerts, status indicators in UI). Consider specific error codes/messages for `CameraError`.
+    *   **Priority**: Medium
+    *   **Files**: App-wide, especially `CameraViewModel.swift` and all Service classes.
+    *   **Dependencies**: None.
 
-*   **`LUTProcessor.swift`**: This class uses Core Image (`CIFilter`) to process LUTs. Since the primary preview and bake-in logic now uses Metal shaders (`MetalPreviewView`, `MetalFrameProcessor`), review if `LUTProcessor` and its usage in `LUTVideoPreviewView` are still necessary or can be refactored/removed to rely solely on the Metal pipeline.
-*   **Orientation Logic**: The orientation handling involves multiple components (`AppDelegate`, `OrientationFixView`, `RotatingView`, `DeviceOrientationViewModel`, service logic). Review for potential simplification and ensure consistency, especially around the fixed portrait preview vs. rotating UI elements and recording orientation.
-*   **Empty `iPhoneApp/Core/Services/`**: This directory exists but is empty. Determine if it's needed or if core services should reside elsewhere.
-*   **`TestDynamicIslandOverlayView.swift`**: This file seems experimental. Determine if it's still needed or can be removed.
-*   **Dependencies between Services**: Analyze dependencies between the various camera services (`RecordingService`, `VideoFormatService`, `CameraDeviceService`, etc.) to ensure clear responsibilities and minimal coupling.
-*   **Hardcoded Values**: Look for and replace hardcoded values (e.g., UI dimensions, default settings) with constants or configurable properties where appropriate.
-*   **Metal Performance**: Profile Metal usage (preview rendering, compute shaders) using Instruments to identify potential bottlenecks.
+4.  **Refine Dynamic Island / Notch Area UI Layout**
+    *   **Description**: Improve the layout and positioning of the function buttons (`FunctionButtonsView`) to better adapt to the Dynamic Island or notch area on different devices, avoiding overlaps or awkward spacing. Ensure hit targets are adequate and layout calculations are robust. This is primarily a layout correctness task.
+    *   **Priority**: Medium
+    *   **Files**: `FunctionButtonsView.swift`, `CameraView.swift`.
+    *   **Dependencies**: Potentially Task #2 (Orientation Logic Review).
 
-*(This list is based on initial observation.)*
+5.  **Review `LUTProcessor.swift` & Core Image Pipeline**
+    *   **Description**: The `LUTProcessor` (Core Image based) and `LUTVideoPreviewView` seem redundant given the primary Metal-based preview (`MetalPreviewView`) and bake-in (`MetalFrameProcessor`). Verify if the Core Image path is used or needed. If not, remove `LUTProcessor`, `LUTVideoPreviewView`, and related `CIFilter` handling in `LUTManager` to simplify the codebase and rely solely on the Metal pipeline.
+    *   **Priority**: Medium
+    *   **Files**: `LUTProcessor.swift`, `LUTVideoPreviewView.swift`, `LUTManager.swift` (remove `currentLUTFilter`?), `CameraViewModel.swift` (remove references if any).
+    *   **Dependencies**: None, but requires confirming Metal pipeline fully covers required functionality.
+
+6.  **Review Camera Service Dependencies & Responsibilities**
+    *   **Description**: Examine the interactions between camera services. For example, `CameraDeviceService` calls `VideoFormatService.findBestFormat` and `reapplyColorSpaceSettings`. Ensure responsibilities are clear (e.g., who is ultimately responsible for setting the `activeFormat` vs. `activeColorSpace` vs. frame durations during a lens switch or format change?). Minimize coupling where possible for better maintainability and testability.
+    *   **Priority**: Medium
+    *   **Files**: All files within `iPhoneApp/Features/Camera/Services/`, `CameraViewModel.swift`.
+    *   **Dependencies**: None.
+
+7.  **Profile Metal Performance**
+    *   **Description**: Use Instruments (Metal System Trace, GPU Counters) to profile the Metal preview rendering (`MetalPreviewView`, fragment shaders) and the compute kernels (`MetalFrameProcessor`, compute shaders) used for LUT bake-in. Check for high GPU/CPU usage, memory bandwidth issues, or pipeline stalls, especially with 4K/ProRes/Log workflows. Optimize shaders and resource usage as needed.
+    *   **Priority**: Medium
+    *   **Files**: `MetalPreviewView.swift`, `MetalFrameProcessor.swift`, `PreviewShaders.metal`.
+    *   **Dependencies**: Requires running on a physical device.
+
+8.  **Implement Structured Logging**
+    *   **Description**: Replace basic `print`/`os.log` statements with a more structured logging framework (e.g., using unified `OSLog` more effectively, `Pulse`, `OSLogStore` for on-device inspection) for better debugging, performance monitoring, and production issue tracking. This enhances maintainability.
+    *   **Priority**: Medium
+    *   **Files**: App-wide integration, potentially a dedicated logging service/wrapper.
+    *   **Dependencies**: None.
+
+9.  **Improve Accessibility Implementation**
+    *   **Description**: Ensure proper implementation of accessibility modifiers (`.accessibilityLabel`, `.accessibilityHint`, `.accessibilityValue`, etc.) for all interactive UI elements. Verify VoiceOver navigation and usability. Test Dynamic Type support thoroughly. This is essential for app quality and usability.
+    *   **Priority**: Medium
+    *   **Files**: All UI files (`*View.swift`).
+    *   **Dependencies**: None.
+
+10. **Review/Remove `TestDynamicIslandOverlayView.swift`**
+    *   **Description**: This file (`TestDynamicIslandOverlayView.swift`) appears experimental or temporary. Confirm if it's still needed for testing or reference, or if it can be safely removed to reduce unused code.
+    *   **Priority**: Low
+    *   **Files**: `TestDynamicIslandOverlayView.swift`.
+    *   **Dependencies**: None.
+
+11. **Address Empty `Core/Services/` Directory**
+    *   **Description**: The `iPhoneApp/Core/Services/` directory is currently empty. Decide if this is reserved for future truly *core* services (unrelated to specific features like Camera or LUT) or if it should be removed for structural clarity.
+    *   **Priority**: Low
+    *   **Files**: `iPhoneApp/Core/Services/` directory.
+    *   **Dependencies**: None.
+
+12. **Review Hardcoded Values**
+    *   **Description**: Search for hardcoded numbers/strings (e.g., UI padding/sizes, default settings, queue labels, notification names). Replace with named constants (`Constants.swift`?), enums, or configuration values where appropriate for better maintainability and clarity.
+    *   **Priority**: Low
+    *   **Files**: App-wide search needed.
+    *   **Dependencies**: None.
+
+*(Priorities and dependencies are estimates and may change.)*
