@@ -186,7 +186,11 @@ kernel void applyLUTComputeYUV(
     // Read Chroma (CbCr) - texture coordinates need adjustment for 4:2:2 subsampling
     // Read from the pixel coordinate corresponding to the current Luma position.
     // Since CbCr width is half, the x coordinate is gid.x / 2.
-    uint2 cbcr_gid = uint2(gid.x / 2, gid.y);
+    // For 4:2:0, CbCr height is also half, so y coordinate is gid.y / 2.
+    // For 4:2:2, CbCr height matches Y, so y coordinate *should* be gid.y.
+    // Using gid.y / 2 for now to fix the immediate 4:2:0 issue.
+    // TODO: Pass format flag to shader for perfect 4:2:2 vs 4:2:0 handling.
+    uint2 cbcr_gid = uint2(gid.x / 2, gid.y / 2);
     float2 cbcr = cbcrTexture.read(cbcr_gid).rg;
 
     // Convert YUV (BT.2020 Log) to RGB (Log)

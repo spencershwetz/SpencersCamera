@@ -66,9 +66,7 @@ The project is organized into the following main components:
 │   │   │   └── FlashlightManager.swift
 │   │   ├── LUT/
 │   │   │   ├── Utils/
-│   │   │   │   └── LUTProcessor.swift
 │   │   │   ├── Views/
-│   │   │   │   └── LUTVideoPreviewView.swift
 │   │   │   ├── CubeLUTLoader.swift
 │   │   │   └── LUTManager.swift
 │   │   ├── Settings/
@@ -109,7 +107,7 @@ The project is organized into the following main components:
     *   `CameraView` displays preview via `CameraPreviewView` (which uses `MetalPreviewView` internally).
     *   `MetalPreviewView` receives raw `CMSampleBuffer`s, creates Metal textures, and renders them using shaders from `PreviewShaders.metal`, applying the `currentLUTTexture` from `LUTManager` in the fragment shader.
 *   **LUT Feature**: 
-    *   `LUTManager` loads `.cube` files (using `CubeLUTLoader`), creates both a `MTLTexture` (`currentLUTTexture`) and a `CIFilter` (`currentLUTFilter`).
+    *   `LUTManager` loads `.cube` files (using `CubeLUTLoader`), creates both a `MTLTexture` (`currentLUTTexture`).
     *   `MetalPreviewView` uses `currentLUTTexture` for rendering.
     *   `RecordingService` uses `MetalFrameProcessor` which uses `currentLUTTexture` for bake-in.
 *   **Settings**: 

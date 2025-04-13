@@ -26,43 +26,37 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Files**: `FunctionButtonsView.swift`, `CameraView.swift`.
     *   **Dependencies**: Potentially Task #2 (Orientation Logic Review).
 
-5.  **Review `LUTProcessor.swift` & Core Image Pipeline**
-    *   **Description**: The `LUTProcessor` (Core Image based) and `LUTVideoPreviewView` seem redundant given the primary Metal-based preview (`MetalPreviewView`) and bake-in (`MetalFrameProcessor`). Verify if the Core Image path is used or needed. If not, remove `LUTProcessor`, `LUTVideoPreviewView`, and related `CIFilter` handling in `LUTManager` to simplify the codebase and rely solely on the Metal pipeline.
-    *   **Priority**: Medium
-    *   **Files**: `LUTProcessor.swift`, `LUTVideoPreviewView.swift`, `LUTManager.swift` (remove `currentLUTFilter`?), `CameraViewModel.swift` (remove references if any).
-    *   **Dependencies**: None, but requires confirming Metal pipeline fully covers required functionality.
-
-6.  **Review Camera Service Dependencies & Responsibilities**
+5.  **Review Camera Service Dependencies & Responsibilities**
     *   **Description**: Examine the interactions between camera services. For example, `CameraDeviceService` calls `VideoFormatService.findBestFormat` and `reapplyColorSpaceSettings`. Ensure responsibilities are clear (e.g., who is ultimately responsible for setting the `activeFormat` vs. `activeColorSpace` vs. frame durations during a lens switch or format change?). Minimize coupling where possible for better maintainability and testability.
     *   **Priority**: Medium
     *   **Files**: All files within `iPhoneApp/Features/Camera/Services/`, `CameraViewModel.swift`.
     *   **Dependencies**: None.
 
-7.  **Profile Metal Performance**
+6.  **Profile Metal Performance**
     *   **Description**: Use Instruments (Metal System Trace, GPU Counters) to profile the Metal preview rendering (`MetalPreviewView`, fragment shaders) and the compute kernels (`MetalFrameProcessor`, compute shaders) used for LUT bake-in. Check for high GPU/CPU usage, memory bandwidth issues, or pipeline stalls, especially with 4K/ProRes/Log workflows. Optimize shaders and resource usage as needed.
     *   **Priority**: Medium
     *   **Files**: `MetalPreviewView.swift`, `MetalFrameProcessor.swift`, `PreviewShaders.metal`.
     *   **Dependencies**: Requires running on a physical device.
 
-8.  **Implement Structured Logging**
+7.  **Implement Structured Logging**
     *   **Description**: Replace basic `print`/`os.log` statements with a more structured logging framework (e.g., using unified `OSLog` more effectively, `Pulse`, `OSLogStore` for on-device inspection) for better debugging, performance monitoring, and production issue tracking. This enhances maintainability.
     *   **Priority**: Medium
     *   **Files**: App-wide integration, potentially a dedicated logging service/wrapper.
     *   **Dependencies**: None.
 
-9.  **Improve Accessibility Implementation**
+8.  **Improve Accessibility Implementation**
     *   **Description**: Ensure proper implementation of accessibility modifiers (`.accessibilityLabel`, `.accessibilityHint`, `.accessibilityValue`, etc.) for all interactive UI elements. Verify VoiceOver navigation and usability. Test Dynamic Type support thoroughly. This is essential for app quality and usability.
     *   **Priority**: Medium
     *   **Files**: All UI files (`*View.swift`).
     *   **Dependencies**: None.
 
-10. **Address Empty `Core/Services/` Directory**
+9.  **Address Empty `Core/Services/` Directory**
     *   **Description**: The `iPhoneApp/Core/Services/` directory is currently empty. Decide if this is reserved for future truly *core* services (unrelated to specific features like Camera or LUT) or if it should be removed for structural clarity.
     *   **Priority**: Low
     *   **Files**: `iPhoneApp/Core/Services/` directory.
     *   **Dependencies**: None.
 
-11. **Review Hardcoded Values**
+10. **Review Hardcoded Values**
     *   **Description**: Search for hardcoded numbers/strings (e.g., UI padding/sizes, default settings, queue labels, notification names). Replace with named constants (`Constants.swift`?), enums, or configuration values where appropriate for better maintainability and clarity.
     *   **Priority**: Low
     *   **Files**: App-wide search needed.

@@ -147,6 +147,32 @@ class MetalFrameProcessor {
              }
              inputTextureCbCr = CVMetalTextureGetTexture(cvTexCbCr_x422)
 
+        case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: // 8-bit 4:2:0 YUV ('420v' or '420f')
+            logger.trace("Processing YUV 4:2:0 Bi-Planar frame.")
+            requiresYUVProcessing = true
+            pipelineState = computePipelineStateYUV
+
+            // Texture for Y plane (Plane 0) - Use r8Unorm for 8-bit Y data
+            var cvTextureY_420: CVMetalTexture?
+            var status_420 = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, pixelBuffer, nil, .r8Unorm, width, height, 0, &cvTextureY_420)
+            guard status_420 == kCVReturnSuccess, let cvTexY_420 = cvTextureY_420 else {
+                logger.error("Failed to create input Y Metal texture (r8Unorm) for 420v/f: \(status_420)")
+                CVMetalTextureCacheFlush(cache, 0)
+                return nil
+            }
+            inputTextureY = CVMetalTextureGetTexture(cvTexY_420)
+
+            // Texture for CbCr plane (Plane 1) - Use rg8Unorm for 8-bit UV data
+            // Note: Width and Height for CbCr plane are half the Luma dimensions in 4:2:0
+            var cvTextureCbCr_420: CVMetalTexture?
+            status_420 = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, pixelBuffer, nil, .rg8Unorm, width / 2, height / 2, 1, &cvTextureCbCr_420)
+            guard status_420 == kCVReturnSuccess, let cvTexCbCr_420 = cvTextureCbCr_420 else {
+                logger.error("Failed to create input CbCr Metal texture (rg8Unorm) for 420v/f: \(status_420)")
+                CVMetalTextureCacheFlush(cache, 0)
+                return nil
+            }
+            inputTextureCbCr = CVMetalTextureGetTexture(cvTexCbCr_420)
+
         default:
             logger.error("Unsupported pixel format for Metal processing: \(pixelFormat)")
             return nil // Cannot process this format
