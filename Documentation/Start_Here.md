@@ -16,7 +16,8 @@ Please be aware of the following documentation files located in the `/Documentat
     *   A listed task is completed.
     *   New technical debt or areas for improvement are identified during development.
     *   Priorities change.
-*   **`CodebaseDocumentation.md`**: A more detailed, potentially generated or manually written documentation of specific classes, functions, or features. (Review this file's current content and update its description here if needed).
+*   **`CodebaseDocumentation.md`**: A more detailed, potentially generated or manually written documentation of specific classes, functions, or features. **Requires updates** when:
+    *   The documented code (classes, functions, features) is significantly changed or removed.
 *   **`TechnicalSpecification.md`**: Outlines the technical requirements, features, and specifications of the application. **Requires updates** when:
     *   Core features are added or significantly changed.
     *   Technical requirements (e.g., supported iOS versions, specific hardware features used) are modified.

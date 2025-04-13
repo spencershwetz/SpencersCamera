@@ -4,13 +4,13 @@ This list tracks potential improvements, refactoring tasks, and items to review 
 
 ## Tasks
 
-1.  [ ] **Remove Unused LUT Processor (`LUTProcessor.swift`)**
-    *   Verify no code paths reference `LUTProcessor.swift`.
-    *   If unused, remove the file and related setup code (e.g., in `CameraViewModel`).
+1.  [ ] **Refactor `LUTVideoPreviewView` and Remove `LUTProcessor`**
+    *   Modify `LUTVideoPreviewView.swift` to use `MetalFrameProcessor` for applying LUTs instead of `LUTProcessor`.
+    *   Once `LUTProcessor.swift` is confirmed unused, remove the file and related setup code.
 
-2.  [ ] **Evaluate/Remove `TestDynamicIslandOverlayView.swift`**
-    *   Determine if the view is still needed for testing or active development.
-    *   If not needed, remove the file.
+2.  ~~[x] **Remove `TestDynamicIslandOverlayView.swift`**~~
+    *   ~~File appears unused outside of its own definition and previews.~~
+    *   ~~Action: Delete the file `iPhoneApp/Features/Camera/Views/TestDynamicIslandOverlayView.swift`.~~ **DONE**
 
 3.  [ ] **Refactor Camera Preview View Abstraction**
     *   Review the `CameraPreviewView` -> `CameraPreviewImplementation` -> `MetalPreviewView` hierarchy.
