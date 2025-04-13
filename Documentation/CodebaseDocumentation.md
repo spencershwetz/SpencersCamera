@@ -16,7 +16,7 @@ This document provides a detailed overview of key classes, components, and their
 *   **`AppDelegate` (`AppDelegate.swift`)**: 
     *   UIKit App Delegate (`@UIApplicationDelegateAdaptor`).
     *   Handles app lifecycle (`didFinishLaunching`, `applicationWillTerminate`), mainly for setting up/tearing down `UIDevice.begin/endGeneratingDeviceOrientationNotifications()`.
-    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control device orientation based on the topmost view controller and static flags (`AppDelegate.isVideoLibraryPresented`, `AppDelegate.landscapeEnabledViewControllers`). Allows landscape only if `isVideoLibraryPresented` is true or the top view controller allows it (via `OrientationFixViewController` or its presence in `landscapeEnabledViewControllers`). Defaults to portrait.
+    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control device orientation based on the topmost view controller. Checks `OrientationFixViewController.allowsLandscapeMode` or if the view controller is in `landscapeEnabledViewControllers`. Defaults to portrait. (Simplified: Removed `isVideoLibraryPresented` flag check).
     *   Provides a helper extension `UIViewController.topMostViewController()`.
 
 ### Core (`iPhoneApp/Core`)
@@ -48,8 +48,7 @@ This document provides a detailed overview of key classes, components, and their
     *   **`OrientationFixView` (`OrientationFixView.swift`)**: 
         *   `UIViewControllerRepresentable` wrapping `OrientationFixViewController`.
         *   Takes `allowsLandscapeMode: Bool` parameter.
-        *   Sets `AppDelegate.isVideoLibraryPresented = true` if `allowsLandscapeMode` is true during init or update.
-        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view. Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. Attempts to enforce portrait orientation using `requestGeometryUpdate` if `allowsLandscapeMode` is false. (Simplified: Removed aggressive parent background setting).
+        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view. Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. Attempts to enforce portrait orientation using `requestGeometryUpdate` if `allowsLandscapeMode` is false. (Simplified: Removed setting `AppDelegate.isVideoLibraryPresented`).
     *   **`RotatingView` (`RotatingView.swift`)**: 
         *   `UIViewControllerRepresentable` wrapping `RotatingViewController`.
         *   Takes `orientationViewModel` and `invertRotation: Bool`.
@@ -71,6 +70,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Provides `startRecording`/`stopRecording` async methods, configuring `RecordingService` with current settings (including LUT bake-in state and texture) before starting.
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
+        *   (Orientation logic removed - relies on `DeviceOrientationViewModel` for UI and `RecordingService` for metadata).
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `GeometryReader` for layout.
@@ -79,7 +79,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Includes Record, Library, and Settings buttons.
         *   Manages presentation state for Settings (`.fullScreenCover`), Library (`.fullScreenCover` with `OrientationFixView(allowsLandscapeMode: true)`), and LUT Document Picker (`.sheet`).
         *   Handles `onAppear`/`onDisappear` to start/stop session via ViewModel.
-        *   Responds to `UIApplication.willResignActiveNotification` and `UIDevice.orientationDidChangeNotification`. (Removed redundant `didBecomeActiveNotification` handler).
+        *   Responds to `UIApplication.willResignActiveNotification`. (Removed `didBecomeActiveNotification` and `orientationDidChangeNotification` handlers).
     *   **`CameraPreviewView` (`CameraPreviewView.swift`)**: 
         *   `UIViewRepresentable` for `MTKView`.
         *   `makeUIView`: Creates `MTKView`, sets up `MetalPreviewView` as its delegate (passing `LUTManager`), creates and adds `AVCaptureVideoDataOutput` to the session, sets the delegate to its `Coordinator`.

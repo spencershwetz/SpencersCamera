@@ -106,30 +106,6 @@ struct CameraView: View {
                 // When app is moved to background
                 stopSession()
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                // Get the current device orientation
-                let deviceOrientation = UIDevice.current.orientation
-                
-                // Only update when the device orientation is a valid interface orientation
-                if deviceOrientation.isValidInterfaceOrientation {
-                    print("DEBUG: Device orientation changed to: \(deviceOrientation.rawValue)")
-                    // Convert device orientation to interface orientation
-                    let interfaceOrientation: UIInterfaceOrientation
-                    switch deviceOrientation {
-                    case .portrait:
-                        interfaceOrientation = .portrait
-                    case .portraitUpsideDown:
-                        interfaceOrientation = .portraitUpsideDown
-                    case .landscapeLeft:
-                        interfaceOrientation = .landscapeRight // Note: these are flipped
-                    case .landscapeRight:
-                        interfaceOrientation = .landscapeLeft  // Note: these are flipped
-                    default:
-                        interfaceOrientation = .portrait
-                    }
-                    viewModel.updateOrientation(interfaceOrientation)
-                }
-            }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator
                 if newValue != nil {
@@ -166,21 +142,6 @@ struct CameraView: View {
             .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
                 // Reset orientation lock when settings is dismissed
                 print("DEBUG: [ORIENTATION-DEBUG] settings fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
-                AppDelegate.isVideoLibraryPresented = false
-                
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-                    let orientations: UIInterfaceOrientationMask = [.portrait]
-                    let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientations)
-                    
-                    print("DEBUG: Returning to portrait after settings")
-                    windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                        print("DEBUG: Portrait return result: \(error.localizedDescription)")
-                    }
-                    
-                    for window in windowScene.windows {
-                        window.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-                    }
-                }
             }) {
                 SettingsView(
                     lutManager: viewModel.lutManager,
@@ -264,7 +225,6 @@ struct CameraView: View {
     private var videoLibraryButton: some View {
         Button {
             print("DEBUG: [ORIENTATION-DEBUG] Library button tapped - setting AppDelegate.isVideoLibraryPresented = true")
-            AppDelegate.isVideoLibraryPresented = true // Allow landscape for library
             isShowingVideoLibrary = true
         } label: {
             Image(systemName: "photo.stack")
@@ -278,7 +238,6 @@ struct CameraView: View {
         }
         .fullScreenCover(isPresented: $isShowingVideoLibrary, onDismiss: {
             print("DEBUG: [ORIENTATION-DEBUG] library fullScreenCover onDismiss scheduled - setting AppDelegate.isVideoLibraryPresented = false")
-            AppDelegate.isVideoLibraryPresented = false // Lock back to portrait
 
             // Delay orientation change to allow dismissal animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { // Add 0.5 second delay

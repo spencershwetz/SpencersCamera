@@ -8,10 +8,10 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Files**: Requires new test targets and test files (`*Tests.swift`). Tests would target most existing Swift files.
     *   **Dependencies**: Improved error handling (Task #3) and service decoupling (Task #6) would facilitate testing.
 
-2.  **Review Orientation Handling Logic**
-    *   **Description**: Analyze the complex interaction between `AppDelegate`, `OrientationFixView`, `RotatingView`, `DeviceOrientationViewModel`, `CameraViewModel`, and `RecordingService` regarding UI rotation and video metadata orientation. Simplify if possible (e.g., can `OrientationFixView` handle all locking? Can `RecordingService` rely solely on `UIDeviceOrientation` at start?). Ensure consistency during recording and view transitions.
+2.  **Review Orientation Handling Logic [COMPLETED]**
+    *   **Description**: Analyzed the complex interaction between `AppDelegate`, `OrientationFixView`, `RotatingView`, `DeviceOrientationViewModel`, `CameraViewModel`, and `RecordingService` regarding UI rotation and video metadata orientation. Simplified by centralizing UI orientation in `DeviceOrientationViewModel`, removing direct handling in `CameraViewModel`/`CameraView`, and relying on `RecordingService` for metadata. Simplified `AppDelegate`/`OrientationFixView` logic.
     *   **Priority**: High
-    *   **Files**: `AppDelegate.swift`, `OrientationFixView.swift`, `RotatingView.swift`, `DeviceOrientationViewModel.swift`, `CameraViewModel.swift`, `RecordingService.swift`, `UIDeviceOrientation+Extensions.swift`.
+    *   **Files**: `AppDelegate.swift`, `OrientationFixView.swift`, `RotatingView.swift`, `DeviceOrientationViewModel.swift`, `CameraViewModel.swift`, `RecordingService.swift`, `UIDeviceOrientation+Extensions.swift`, `CameraView.swift`.
     *   **Dependencies**: May impact Task #4 (UI Refinements).
 
 3.  **Improve Error Handling & Presentation**
@@ -61,5 +61,11 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Priority**: Low
     *   **Files**: App-wide search needed.
     *   **Dependencies**: None.
+
+11. **REMOVE: Review/Remove `LUTVideoPreviewView`** (Related to original Task #13)
+    *   **Description**: The `LUTVideoPreviewView` (and `LUTProcessor`) seems outdated and potentially conflicts with the primary `MetalPreviewView` and `MetalFrameProcessor` used for preview and bake-in. It uses Core Image for processing and a separate `AVCaptureVideoPreviewLayer`, which differs from the main Metal pipeline. Review its necessity and remove if redundant to simplify the codebase and focus on the Metal path.
+    *   **Priority**: Low
+    *   **Files**: `LUTVideoPreviewView.swift`, `LUTProcessor.swift`.
+    *   **Dependencies**: Depends on confirming `MetalFrameProcessor` fully handles bake-in needs.
 
 *(Priorities and dependencies are estimates and may change.)*

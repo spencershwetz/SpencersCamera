@@ -14,9 +14,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     /// Static variable to track view controllers that need landscape support
     static var landscapeEnabledViewControllers: [String] = []
     
-    // Track if the video library is currently being presented
-    static var isVideoLibraryPresented: Bool = false
-    
     // Track whether status bar should be hidden
     static var shouldHideStatusBar: Bool = true
     
@@ -76,12 +73,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     /// Handle orientation lock dynamically based on the current view controller
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         logger.debug("Querying supported interface orientations.")
-        // If video library is flagged as presented, always allow landscape
-        if AppDelegate.isVideoLibraryPresented {
-            logger.info("Video library is presented. Allowing Portrait and Landscape Left/Right.")
-            return [.portrait, .landscapeLeft, .landscapeRight]
-        }
-        
         // Get the top view controller
         if let topViewController = window?.rootViewController?.topMostViewController() {
             let vcName = String(describing: type(of: topViewController))

@@ -48,9 +48,10 @@ This document outlines the technical specifications and requirements for the Spe
     *   Uses `PHImageManager` to request thumbnails (`requestImage`) and `AVAsset`s for playback (`requestAVAsset`).
 *   **Orientation Handling**: 
     *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements (internal logging reduced).
-    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`. (Implementation simplified to reduce potential rendering issues).
+    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`. (Simplified: Removed `isVideoLibraryPresented` flag, relies on `allowsLandscapeMode` property).
     *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed.
     *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue`) based on device/interface orientation and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`.
+    *   Simplified: `CameraViewModel` and `CameraView` no longer directly handle orientation changes.
 *   **Real-time Preview**: 
     *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
     *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
@@ -85,6 +86,7 @@ This document outlines the technical specifications and requirements for the Spe
 
 *   **Metal vs. Core Image for LUTs**: Chose Metal for primary preview/bake-in path likely for performance benefits and finer control over rendering pipeline compared to `CIFilter`, especially for compute tasks. Core Image (`LUTProcessor`) might be a legacy or fallback path.
 *   **Fixed Portrait UI**: Simplifies `CameraView` layout but necessitates complex orientation handling for rotating elements (`RotatingView`) and video metadata (`RecordingService`). Trade-off between UI simplicity and orientation complexity.
+    *   Update: Some complexity reduced by centralizing orientation logic. `CameraView` itself is now simpler regarding orientation.
 *   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
 *   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.

@@ -55,7 +55,6 @@ The project is organized into the following main components:
 │   │   │   ├── Utilities/
 │   │   │   │   └── DocumentPicker.swift
 │   │   │   ├── Views/
-│   │   │   │   ├── CameraPreviewImplementation.swift
 │   │   │   │   ├── CameraPreviewView.swift
 │   │   │   │   ├── CameraView.swift
 │   │   │   │   ├── FunctionButtonsView.swift
@@ -115,12 +114,4 @@ The project is organized into the following main components:
     *   `SettingsModel` uses `UserDefaults` for persistence and `NotificationCenter` to signal changes (e.g., flashlight, bake-in LUT).
     *   `CameraViewModel` observes notifications or directly uses `SettingsModel` state to configure services (e.g., `RecordingService` for bake-in LUT state).
 *   **Watch Connectivity**: 
-    *   `CameraViewModel` acts as `WCSessionDelegate` on iOS, sending state (`isRecording`, `isAppActive`, etc.) via `updateApplicationContext`. It receives messages (start/stop) and triggers corresponding actions.
-    *   `WatchConnectivityService` is `WCSessionDelegate` on watchOS, receiving context updates (`latestContext`) published to `ContentView`, and sending messages to iOS.
-*   **Orientation**: 
-    *   `DeviceOrientationViewModel` publishes device orientation.
-    *   `RotatingView` subscribes and applies transforms to specific UI elements.
-    *   `OrientationFixView` enforces specific screen orientations for views like `CameraView` and `VideoLibraryView`.
-    *   `RecordingService` determines video orientation metadata based on device/interface orientation at the start of recording.
-
-*(This architecture description provides a more detailed overview but may still evolve.)*
+    *   `CameraViewModel` acts as `WCSessionDelegate`

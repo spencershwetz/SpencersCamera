@@ -174,20 +174,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @Published var selectedFrameRate: Double = 30.0
     let availableFrameRates: [Double] = [23.976, 24.0, 25.0, 29.97, 30.0]
     
-    private var orientationObserver: NSObjectProtocol?
-    @Published private(set) var currentInterfaceOrientation: UIInterfaceOrientation = .portrait
-    
-    private let processingQueue = DispatchQueue(
-        label: "com.camera.processing",
-        qos: .userInitiated,
-        attributes: [],
-        autoreleaseFrequency: .workItem
-    )
-    
-    private var lastFrameTimestamp: CFAbsoluteTime = 0
-    private var lastFrameTime: CMTime?
-    private var frameCount: Int = 0
-    private var frameRateAccumulator: Double = 0
     private var frameRateUpdateInterval: Int = 30
     
     private var supportedFrameRateRange: AVFrameRateRange? {
@@ -403,22 +389,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             print("Failed to setup session: \(error)")
         }
         
-        // Add orientation change observer
-        // REMOVED: Orientation is now handled solely within CameraPreviewView
-        /*
-        orientationObserver = NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil,
-            queue: .main) { [weak self] _ in
-                guard let self = self else { return }
-                guard !self.isRecording else {
-                    self.logger.debug("Orientation changed during recording, skipping connection angle update.")
-                    return
-                }
-                self.applyCurrentOrientationToConnections()
-        }
-        */
-        
         // Set initial shutter angle
         updateShutterAngle(180.0)
         
@@ -434,13 +404,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
-        // REMOVED: Orientation observer removal
-        /*
-        if let observer = orientationObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        */
-        
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -487,18 +450,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func updateTint(_ newValue: Double) {
         currentTint = newValue.clamped(to: tintRange)
         exposureService.updateTint(currentTint, currentWhiteBalance: whiteBalance)
-    }
-    
-    func updateOrientation(_ orientation: UIInterfaceOrientation) {
-        guard !isRecording else {
-            logger.debug("Interface orientation update skipped during recording.")
-            // Still update the published property so UI elements can rotate
-            self.currentInterfaceOrientation = orientation
-            return
-        }
-        self.currentInterfaceOrientation = orientation
-        
-        print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
     }
     
     func switchToLens(_ lens: CameraLens) {
@@ -610,11 +561,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Update watch state
         sendStateToWatch()
-
-        // Re-apply fixed portrait orientation to connections after recording stops
-        // REMOVED: No longer needed as applyCurrentOrientationToConnections is mostly empty and orientation is fixed in PreviewView
-        // logger.info("Applying fixed portrait orientation to connections after recording stop.")
-        // applyCurrentOrientationToConnections()
     }
     
     private func updateVideoConfiguration() {
@@ -717,81 +663,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     // MARK: - Orientation Handling (NEW)
     
-    private func applyCurrentOrientationToConnections() {
-        orientationLogger.debug("--> applyCurrentOrientationToConnections called.")
-        // Add logging here to check videoDataOutput
-        if self.videoDataOutput == nil {
-            orientationLogger.warning("    [applyCurrentOrientation] videoDataOutput is NIL at this point.")
-        } else {
-            orientationLogger.debug("    [applyCurrentOrientation] videoDataOutput is assigned.")
-        }
-
-        // Use UIDevice orientation
-        let deviceOrientation = UIDevice.current.orientation
-        // REMOVE: let targetAngle: CGFloat
-
-        switch deviceOrientation {
-        case .landscapeLeft:
-            // REMOVE: targetAngle = 0
-            orientationLogger.debug("    Device orientation: Landscape Left -> Target Angle: 0°")
-        case .landscapeRight:
-            // REMOVE: targetAngle = 180
-            orientationLogger.debug("    Device orientation: Landscape Right -> Target Angle: 180°")
-        case .portraitUpsideDown:
-            // REMOVE: targetAngle = 270
-            orientationLogger.debug("    Device orientation: Portrait Upside Down -> Target Angle: 270°")
-        case .portrait:
-            // REMOVE: targetAngle = 90
-            orientationLogger.debug("    Device orientation: Portrait -> Target Angle: 90°")
-        default: // Includes .unknown, .faceUp, .faceDown
-            // Fallback to portrait if orientation is invalid or face up/down
-            // REMOVE: targetAngle = 90
-            orientationLogger.debug("    Device orientation: \\(deviceOrientation.rawValue) (Invalid/FaceUp/FaceDown) -> Defaulting to Target Angle: 90°")
-        }
-
-        // Apply to Preview Layer connection - REMOVED as previewLayer is private in CustomPreviewView
-        // The previewLayer's connection orientation should be managed within CustomPreviewView itself (e.g., via forcePortraitOrientation)
-        /* 
-        if let previewLayerConnection = (owningView?.viewWithTag(100) as? CameraPreviewView.CustomPreviewView)?.previewLayer.connection {
-            ... // Removed logic
-        } else {
-            orientationLogger.warning("    Could not get PreviewLayer connection.")
-        }
-        */
-
-        // Apply to Video Data Output connection (The one managed by CameraViewModel/CameraSetupService)
-        // REMOVED: This is handled by RecordingService during recording setup.
-        /*
-        if let videoDataOutputConnection = videoDataOutput?.connection(with: .video) {
-            let connectionID = videoDataOutputConnection.description
-            let previousAngle = videoDataOutputConnection.videoRotationAngle
-            orientationLogger.debug("    Checking VideoDataOutput Connection (\(connectionID)): Current=\(previousAngle)°, Target=\(targetAngle)°")
-            if videoDataOutputConnection.isVideoRotationAngleSupported(targetAngle) {
-                if videoDataOutputConnection.videoRotationAngle != targetAngle {
-                    videoDataOutputConnection.videoRotationAngle = targetAngle
-                    orientationLogger.info("    [applyCurrentOrientation] Updated VideoDataOutput connection \(connectionID) rotation angle from \(previousAngle)° to \(targetAngle)°")
-                } else {
-                     orientationLogger.debug("    Angle \(targetAngle)° already set for VideoDataOutput connection \(connectionID). No change needed.")
-                }
-            } else {
-                orientationLogger.warning("    Angle \(targetAngle)° not supported for VideoDataOutput connection \(connectionID).")
-            }
-        } else {
-             orientationLogger.warning("    Could not get VideoDataOutput connection (ViewModel's instance).") // Clarified which instance
-        }
-        */
-
-        // Apply to Audio Connection - REMOVED as audioOutput is not directly accessible here
-        /* 
-        if let audioConnection = audioOutput?.connection(with: .audio) {
-            ... // Removed logic
-        } else {
-             orientationLogger.warning("    Could not get AudioOutput connection.")
-        }
-        */
-        orientationLogger.debug("<-- Finished applyCurrentOrientationToConnections")
-    }
-
     func setCamera(_ device: AVCaptureDevice?) {
         Task {
             _ = device?.localizedName ?? "nil" // Assign unused deviceName to _
