@@ -72,29 +72,29 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     /// Handle orientation lock dynamically based on the current view controller
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        logger.debug("Querying supported interface orientations.")
+        // logger.debug("Querying supported interface orientations.")
         // Get the top view controller
         if let topViewController = window?.rootViewController?.topMostViewController() {
             let vcName = String(describing: type(of: topViewController))
-            logger.debug("Top view controller identified: \(vcName)")
+            // logger.debug("Top view controller identified: \(vcName)")
             
             // Check if this is a presentation controller that contains our view
             if vcName.contains("PresentationHostingController") {
                 // For SwiftUI presentation controllers, we need to check their content
                 if let childController = topViewController.children.first {
                     let childName = String(describing: type(of: childController))
-                    logger.debug("PresentationHostingController contains child: \(childName)")
+                    // logger.debug("PresentationHostingController contains child: \(childName)")
                     
                     // Check if the child controller is allowed to use landscape
                     if AppDelegate.landscapeEnabledViewControllers.contains(where: { childName.contains($0) }) {
-                        logger.info("Child controller \(childName) allows landscape. Allowing Portrait and Landscape Left/Right.")
+                        // logger.info("Child controller \(childName) allows landscape. Allowing Portrait and Landscape Left/Right.")
                         return [.portrait, .landscapeLeft, .landscapeRight]
                     } else {
-                        logger.info("Child controller \(childName) does not require landscape. Locking to Portrait.")
+                        // logger.info("Child controller \(childName) does not require landscape. Locking to Portrait.")
                         return .portrait
                     }
                 } else {
-                    logger.warning("PresentationHostingController has no children. Locking to Portrait.")
+                    // logger.warning("PresentationHostingController has no children. Locking to Portrait.")
                     return .portrait
                 }
             }
@@ -103,7 +103,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             if let orientationViewController = topViewController as? OrientationFixViewController {
                 // Use property from our custom view controller
                 if orientationViewController.allowsLandscapeMode {
-                    logger.info("OrientationFixViewController allows landscape. Allowing Portrait and Landscape Left/Right.")
+                    // logger.info("OrientationFixViewController allows landscape. Allowing Portrait and Landscape Left/Right.")
                     return [.portrait, .landscapeLeft, .landscapeRight]
                 }
             }
@@ -114,13 +114,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 return [.portrait, .landscapeLeft, .landscapeRight]
             }
             
-            logger.info("    [Orientation] No special case matched for VC '\(vcName)'. Locking to Portrait.")
+            // logger.info("    [Orientation] No special case matched for VC '\(vcName)'. Locking to Portrait.")
         } else {
             logger.warning("    [Orientation] Could not determine top view controller. Locking to Portrait as fallback.")
         }
         
         // Default to portrait only
-        logger.info("    [Orientation] Defaulting to Portrait only.")
+        // logger.info("    [Orientation] Defaulting to Portrait only.")
         return .portrait
     }
 }
