@@ -19,39 +19,70 @@ The project is organized into the following main components:
 .
 ├── Documentation/         # Project documentation (this file, ToDo, Specs, etc.)
 ├── iPhoneApp/             # Main iOS Application Target
-│   ├── App/               # App Delegate, main App struct
+│   ├── App/
 │   │   └── AppDelegate.swift
 │   ├── Assets.xcassets/   # Image assets, colors, etc.
-│   ├── Core/              # Core functionalities shared across features
-│   │   ├── Extensions/    # Swift extensions (UIDeviceOrientation, CIContext)
-│   │   ├── Metal/         # Metal rendering code (Preview, Shaders, Processor)
-│   │   │   ├── MetalPreviewView.swift  # MTKViewDelegate for live preview
-│   │   │   ├── MetalFrameProcessor.swift # Processes frames for LUT bake-in
-│   │   │   └── PreviewShaders.metal    # Shaders for preview & compute
-│   │   ├── Orientation/   # Device orientation handling (ViewModel, Views, Modifiers)
-│   │   └── Services/      # Shared services (Currently Empty)
-│   ├── Features/          # Feature-specific modules
-│   │   ├── Camera/        # Camera capture and control feature
+│   ├── Core/
+│   │   ├── Extensions/
+│   │   │   ├── CIContext+Shared.swift
+│   │   │   └── UIDeviceOrientation+Extensions.swift
+│   │   ├── Metal/
+│   │   │   ├── MetalFrameProcessor.swift
+│   │   │   ├── MetalPreviewView.swift
+│   │   │   └── PreviewShaders.metal
+│   │   ├── Orientation/
+│   │   │   ├── DeviceOrientationViewModel.swift
+│   │   │   ├── DeviceRotationViewModifier.swift
+│   │   │   ├── OrientationFixView.swift
+│   │   │   └── RotatingView.swift
+│   │   └── Services/      # (Currently Empty)
+│   ├── Features/
+│   │   ├── Camera/
 │   │   │   ├── Extensions/
-│   │   │   ├── Models/    # Data models (CameraError, CameraLens, ShutterAngle)
-│   │   │   ├── Services/  # Camera-specific services (Setup, Recording, Device, Format, Exposure)
-│   │   │   ├── Utilities/ # Utility components (DocumentPicker)
-│   │   │   ├── Views/     # SwiftUI Views (CameraView, Settings, Preview, Buttons, Zoom)
+│   │   │   │   └── AVFoundationExtensions.swift
+│   │   │   ├── Models/
+│   │   │   │   ├── CameraError.swift
+│   │   │   │   ├── CameraLens.swift
+│   │   │   │   └── ShutterAngle.swift
+│   │   │   ├── Services/
+│   │   │   │   ├── CameraDeviceService.swift
+│   │   │   │   ├── CameraSetupService.swift
+│   │   │   │   ├── ExposureService.swift
+│   │   │   │   ├── RecordingService.swift
+│   │   │   │   ├── VideoFormatService.swift
+│   │   │   │   ├── VideoOutputDelegate.swift
+│   │   │   │   └── VolumeButtonHandler.swift
+│   │   │   ├── Utilities/
+│   │   │   │   └── DocumentPicker.swift
+│   │   │   ├── Views/
+│   │   │   │   ├── CameraPreviewImplementation.swift
+│   │   │   │   ├── CameraPreviewView.swift
+│   │   │   │   ├── CameraView.swift
+│   │   │   │   ├── FunctionButtonsView.swift
+│   │   │   │   ├── LensSelectionView.swift
+│   │   │   │   ├── SettingsView.swift
+│   │   │   │   └── ZoomSliderView.swift
 │   │   │   ├── CameraViewModel.swift
 │   │   │   └── FlashlightManager.swift
-│   │   ├── LUT/           # Look-Up Table (LUT) feature
-│   │   │   ├── Utils/     # LUT processing utilities
-│   │   │   ├── Views/     # LUT-related views
+│   │   ├── LUT/
+│   │   │   ├── Utils/
+│   │   │   │   └── LUTProcessor.swift
+│   │   │   ├── Views/
+│   │   │   │   └── LUTVideoPreviewView.swift
 │   │   │   ├── CubeLUTLoader.swift
 │   │   │   └── LUTManager.swift
-│   │   ├── Settings/      # Application settings feature
+│   │   ├── Settings/
 │   │   │   ├── FlashlightSettingsView.swift
 │   │   │   └── SettingsModel.swift
-│   │   └── VideoLibrary/  # Video library browser feature
+│   │   └── VideoLibrary/
 │   │       ├── VideoLibraryView.swift
 │   │       └── VideoLibraryViewModel.swift
-│   ├── Preview Content/   # Assets for SwiftUI Previews
-│   ├── camera.xcdatamodeld/ # Core Data model definition
+│   ├── Preview Content/
+│   │   └── Preview Assets.xcassets/
+│   ├── camera.xcdatamodeld/
+│   │   ├── camera.xcdatamodel/
+│   │   │   └── contents
+│   │   └── .xccurrentversion
 │   ├── cameraApp.swift    # Main application entry point (@main)
 │   ├── Info.plist         # Application property list
 │   └── Persistence.swift  # Core Data persistence controller

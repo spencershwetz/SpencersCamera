@@ -56,19 +56,13 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Files**: All UI files (`*View.swift`).
     *   **Dependencies**: None.
 
-10. **Review/Remove `TestDynamicIslandOverlayView.swift`**
-    *   **Description**: This file (`TestDynamicIslandOverlayView.swift`) appears experimental or temporary. Confirm if it's still needed for testing or reference, or if it can be safely removed to reduce unused code.
-    *   **Priority**: Low
-    *   **Files**: `TestDynamicIslandOverlayView.swift`.
-    *   **Dependencies**: None.
-
-11. **Address Empty `Core/Services/` Directory**
+10. **Address Empty `Core/Services/` Directory**
     *   **Description**: The `iPhoneApp/Core/Services/` directory is currently empty. Decide if this is reserved for future truly *core* services (unrelated to specific features like Camera or LUT) or if it should be removed for structural clarity.
     *   **Priority**: Low
     *   **Files**: `iPhoneApp/Core/Services/` directory.
     *   **Dependencies**: None.
 
-12. **Review Hardcoded Values**
+11. **Review Hardcoded Values**
     *   **Description**: Search for hardcoded numbers/strings (e.g., UI padding/sizes, default settings, queue labels, notification names). Replace with named constants (`Constants.swift`?), enums, or configuration values where appropriate for better maintainability and clarity.
     *   **Priority**: Low
     *   **Files**: App-wide search needed.
