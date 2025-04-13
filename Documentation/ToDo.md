@@ -20,8 +20,8 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Files**: App-wide, especially `CameraViewModel.swift` and all Service classes.
     *   **Dependencies**: None.
 
-4.  **Refine Dynamic Island / Notch Area UI Layout**
-    *   **Description**: Improve the layout and positioning of the function buttons (`FunctionButtonsView`) to better adapt to the Dynamic Island or notch area on different devices, avoiding overlaps or awkward spacing. Ensure hit targets are adequate and layout calculations are robust. This is primarily a layout correctness task.
+4.  **Refine Dynamic Island / Notch Area UI Layout [COMPLETED]**
+    *   **Description**: Improved the layout and positioning of the function buttons (`FunctionButtonsView`) to better adapt to the Dynamic Island or notch area on different devices, avoiding overlaps or awkward spacing, by removing `ignoresSafeArea()` and adjusting padding. Ensured hit targets are adequate and layout calculations are robust. This is primarily a layout correctness task.
     *   **Priority**: Medium
     *   **Files**: `FunctionButtonsView.swift`, `CameraView.swift`.
     *   **Dependencies**: Potentially Task #2 (Orientation Logic Review).

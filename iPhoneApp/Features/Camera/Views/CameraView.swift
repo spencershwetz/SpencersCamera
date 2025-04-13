@@ -54,7 +54,6 @@ struct CameraView: View {
                 FunctionButtonsView(viewModel: viewModel, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
                     .zIndex(100)
                     .allowsHitTesting(true)
-                    .ignoresSafeArea()
                 
                 // Lens selection with zoom slider
                 VStack {

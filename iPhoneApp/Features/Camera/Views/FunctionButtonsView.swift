@@ -57,11 +57,10 @@ struct FunctionButtonsView: View {
                 }
                 .padding(.trailing, geometry.size.width * 0.15) // Keep F3 in current position
             }
+            .padding(.top, 20) // INCREASED: Add more padding below the safe area
             .frame(width: geometry.size.width, height: 44)
             .background(Color.black.opacity(0.01))
-            .position(x: geometry.size.width / 2, y: 28)
         }
-        .ignoresSafeArea()
     }
 }
 
