@@ -26,15 +26,15 @@ final class DeviceOrientationViewModel: ObservableObject {
                 // Only handle valid interface orientations
                 switch orientation {
                 case .portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight:
-                    print("DEBUG: [OrientationVM] Valid orientation detected: \(orientation.rawValue)")
+                    // print("DEBUG: [OrientationVM] Valid orientation detected: \\(orientation.rawValue)")
                     return true
                 default:
-                    print("DEBUG: [OrientationVM] Ignoring invalid orientation: \(orientation.rawValue)")
+                    // print("DEBUG: [OrientationVM] Ignoring invalid orientation: \\(orientation.rawValue)")
                     return false
                 }
             }
             .sink { [weak self] newOrientation in
-                print("DEBUG: [OrientationVM] Updating orientation to: \(newOrientation.rawValue)")
+                // print("DEBUG: [OrientationVM] Updating orientation to: \\(newOrientation.rawValue)")
                 withAnimation(.easeInOut(duration: 0.3)) {
                     self?.orientation = newOrientation
                 }
@@ -43,7 +43,7 @@ final class DeviceOrientationViewModel: ObservableObject {
     }
     
     deinit {
-        print("DEBUG: [OrientationVM] Deinitializing DeviceOrientationViewModel")
+        // print("DEBUG: [OrientationVM] Deinitializing DeviceOrientationViewModel")
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         logger.info("Stopping device orientation observation.")
         if let observer = orientationObserver {

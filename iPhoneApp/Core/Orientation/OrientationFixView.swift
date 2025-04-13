@@ -18,9 +18,9 @@ class OrientationFixViewController: UIViewController {
         // Configure modal presentation style based on landscape allowance
         if !allowsLandscapeMode {
             self.modalPresentationStyle = .fullScreen
-            print("DEBUG: OrientationFixViewController initializing with portrait-only mode")
+            // print("DEBUG: OrientationFixViewController initializing with portrait-only mode")
         } else {
-            print("DEBUG: OrientationFixViewController initializing with all orientations allowed")
+            // print("DEBUG: OrientationFixViewController initializing with all orientations allowed")
         }
     }
     
@@ -42,7 +42,7 @@ class OrientationFixViewController: UIViewController {
         // Set black background for all parent views up the hierarchy
         setBlackBackgroundForAllParentViews()
         
-        print("DEBUG: OrientationFixViewController viewDidLoad - background set to black")
+        // print("DEBUG: OrientationFixViewController viewDidLoad - background set to black")
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -54,14 +54,26 @@ class OrientationFixViewController: UIViewController {
         // Apply orientation settings
         if !allowsLandscapeMode {
             enforcePortraitOrientation()
-            print("DEBUG: OrientationFixViewController viewWillAppear - enforcing portrait mode")
+            // print("DEBUG: OrientationFixViewController viewWillAppear - enforcing portrait mode")
         } else {
             enableAllOrientations()
-            print("DEBUG: OrientationFixViewController viewWillAppear - allowing all orientations")
+            // print("DEBUG: OrientationFixViewController viewWillAppear - allowing all orientations")
         }
         
         // Set black background for all parent views
         setBlackBackgroundForAllParentViews()
+        
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        
+        // Set preferred orientation via UIApplication
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            if #available(iOS 16.0, *) {
+                windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+        }
+        
+        // Report current orientation settings
+        // print("DEBUG: Enforcing portrait orientation")
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -100,12 +112,12 @@ class OrientationFixViewController: UIViewController {
         }
         
         // Report current orientation settings
-        print("DEBUG: Enforcing portrait orientation")
+        // print("DEBUG: Enforcing portrait orientation")
     }
     
     private func enableAllOrientations() {
         // Allow all orientations
-        print("DEBUG: Enabling all orientations")
+        // print("DEBUG: Enabling all orientations")
     }
     
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
@@ -134,7 +146,7 @@ class OrientationFixViewController: UIViewController {
             .flatMap { $0.windows }
             .forEach { $0.backgroundColor = .black }
         
-        print("DEBUG: Set black background for all parent views")
+        // print("DEBUG: Set black background for all parent views")
     }
     
     // Hide status bar

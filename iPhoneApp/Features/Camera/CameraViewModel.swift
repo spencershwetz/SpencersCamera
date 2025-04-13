@@ -75,24 +75,24 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     var tempLUTFilter: CIFilter? {
         didSet {
             if tempLUTFilter != nil {
-                print("DEBUG: CameraViewModel stored LUT filter temporarily")
+                logger.debug("CameraViewModel stored LUT filter temporarily")
             } else if oldValue != nil {
-                print("DEBUG: CameraViewModel cleared temporary LUT filter")
+                logger.debug("CameraViewModel cleared temporary LUT filter")
             }
         }
     }
     
     @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
         didSet {
-            print("\n=== Apple Log Toggle ===")
-            print("🔄 Status: \(status)")
-            print("📹 Capture Mode: \(captureMode)")
-            print("✅ Attempting to set Apple Log to: \(isAppleLogEnabled)")
+            logger.info("=== Apple Log Toggle ===")
+            logger.info("🔄 Status: \(String(describing: self.status))")
+            logger.info("📹 Capture Mode: \(String(describing: self.captureMode))")
+            logger.info("✅ Attempting to set Apple Log to: \(self.isAppleLogEnabled)")
             
             guard status == .running, captureMode == .video else {
-                print("❌ Cannot configure Apple Log - Status or mode incorrect")
-                print("Required: status == .running (is: \(status))")
-                print("Required: captureMode == .video (is: \(captureMode))")
+                logger.warning("❌ Cannot configure Apple Log - Status or mode incorrect")
+                logger.warning("Required: status == .running (is: \(String(describing: self.status)))")
+                logger.warning("Required: captureMode == .video (is: \(String(describing: self.captureMode)))")
                 return
             }
             
@@ -144,7 +144,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     }
                 }
             }
-            print("=== End Apple Log Toggle ===\n")
+            logger.info("=== End Apple Log Toggle ===")
         }
     }
     
@@ -215,7 +215,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 do {
                     try await videoFormatService.updateCameraFormat(for: selectedResolution)
                 } catch {
-                    print("Error updating camera format: \(error)")
+                    logger.error("Error updating camera format: \(error)")
                     self.error = .configurationFailed
                 }
             }
@@ -278,7 +278,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     @Published var lutManager = LUTManager()
-    // let lutProcessor = LUTProcessor() // REMOVED old CI processor instance
     let metalFrameProcessor = MetalFrameProcessor() // ADDED Metal processor instance
     
     // Add flag to lock orientation updates during recording
@@ -343,7 +342,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     override init() {
         super.init()
-        print("\n=== Camera Initialization ===")
+        logger.info("=== Camera Initialization ===")
         
         // Initialize services
         setupServices()
@@ -379,20 +378,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             try cameraSetupService.setupSession()
             
             if let device = device {
-                print("📊 Device Capabilities:")
-                print("- Name: \(device.localizedName)")
-                print("- Model ID: \(device.modelID)")
+                logger.info("📊 Device Capabilities:")
+                logger.info("- Name: \(device.localizedName)")
+                logger.info("- Model ID: \(device.modelID)")
                 
                 isAppleLogSupported = device.formats.contains { format in
                     format.supportedColorSpaces.contains(.appleLog)
                 }
-                print("\n✅ Apple Log Support: \(isAppleLogSupported)")
+                logger.info("✅ Apple Log Support: \(self.isAppleLogSupported)")
                 
                 // Set initial Apple Log state based on current color space
                 isAppleLogEnabled = device.activeColorSpace == .appleLog
                 
-                print("Initial Apple Log Enabled state based on activeColorSpace: \(isAppleLogEnabled)")
-                print("=== End Initialization ===\n")
+                logger.info("Initial Apple Log Enabled state based on activeColorSpace: \(self.isAppleLogEnabled)")
+                logger.info("=== End Initialization ===")
             }
             
             if let device = device {
@@ -400,29 +399,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         } catch {
             self.error = .setupFailed
-            print("Failed to setup session: \(error)")
+            logger.error("Failed to setup session: \(error)")
         }
-        
-        // Add orientation change observer
-        // REMOVED: Orientation is now handled solely within CameraPreviewView
-        /*
-        orientationObserver = NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil,
-            queue: .main) { [weak self] _ in
-                guard let self = self else { return }
-                guard !self.isRecording else {
-                    self.logger.debug("Orientation changed during recording, skipping connection angle update.")
-                    return
-                }
-                self.applyCurrentOrientationToConnections()
-        }
-        */
         
         // Set initial shutter angle
         updateShutterAngle(180.0)
         
-        print("📱 LUT Loading: No default LUTs will be loaded")
+        logger.info("📱 LUT Loading: No default LUTs will be loaded")
         
         // Setup Watch Connectivity
         setupWatchConnectivity()
@@ -434,13 +417,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
-        // REMOVED: Orientation observer removal
-        /*
-        if let observer = orientationObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        */
-        
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -453,7 +429,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         cameraSetupService = CameraSetupService(session: session, delegate: self)
         exposureService = ExposureService(delegate: self)
         recordingService = RecordingService(session: session, delegate: self)
-        // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
         recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
         videoFormatService = VideoFormatService(session: session, delegate: self)
         cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
@@ -479,7 +454,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         do {
             try videoFormatService.updateFrameRate(fps)
         } catch {
-            print("❌ Frame rate error: \(error)")
+            logger.error("❌ Frame rate error: \(error)")
             self.error = .configurationFailed
         }
     }
@@ -498,7 +473,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         self.currentInterfaceOrientation = orientation
         
-        print("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
+        logger.debug("DEBUG: UI Interface orientation updated to: \(orientation.rawValue)")
     }
     
     func switchToLens(_ lens: CameraLens) {
@@ -551,11 +526,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Set the selected LUT TEXTURE onto the METAL processor BEFORE configuring the recording service
         logger.debug("Setting Metal LUT texture for bake-in: \(self.lutManager.currentLUTTexture != nil ? "Available" : "None")")
         recordingService.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
-        // lutProcessor.setLUTFilter(lutManager.currentLUTFilter) // <-- REMOVED old filter setting
 
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
-        // lutProcessor.setLogEnabled(self.isAppleLogEnabled) // REMOVED old CI processor log setting
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
         recordingService.setVideoConfiguration(
@@ -610,11 +583,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Update watch state
         sendStateToWatch()
-
-        // Re-apply fixed portrait orientation to connections after recording stops
-        // REMOVED: No longer needed as applyCurrentOrientationToConnections is mostly empty and orientation is fixed in PreviewView
-        // logger.info("Applying fixed portrait orientation to connections after recording stop.")
-        // applyCurrentOrientationToConnections()
     }
     
     private func updateVideoConfiguration() {
@@ -625,18 +593,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             codec: selectedCodec
         )
         
-        print("\n=== Updating Video Configuration ===")
-        print("🎬 Selected Codec: \(selectedCodec.rawValue)")
-        print("🎨 Apple Log Enabled: \(isAppleLogEnabled)")
+        logger.info("=== Updating Video Configuration ===")
+        logger.info("�� Selected Codec: \(self.selectedCodec.rawValue)")
+        logger.info("🎨 Apple Log Enabled: \(self.isAppleLogEnabled)")
         
         if selectedCodec == .proRes {
-            print("✅ Configured for ProRes recording")
+            logger.info("✅ Configured for ProRes recording")
         } else {
-            print("✅ Configured for HEVC recording")
-            print("📊 Bitrate: \(selectedCodec.bitrate / 1_000_000) Mbps")
+            logger.info("✅ Configured for HEVC recording")
+            logger.info("📊 Bitrate: \(self.selectedCodec.bitrate / 1_000_000) Mbps")
         }
         
-        print("=== End Video Configuration ===\n")
+        logger.info("=== End Video Configuration ===")
     }
     
     // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
@@ -669,7 +637,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         )
         
         if status != noErr {
-            print("⚠️ Failed to create sample buffer: \(status)")
+            logger.error("⚠️ Failed to create sample buffer: \(status)")
             return nil
         }
         
@@ -795,7 +763,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func setCamera(_ device: AVCaptureDevice?) {
         Task {
             _ = device?.localizedName ?? "nil" // Assign unused deviceName to _
-//            logger.trace("Setting camera device: \(deviceName)")
             // ... other logic
         }
     }
