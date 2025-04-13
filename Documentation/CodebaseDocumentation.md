@@ -49,7 +49,7 @@ This document provides a detailed overview of key classes, components, and their
         *   `UIViewControllerRepresentable` wrapping `OrientationFixViewController`.
         *   Takes `allowsLandscapeMode: Bool` parameter.
         *   Sets `AppDelegate.isVideoLibraryPresented = true` if `allowsLandscapeMode` is true during init or update.
-        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view. Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. Attempts to enforce portrait orientation using `requestGeometryUpdate` if `allowsLandscapeMode` is false.
+        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view. Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. Attempts to enforce portrait orientation using `requestGeometryUpdate` if `allowsLandscapeMode` is false. (Simplified: Removed aggressive parent background setting).
     *   **`RotatingView` (`RotatingView.swift`)**: 
         *   `UIViewControllerRepresentable` wrapping `RotatingViewController`.
         *   Takes `orientationViewModel` and `invertRotation: Bool`.
@@ -118,7 +118,7 @@ This document provides a detailed overview of key classes, components, and their
         *   `LUTPreviewView`: `UIView` subclass whose backing layer is `AVCaptureVideoPreviewLayer`. Also contains a `processedLayer` (CALayer). Shows/hides layers based on whether `LUTProcessor` has a filter set. Tries to maintain a fixed portrait orientation.
         *   (This entire view seems outdated/conflicting with the `MetalPreviewView` approach used in `CameraView` and should likely be reviewed/removed - see Task #13 in ToDo.md).
 *   **Settings (`iPhoneApp/Features/Settings`)**
-    *   **`SettingsModel` (`SettingsModel.swift`)**: `ObservableObject` holding `@Published` properties for `isAppleLogEnabled`, `isFlashlightEnabled`, `flashlightIntensity`, `isBakeInLUTEnabled`. Uses `UserDefaults` for persistence. Posts notifications (`.appleLogSettingChanged`, etc.) on `didSet`.
+    *   **`SettingsModel` (`SettingsModel.swift`)**: `ObservableObject` holding `@Published` properties for `isAppleLogEnabled`, `isFlashlightEnabled`, `flashlightIntensity`, `isBakeInLUTEnabled`. Uses `UserDefaults` for persistence (correctly defaults `isBakeInLUTEnabled` to false on first launch). Posts notifications (`.appleLogSettingChanged`, etc.) on `didSet`.
     *   **`FlashlightSettingsView` (`FlashlightSettingsView.swift`)**: Section within `SettingsView` for flashlight toggle and intensity slider. Interacts with `SettingsModel` and a local `FlashlightManager` instance.
     *   **`SettingsView` (`SettingsView.swift`)**: SwiftUI `List` view presented modally. Contains pickers for `CameraViewModel` settings (Resolution, Color Space, Codec, FPS) and controls for `LUTManager` (Import, Remove, Recent) and `SettingsModel` (Bake-in LUT, Flashlight via `FlashlightSettingsView`, Debug Info). Uses `NavigationView` and `.sheet` for `DocumentPicker`.
 *   **VideoLibrary (`iPhoneApp/Features/VideoLibrary`)**

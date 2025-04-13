@@ -39,9 +39,6 @@ class OrientationFixViewController: UIViewController {
         contentView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(contentView)
         
-        // Set black background for all parent views up the hierarchy
-        setBlackBackgroundForAllParentViews()
-        
         print("DEBUG: OrientationFixViewController viewDidLoad - background set to black")
     }
     
@@ -59,33 +56,14 @@ class OrientationFixViewController: UIViewController {
             enableAllOrientations()
             print("DEBUG: OrientationFixViewController viewWillAppear - allowing all orientations")
         }
-        
-        // Set black background for all parent views
-        setBlackBackgroundForAllParentViews()
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        
-        // Set black background for all parent views again after appearing
-        setBlackBackgroundForAllParentViews()
-        
-        // Apply orientation settings again after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if !self.allowsLandscapeMode {
-                self.enforcePortraitOrientation()
-            } else {
-                self.enableAllOrientations()
-            }
-        }
     }
     
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        
-        // Force black background during layout
-        view.backgroundColor = .black
-        setBlackBackgroundForAllParentViews()
     }
     
     private func enforcePortraitOrientation() {
@@ -118,23 +96,6 @@ class OrientationFixViewController: UIViewController {
     
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
         return .portrait
-    }
-    
-    private func setBlackBackgroundForAllParentViews() {
-        // Recursively set black background color on all parent views
-        var currentView: UIView? = self.view
-        while let view = currentView {
-            view.backgroundColor = .black
-            currentView = view.superview
-        }
-        
-        // Also ensure all window backgrounds are black
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .forEach { $0.backgroundColor = .black }
-        
-        print("DEBUG: Set black background for all parent views")
     }
     
     // Hide status bar

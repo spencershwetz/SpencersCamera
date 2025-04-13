@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [2024-08-10]
+
+### Added
+
 *   Initial project structure setup.
 *   Core camera functionality (capture session, preview, basic controls).
 *   Video recording capability with HEVC and ProRes codecs.
@@ -32,6 +42,8 @@ All notable changes to this project will be documented in this file.
 *   Reduced excessive logging in `RotatingView` during initialization and orientation changes.
 *   Set default LUT bake-in state in `RecordingService` to `false` to prevent unnecessary processing.
 *   Removed redundant `didBecomeActiveNotification` observer in `CameraView` to simplify session lifecycle management and potentially resolve preview freezes.
+*   Corrected initializer logic in `SettingsModel` to properly default `isBakeInLUTEnabled` to false on first launch, fixing a build error.
+*   Simplified `OrientationFixViewController` by removing aggressive parent background setting logic to potentially resolve black screen issues when presenting the Video Library.
 
 ### Removed
 

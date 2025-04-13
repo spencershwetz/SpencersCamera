@@ -48,7 +48,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Uses `PHImageManager` to request thumbnails (`requestImage`) and `AVAsset`s for playback (`requestAVAsset`).
 *   **Orientation Handling**: 
     *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements (internal logging reduced).
-    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`.
+    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`. (Implementation simplified to reduce potential rendering issues).
     *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed.
     *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue`) based on device/interface orientation and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`.
 *   **Real-time Preview**: 
