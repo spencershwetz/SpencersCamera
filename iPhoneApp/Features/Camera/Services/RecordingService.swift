@@ -21,7 +21,7 @@ class RecordingService: NSObject {
     private var device: AVCaptureDevice?
     private var metalFrameProcessor: MetalFrameProcessor?
     private var isAppleLogEnabled = false
-    private var isBakeInLUTEnabled = true // Default to true to maintain backward compatibility
+    private var isBakeInLUTEnabled = false // Default bake-in to false
     
     // Recording properties
     private var assetWriter: AVAssetWriter?

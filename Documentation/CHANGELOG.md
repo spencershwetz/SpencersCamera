@@ -29,7 +29,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-*   (No fixes tracked yet for released versions)
+*   Reduced excessive logging in `RotatingView` during initialization and orientation changes.
+*   Set default LUT bake-in state in `RecordingService` to `false` to prevent unnecessary processing.
+*   Removed redundant `didBecomeActiveNotification` observer in `CameraView` to simplify session lifecycle management and potentially resolve preview freezes.
 
 ### Removed
 

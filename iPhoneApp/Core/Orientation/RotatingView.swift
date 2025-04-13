@@ -15,7 +15,6 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
         self.content = content()
         self._orientationViewModel = ObservedObject(wrappedValue: orientationViewModel)
         self.invertRotation = invertRotation
-        logger.info("Initializing RotatingView. InvertRotation: \\(invertRotation)")
     }
     
     func makeUIViewController(context: Context) -> RotatingViewController<Content> {
@@ -25,7 +24,6 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
         
         // Set initial transform based on current orientation
         controller.updateOrientation(UIDevice.current.orientation)
-        logger.info("RotatingViewController created. Initial orientation set.")
         return controller
     }
     
@@ -47,17 +45,14 @@ class RotatingViewController<Content: View>: UIViewController {
         super.init(nibName: nil, bundle: nil)
         hostingController = UIHostingController(rootView: rootView)
         hostingController.view.backgroundColor = .clear
-        logger.info("RotatingViewController init. InvertRotation: \\(invertRotation)")
         
         // Use the shared orientation view model
         orientationViewModel.$orientation
             .receive(on: RunLoop.main)
             .sink { [weak self] newOrientation in
-                self?.logger.info("Received new orientation from ViewModel: \\(newOrientation.rawValue)")
                 self?.updateOrientation(newOrientation)
             }
             .store(in: &cancellables)
-        logger.info("Subscribed to orientation changes.")
     }
     
     required init?(coder: NSCoder) {
@@ -87,7 +82,6 @@ class RotatingViewController<Content: View>: UIViewController {
     }
     
     func updateOrientation(_ orientation: UIDeviceOrientation) {
-        logger.info("Updating UI transform for orientation: \\(orientation.rawValue) - \\(String(describing: orientation)). Invert: \\(invertRotation)")
         var transform: CGAffineTransform = .identity
         
         switch orientation {
@@ -101,7 +95,6 @@ class RotatingViewController<Content: View>: UIViewController {
             transform = .identity
         }
         
-        logger.info("Applying transform for \\(orientation.rawValue).")
         UIView.animate(withDuration: 0.3) {
             self.hostingController.view.transform = transform
         }

@@ -106,10 +106,6 @@ struct CameraView: View {
                 // When app is moved to background
                 stopSession()
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                // When app returns to foreground
-                startSession()
-            }
             .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
                 // Get the current device orientation
                 let deviceOrientation = UIDevice.current.orientation

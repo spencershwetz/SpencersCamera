@@ -26,7 +26,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Video Input (`AVAssetWriterInput`): Configured with dimensions from active format, codec type (`.hevc` or `.proRes422HQ`), and compression properties (bitrate, keyframe interval, profile level, color primaries based on `isAppleLogEnabled`).
     *   Audio Input (`AVAssetWriterInput`): Configured for Linear PCM (48kHz, 16-bit stereo).
     *   Orientation: `CGAffineTransform` is applied to the video input based on device/interface orientation at the start of recording to ensure correct playback rotation.
-    *   Pixel Processing: Video frames (`CMSampleBuffer`) are received via delegate (`AVCaptureVideoDataOutputSampleBufferDelegate`). If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), the `CVPixelBuffer` is passed to `MetalFrameProcessor.processPixelBuffer` before being appended to the `AVAssetWriterInputPixelBufferAdaptor`.
+    *   Pixel Processing: Video frames (`CMSampleBuffer`) are received via delegate (`AVCaptureVideoDataOutputSampleBufferDelegate`). If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), the `CVPixelBuffer` is passed to `MetalFrameProcessor.processPixelBuffer` before being appended to the `AVAssetWriterInputPixelBufferAdaptor`. (Note: Default bake-in state is off).
     *   Saving: Finished `.mov` file saved to `PHPhotoLibrary` using `PHPhotoLibrary.shared().performChanges`.
 *   **LUT (Look-Up Table) Support**: 
     *   `.cube` file parsing via `CubeLUTLoader` (text-based, handles comments, size, data, clamps values).
@@ -47,7 +47,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Uses `PHPhotoLibraryChangeObserver` to refresh on library changes.
     *   Uses `PHImageManager` to request thumbnails (`requestImage`) and `AVAsset`s for playback (`requestAVAsset`).
 *   **Orientation Handling**: 
-    *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements.
+    *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements (internal logging reduced).
     *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`.
     *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed.
     *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue`) based on device/interface orientation and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`.
