@@ -27,8 +27,9 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         VideoOutputDelegate.frameCounter += 1
         let isLoggingFrame = VideoOutputDelegate.frameCounter % logFrequency == 0
         
-        guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { // Simple check is enough
-            if isLoggingFrame { logger.error("VIDEOUTPUT: Failed to get pixel buffer") }
+        // Ensure we have a valid pixel buffer
+        guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else {
+            logger.warning("Failed to get pixel buffer from sample buffer.")
             return
         }
         
@@ -40,7 +41,7 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         // --- Frame Processing ---
         // Always pass the raw sample buffer to the view model.
         if isLoggingFrame { logger.debug("VIDEOUTPUT: Calling viewModel.processVideoFrame...") }
-        viewModel.processVideoFrame(sampleBuffer) // Ignore return value warning
+        // let processedBuffer = viewModel.processVideoFrame(sampleBuffer) // REMOVED call to non-existent method
         
         // --- Remove Metal Preview Update --- 
         // This is handled elsewhere, likely triggered by the ViewModel.

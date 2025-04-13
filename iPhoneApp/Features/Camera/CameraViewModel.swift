@@ -862,6 +862,31 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         wcLogger.info("Sent launch command to watch: \(message)")
     }
+
+    // MARK: - New Registration Method for Metal Preview
+
+    /// Registers the delegate responsible for updating the Metal preview texture.
+    /// Call this from the View layer after the Metal preview view/delegate is created.
+    /// - Parameter delegate: An object conforming to `MetalFrameUpdatable`.
+    func registerMetalPreviewDelegate(_ delegate: MetalFrameUpdatable?) {
+        guard let setupService = cameraSetupService else {
+            logger.warning("Attempted to register Metal preview delegate, but CameraSetupService is nil.")
+            return
+        }
+        setupService.videoDataOutputCoordinator.metalPreviewUpdater = delegate
+        if delegate != nil {
+            logger.info("Registered Metal preview delegate with VideoDataOutputCoordinator.")
+        } else {
+            logger.info("Unregistered Metal preview delegate from VideoDataOutputCoordinator.")
+        }
+    }
+
+    // MARK: - Watch Connectivity
+    // ... (setupWatchConnectivity and sendStateToWatch are already present) ...
+
+    private func handleError(_ error: CameraError) {
+        // Handle the error as needed
+    }
 }
 
 // MARK: - VideoFormatServiceDelegate
@@ -1030,4 +1055,5 @@ extension CameraViewModel: WCSessionDelegate {
         }
     }
 }
+
 

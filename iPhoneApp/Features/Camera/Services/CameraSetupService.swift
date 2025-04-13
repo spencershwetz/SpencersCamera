@@ -14,6 +14,9 @@ class CameraSetupService {
     private var session: AVCaptureSession
     private weak var delegate: CameraSetupServiceDelegate?
     private var videoDeviceInput: AVCaptureDeviceInput?
+    private var videoDataOutput: AVCaptureVideoDataOutput?
+    
+    let videoDataOutputCoordinator = VideoDataOutputCoordinator()
     
     init(session: AVCaptureSession, delegate: CameraSetupServiceDelegate) {
         self.session = session
@@ -65,6 +68,38 @@ class CameraSetupService {
             return
         }
         
+        // --- Add Video Data Output ---
+        let videoOutput = AVCaptureVideoDataOutput()
+        // Recommended settings for real-time processing
+        videoOutput.alwaysDiscardsLateVideoFrames = true 
+        // Specify pixel format. BGRA is common for previews, but YUV might be needed for efficient recording/processing depending on requirements.
+        // Let's start with BGRA as MetalPreviewView expects it initially.
+        // We might need to adapt MetalPreviewView/MetalFrameProcessor later if we switch to YUV here.
+        videoOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+            videoOutput.setSampleBufferDelegate(videoDataOutputCoordinator, queue: videoDataOutputCoordinator.delegateQueue)
+            self.videoDataOutput = videoOutput // Store reference
+            logger.info("Added shared video data output and set coordinator as delegate.")
+            
+            // Ensure connection orientation is correct (Portrait)
+            if let connection = videoOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                    logger.info("Set shared video output connection rotation angle to 90°")
+                } else {
+                    logger.warning("Shared video output connection does not support rotation angle 90°")
+                }
+            } else {
+                logger.warning("Could not get connection for shared video output.")
+            }
+        } else {
+            logger.error("Could not add shared video data output to session.")
+            // Handle error appropriately, maybe throw or delegate
+        }
+        // --- End Add Video Data Output ---
+
         session.commitConfiguration()
         
         if session.canSetSessionPreset(.hd4K3840x2160) {
@@ -121,18 +156,44 @@ class CameraSetupService {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             
-            self.logger.info("Starting camera session...")
+            self.logger.info("Attempting to start camera session on background thread...")
             if !self.session.isRunning {
-                self.session.startRunning()
+                self.logger.info("Session is not running. Calling startRunning() now.")
                 
+                var didStartSuccessfully = false
+                do {
+                    self.session.startRunning()
+                    didStartSuccessfully = true // Assume success if no immediate exception
+                    self.logger.info("startRunning() called. Checking session state...")
+                } catch {
+                    // Although startRunning() doesn't officially throw, capture potential unexpected issues.
+                    self.logger.error("Caught unexpected error during startRunning(): \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        self.delegate?.didEncounterError(.setupFailed)
+                        self.delegate?.didUpdateSessionStatus(.failed)
+                    }
+                    return // Exit if there was an immediate error
+                }
+                
+                // Check the state *after* calling startRunning
+                let isRunningAfterStart = self.session.isRunning
+                self.logger.info("Session isRunning property after startRunning() call: \(isRunningAfterStart)")
+
+                // Ensure the video output connection orientation is still correct after session starts
+                if let connection = self.videoDataOutput?.connection(with: .video), connection.videoRotationAngle != 90 {
+                    if connection.isVideoRotationAngleSupported(90) {
+                        connection.videoRotationAngle = 90
+                        self.logger.info("Re-applied 90° rotation to shared video output connection after session start.")
+                    }
+                }
+
                 DispatchQueue.main.async {
-                    let isRunning = self.session.isRunning
-                    self.delegate?.didStartRunning(isRunning)
-                    self.delegate?.didUpdateSessionStatus(isRunning ? .running : .failed)
-                    self.logger.info("Camera session running: \(isRunning)")
+                    self.delegate?.didStartRunning(isRunningAfterStart)
+                    self.delegate?.didUpdateSessionStatus(isRunningAfterStart ? .running : .failed)
+                    self.logger.info("Notified delegate on main thread. Final running state: \(isRunningAfterStart)")
                 }
             } else {
-                self.logger.warning("Camera session already running")
+                self.logger.warning("Camera session was already running when startCameraSession() was called.")
                 
                 DispatchQueue.main.async {
                     self.delegate?.didStartRunning(true)
@@ -147,5 +208,10 @@ class CameraSetupService {
             session.stopRunning()
             delegate?.didStartRunning(false)
         }
+    }
+    
+    // Helper to get the shared video output (needed by RecordingService)
+    func getVideoOutput() -> AVCaptureVideoDataOutput? {
+        return self.videoDataOutput
     }
 } 

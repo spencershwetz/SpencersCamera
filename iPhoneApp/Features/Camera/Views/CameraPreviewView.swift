@@ -78,6 +78,8 @@ struct CameraPreviewView: UIViewRepresentable {
         }
         
         func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+            // Add log here
+            parent.logger.trace("Coordinator captureOutput called - passing buffer to Metal delegate.") 
             // Pass the frame to our Metal preview
             metalDelegate?.updateTexture(with: sampleBuffer)
         }
