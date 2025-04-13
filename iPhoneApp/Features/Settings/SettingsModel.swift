@@ -44,21 +44,42 @@ class SettingsModel: ObservableObject {
     }
     
     init() {
-        self.isAppleLogEnabled = UserDefaults.standard.bool(forKey: "isAppleLogEnabled")
-        self.isFlashlightEnabled = UserDefaults.standard.bool(forKey: "isFlashlightEnabled")
-        self.flashlightIntensity = UserDefaults.standard.float(forKey: "flashlightIntensity")
-        self.isBakeInLUTEnabled = UserDefaults.standard.bool(forKey: "isBakeInLUTEnabled")
-        
-        // Set default values if not set
-        if self.flashlightIntensity == 0 {
-            self.flashlightIntensity = 1.0
-            UserDefaults.standard.set(self.flashlightIntensity, forKey: "flashlightIntensity")
+        // 1. Read all initial values from UserDefaults
+        let initialAppleLogEnabled = UserDefaults.standard.bool(forKey: "isAppleLogEnabled")
+        let initialFlashlightEnabled = UserDefaults.standard.bool(forKey: "isFlashlightEnabled")
+        let initialFlashlightIntensity = UserDefaults.standard.float(forKey: "flashlightIntensity")
+        let bakeInLUTValue = UserDefaults.standard.object(forKey: "isBakeInLUTEnabled")
+
+        // 2. Determine final initial values, applying defaults
+        var finalFlashlightIntensity = initialFlashlightIntensity
+        var shouldWriteFlashlightDefault = false
+        if initialFlashlightIntensity == 0 { // Check the local constant, not self
+            finalFlashlightIntensity = 1.0
+            shouldWriteFlashlightDefault = true
+        }
+
+        var finalBakeInLUTEnabled: Bool
+        var shouldWriteBakeInLUTDefault = false
+        if bakeInLUTValue == nil {
+            finalBakeInLUTEnabled = false // Default to OFF
+            shouldWriteBakeInLUTDefault = true
+        } else {
+            // If a value exists, use it (reading directly again is fine)
+            finalBakeInLUTEnabled = UserDefaults.standard.bool(forKey: "isBakeInLUTEnabled")
         }
         
-        // By default, bake in LUT is enabled (matches current behavior)
-        if UserDefaults.standard.object(forKey: "isBakeInLUTEnabled") == nil {
-            self.isBakeInLUTEnabled = true
-            UserDefaults.standard.set(self.isBakeInLUTEnabled, forKey: "isBakeInLUTEnabled")
+        // 3. Initialize all @Published properties
+        self.isAppleLogEnabled = initialAppleLogEnabled
+        self.isFlashlightEnabled = initialFlashlightEnabled
+        self.flashlightIntensity = finalFlashlightIntensity
+        self.isBakeInLUTEnabled = finalBakeInLUTEnabled
+        
+        // 4. Write back defaults if they were applied
+        if shouldWriteFlashlightDefault {
+            UserDefaults.standard.set(finalFlashlightIntensity, forKey: "flashlightIntensity")
+        }
+        if shouldWriteBakeInLUTDefault {
+            UserDefaults.standard.set(finalBakeInLUTEnabled, forKey: "isBakeInLUTEnabled")
         }
     }
 }
