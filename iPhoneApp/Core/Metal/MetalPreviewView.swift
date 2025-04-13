@@ -117,7 +117,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         let mediaTypeUInt = CMFormatDescriptionGetMediaType(CMSampleBufferGetFormatDescription(sampleBuffer)!)
         let mediaTypeStr = FourCCString(mediaTypeUInt) // Convert media type code
         let formatStr = FourCCString(pixelFormat) // Convert pixel format code
-        logger.debug("Received pixel buffer: Format=\(formatStr) (\(pixelFormat)), MediaType=\(mediaTypeStr) (\(mediaTypeUInt))")
+        // logger.debug("Received pixel buffer: Format=\(formatStr) (\(pixelFormat)), MediaType=\(mediaTypeStr) (\(mediaTypeUInt))")
         
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
@@ -150,17 +150,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             chromaTexture = nil
             
         } else if pixelFormat == 2016686642 { // 'x422' 10-bit Biplanar Apple Log format
-            logger.info("Handling Apple Log 'x422' 10-bit format")
+            // logger.info("Handling Apple Log 'x422' 10-bit format")
             // --- Handle YUV 422 10-bit Bi-Planar (Apple Log 'x422') ---
             
             // Log detailed format information
-            logger.info("Apple Log Format details:")
-            for i in 0..<CVPixelBufferGetPlaneCount(pixelBuffer) {
-                let planeWidth = CVPixelBufferGetWidthOfPlane(pixelBuffer, i)
-                let planeHeight = CVPixelBufferGetHeightOfPlane(pixelBuffer, i)
-                let planeBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, i)
-                logger.info("  Plane \(i): Width=\(planeWidth), Height=\(planeHeight), BytesPerRow=\(planeBytesPerRow)")
-            }
+            // logger.info("Apple Log Format details:")
+            // for i in 0..<CVPixelBufferGetPlaneCount(pixelBuffer) {
+            //     let planeWidth = CVPixelBufferGetWidthOfPlane(pixelBuffer, i)
+            //     let planeHeight = CVPixelBufferGetHeightOfPlane(pixelBuffer, i)
+            //     let planeBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, i)
+            //     logger.info("  Plane \(i): Width=\(planeWidth), Height=\(planeHeight), BytesPerRow=\(planeBytesPerRow)")
+            // }
             
             // Create Luma (Y) texture (Plane 0)
             var lumaTextureRef: CVMetalTexture?
@@ -202,11 +202,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             // ... etc ...
             
         } else {
-            logger.error("Unsupported pixel format: \(formatStr) (\(pixelFormat))")
-            // Clear all textures if unsupported format is received
-            bgraTexture = nil
-            lumaTexture = nil
-            chromaTexture = nil
+            logger.warning("Ignoring unsupported pixel format: \(formatStr)")
+            // Optionally clear textures if needed
             return
         }
         
@@ -255,7 +252,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setRenderPipelineState(rgbPipelineState)
             renderEncoder.setFragmentTexture(texture, index: 0)    // BGRA texture
             renderEncoder.setFragmentTexture(lutTexture, index: 1) // LUT texture
-            logger.debug("Using RGB pipeline for BGRA format")
         } else if currentPixelFormat == 2016686642,
                   let yTexture = lumaTexture, let cbcrTexture = chromaTexture {
             renderEncoder.setRenderPipelineState(yuvPipelineState)
@@ -267,8 +263,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             var isLUTActive = lutManager.selectedLUTURL != nil // Check if a custom LUT is loaded
             renderEncoder.setFragmentBytes(&isLUTActive, length: MemoryLayout<Bool>.size, index: 0) // Pass boolean to shader buffer 0
             // --- End Pass isLUTActive ---
-            
-            logger.debug("Using YUV pipeline for Apple Log x422 format")
         } else {
             //logger.trace("No valid textures available for current format: \(FourCCString(currentPixelFormat))")
             // Don't draw anything if the textures for the current format aren't ready

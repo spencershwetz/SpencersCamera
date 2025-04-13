@@ -122,7 +122,6 @@ class MetalFrameProcessor {
              inputTextureCbCr = CVMetalTextureGetTexture(cvTexCbCr)
         
         case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange: // Apple Log 10-bit 4:2:2 YpCbCr ('x422') - Bi-Planar
-             logger.trace("Processing YUV ('x422' Bi-Planar) frame.")
              requiresYUVProcessing = true
              pipelineState = computePipelineStateYUV
 
@@ -148,7 +147,6 @@ class MetalFrameProcessor {
              inputTextureCbCr = CVMetalTextureGetTexture(cvTexCbCr_x422)
 
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: // 8-bit 4:2:0 YUV ('420v' or '420f')
-            logger.trace("Processing YUV 4:2:0 Bi-Planar frame.")
             requiresYUVProcessing = true
             pipelineState = computePipelineStateYUV
 
