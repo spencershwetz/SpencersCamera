@@ -40,10 +40,11 @@ struct CameraPreviewView: UIViewRepresentable {
             
             // Ensure connection orientation is correct
             if let connection = videoOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                    logger.info("Set video rotation angle to 90°")
-                }
+                // Log connection info
+                logger.info("PREVIEW_ORIENT: Connection videoRotationAngle: \(connection.videoRotationAngle)° (Should be 0)") // Verify it's 0
+                logger.info("PREVIEW_ORIENT: Connection active: \(connection.isActive), enabled: \(connection.isEnabled)")
+                logger.info("PREVIEW_ORIENT: Connection videoOrientation: \(connection.videoOrientation.rawValue)")
+                logger.info("PREVIEW_ORIENT: Connection videoMirrored: \(connection.isVideoMirrored)")
             }
         } else {
             logger.error("Could not add video output to session")

@@ -150,10 +150,10 @@ class RecordingService: NSObject {
         if deviceOrientation.isValidInterfaceOrientation {
             // Use device orientation if valid (landscape or portrait)
             recordingAngle = deviceOrientation.videoRotationAngleValue
-            logger.info("Using device orientation angle for recording: \\(recordingAngle)° (Source: UIDevice.current.orientation)")
+            logger.info("REC_ORIENT: Using device orientation (\\(deviceOrientation.rawValue)) angle for recording: \\(recordingAngle)°") // Enhanced log
         } else {
             // Fallback to interface orientation if device orientation is invalid (e.g., faceUp, faceDown)
-            logger.info("Device orientation (\\(deviceOrientation.rawValue)) is invalid for recording. Falling back to interface orientation.")
+            logger.info("REC_ORIENT: Device orientation (\\(deviceOrientation.rawValue)) is invalid for recording. Falling back to interface orientation (\\(interfaceOrientation?.rawValue ?? -1))") // Enhanced log
             switch interfaceOrientation {
             case .portrait:
                 recordingAngle = 90
@@ -165,17 +165,17 @@ class RecordingService: NSObject {
                 recordingAngle = 270
             case .unknown, nil:
                 recordingAngle = 90 // Default to portrait if interface orientation is unknown
-                logger.warning("Interface orientation is unknown. Defaulting recording angle to 90°.")
+                logger.warning("REC_ORIENT: Interface orientation is unknown. Defaulting recording angle to 90°.") // Enhanced log
             @unknown default:
                 recordingAngle = 90 // Default to portrait for future cases
-                logger.warning("Unknown interface orientation (\\(interfaceOrientation?.rawValue ?? -1)). Defaulting recording angle to 90°.")
+                logger.warning("REC_ORIENT: Unknown interface orientation (\\(interfaceOrientation?.rawValue ?? -1)). Defaulting recording angle to 90°.") // Enhanced log
             }
-            logger.info("Using interface orientation angle for recording: \\(recordingAngle)° (Source: UIWindowScene.interfaceOrientation)")
+            logger.info("REC_ORIENT: Using interface orientation angle for recording: \\(recordingAngle)°") // Enhanced log
         }
         
         // Store the final chosen orientation for the recording file
         recordingOrientation = recordingAngle
-        logger.info("Final recording orientation angle set to: \\(recordingAngle)°")
+        logger.info("REC_ORIENT: Final recording orientation angle set to: \\(recordingAngle)°") // Enhanced log
         
         // Reset counters when starting a new recording
         videoFrameCount = 0
@@ -251,21 +251,22 @@ class RecordingService: NSObject {
             switch recordingOrientation {
             case 0: // Landscape Left (physical right side down, USB on right)
                 transform = .identity
-                logger.info("Applying transform: .identity (Landscape Left, 0°)")
+                logger.info("REC_ORIENT: Applying transform: .identity (Landscape Left, 0°)") // Enhanced log
             case 90: // Portrait
                 transform = CGAffineTransform(rotationAngle: .pi / 2)
-                logger.info("Applying transform: 90° rotation (Portrait, 90°)")
+                logger.info("REC_ORIENT: Applying transform: 90° rotation (Portrait, 90°)") // Enhanced log
             case 180: // Landscape Right (physical left side down, USB on left)
                 transform = CGAffineTransform(rotationAngle: .pi)
-                logger.info("Applying transform: 180° rotation (Landscape Right, 180°)")
+                logger.info("REC_ORIENT: Applying transform: 180° rotation (Landscape Right, 180°)") // Enhanced log
             case 270: // Portrait Upside Down
                 transform = CGAffineTransform(rotationAngle: -.pi / 2) // or 3 * .pi / 2
-                logger.info("Applying transform: 270° rotation (Portrait Upside Down, 270°)")
+                logger.info("REC_ORIENT: Applying transform: 270° rotation (Portrait Upside Down, 270°)") // Enhanced log
             default:
                 transform = CGAffineTransform(rotationAngle: .pi / 2) // Default to portrait
-                logger.warning("Unexpected recordingOrientation \\(recordingOrientation). Defaulting transform to Portrait (90° rotation).")
+                logger.warning("REC_ORIENT: Unexpected recordingOrientation \\(recordingOrientation). Defaulting transform to Portrait (90° rotation).") // Enhanced log
             }
             assetWriterInput?.transform = transform
+            logger.info("REC_ORIENT: Transform applied to AVAssetWriterInput: \\(transform)") // Add log for applied transform
             
             logger.info("Created asset writer input with settings: \(videoSettings)")
             
@@ -530,6 +531,18 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             let shouldLog = videoFrameCount % 30 == 0
             if shouldLog {
                 logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] BEGIN, writer status: \(assetWriter.status.rawValue)") // LOG FRAME START
+                
+                // Log sample buffer orientation info
+                if let orientationAttachment = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data {
+                    // The presence of this attachment often implies orientation info, though not directly the angle.
+                    logger.info("REC_ORIENT: SampleBuffer #\(self.videoFrameCount) has CameraIntrinsicMatrix attachment (size: \(orientationAttachment.count))")
+                } else {
+                    logger.info("REC_ORIENT: SampleBuffer #\(self.videoFrameCount) does NOT have CameraIntrinsicMatrix attachment.")
+                }
+                
+                // Log connection orientation at this point
+                logger.info("REC_ORIENT: Connection videoRotationAngle at frame #\(self.videoFrameCount): \(connection.videoRotationAngle)°")
+                logger.info("REC_ORIENT: Connection videoOrientation at frame #\(self.videoFrameCount): \(connection.videoOrientation.rawValue)")
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {

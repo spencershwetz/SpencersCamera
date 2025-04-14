@@ -206,7 +206,8 @@ class CameraDeviceService {
             session.commitConfiguration()
             logger.debug("🔄 Lens switch: Configuration committed.")
             
-            // *** Add code to set data output orientation AFTER committing config ***
+            // *** REMOVE code setting data output orientation here ***
+            /*
             if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
                let connection = videoDataOutput.connection(with: .video) {
                 if connection.isVideoRotationAngleSupported(90) {
@@ -218,7 +219,9 @@ class CameraDeviceService {
             } else {
                 logger.warning("🔄 Lens switch: Could not find VideoDataOutput or connection after config commit.")
             }
-            // *** End added code ***
+            */
+            logger.info("🔄 Lens switch: Skipping explicit VideoDataOutput connection angle setting.") // Add log indicating skip
+            // *** End removal ***
             
             // Apply digital zoom INSTANTLY if needed after the physical switch
             if zoomFactor != 1.0 {
@@ -449,7 +452,8 @@ class CameraDeviceService {
             logger.info("⚙️ Committing session configuration block.")
             session.commitConfiguration()
 
-            // *** Add code to set data output orientation AFTER committing config ***
+            // *** REMOVE code setting data output orientation here ***
+            /*
             if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
                let connection = videoDataOutput.connection(with: .video) {
                 if connection.isVideoRotationAngleSupported(90) {
@@ -461,7 +465,9 @@ class CameraDeviceService {
             } else {
                 logger.warning("🔄 [reconfigureSessionForCurrentDevice] Could not find VideoDataOutput or connection after config commit.")
             }
-            // *** End added code ***
+            */
+            logger.info("🔄 [reconfigureSessionForCurrentDevice] Skipping explicit VideoDataOutput connection angle setting.") // Add log indicating skip
+            // *** End removal ***
 
             // Re-apply color space just in case (redundant if called by ViewModel, but safe)
             logger.info("🎨 Re-applying color space settings after reconfiguration...")

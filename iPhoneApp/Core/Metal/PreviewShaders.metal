@@ -16,11 +16,12 @@ vertex RasterizerData vertexShader(uint vertexID [[vertex_id]]) {
         float4( 1.0,  1.0, 0.0, 1.0)
     };
     
+    // Rotated Texture Coordinates (-90 degrees for landscapeLeft buffers on portrait view)
     const float2 texCoords[] = {
-        float2(0.0, 1.0),
-        float2(1.0, 1.0),
-        float2(0.0, 0.0),
-        float2(1.0, 0.0)
+        float2(1.0, 1.0), // Vertex BL needs Texture BR
+        float2(1.0, 0.0), // Vertex BR needs Texture TR
+        float2(0.0, 1.0), // Vertex TL needs Texture BL
+        float2(0.0, 0.0)  // Vertex TR needs Texture TL
     };
     
     RasterizerData out;
