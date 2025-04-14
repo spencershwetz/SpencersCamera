@@ -69,3 +69,27 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
     *   **Dependencies**: Depends on confirming `MetalFrameProcessor` fully handles bake-in needs.
 
 *(Priorities and dependencies are estimates and may change.)*
+
+---
+
+# Future Features / Enhancements
+
+This section lists potential features and improvements for future consideration.
+
+1.  **GPS Data Tagging for Videos**
+    *   **Description**: Capture the user's location (with permission) while recording and embed GPS coordinates (latitude, longitude, altitude, timestamp) into the video file's metadata (e.g., using `AVMetadataItem`).
+    *   **Priority**: Low/Medium (Feature)
+    *   **Files**: `RecordingService.swift`, potentially a new `LocationService.swift` (using `CoreLocation`).
+    *   **Dependencies**: Requires adding `CoreLocation` framework and handling location permissions (`Info.plist` keys).
+
+2.  **DockKit Integration**
+    *   **Description**: Implement support for DockKit-compatible motorized stands. Allow the app to detect connection, potentially control pan/tilt for subject tracking, and query dock status.
+    *   **Priority**: Low (Feature / Accessory Support)
+    *   **Files**: New services/managers related to DockKit framework (`DockKit`), potentially impacting `CameraViewModel.swift` or a dedicated `DockManager.swift`.
+    *   **Dependencies**: Requires adding `DockKit` framework, handling relevant entitlements and permissions.
+
+3.  **External Camera Control Button Support**
+    *   **Description**: Allow external hardware buttons (e.g., volume buttons, dedicated Bluetooth shutter remotes, potentially MFi accessory buttons) to trigger actions like starting/stopping recording or taking a photo (if photo mode is added).
+    *   **Priority**: Low (Feature / Usability)
+    *   **Files**: Potentially `CameraViewModel.swift`, `AppDelegate.swift` (for handling certain system events), or a dedicated input handling service.
+    *   **Dependencies**: May require different approaches depending on the type of control (Volume buttons vs. Bluetooth HID vs. MFi).
