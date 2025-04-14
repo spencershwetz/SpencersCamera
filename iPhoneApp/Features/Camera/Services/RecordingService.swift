@@ -6,6 +6,13 @@ import CoreMedia
 import CoreImage
 import Metal
 
+// Add performance logging helper
+extension Date {
+    static func nowTimestamp() -> Double {
+        return CACurrentMediaTime()
+    }
+}
+
 protocol RecordingServiceDelegate: AnyObject {
     func didStartRecording()
     func didStopRecording()
@@ -54,6 +61,10 @@ class RecordingService: NSObject {
             autoreleaseFrequency: .workItem
         )
         super.init()
+        // SETUP OUTPUTS ON INIT
+        setupVideoDataOutput()
+        setupAudioDataOutput()
+        logger.info("REC_PERF: RecordingService initialized and outputs configured.")
     }
     
     func setDevice(_ device: AVCaptureDevice) {
@@ -86,33 +97,39 @@ class RecordingService: NSObject {
     }
     
     func setupVideoDataOutput() {
-        if videoDataOutput == nil {
-            videoDataOutput = AVCaptureVideoDataOutput()
-            videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-            if session.canAddOutput(videoDataOutput!) {
-                session.addOutput(videoDataOutput!)
-                logger.info("Added video data output to session")
-            } else {
-                logger.error("Failed to add video data output to session")
-            }
+        guard videoDataOutput == nil else {
+            logger.info("Video data output already configured.")
+            return
+        }
+        videoDataOutput = AVCaptureVideoDataOutput()
+        videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
+        if session.canAddOutput(videoDataOutput!) {
+            session.addOutput(videoDataOutput!)
+            logger.info("Added video data output to session")
+        } else {
+            logger.error("Failed to add video data output to session")
         }
     }
     
     func setupAudioDataOutput() {
-        if audioDataOutput == nil {
-            audioDataOutput = AVCaptureAudioDataOutput()
-            audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-            if session.canAddOutput(audioDataOutput!) {
-                session.addOutput(audioDataOutput!)
-                logger.info("Added audio data output to session")
-            } else {
-                logger.error("Failed to add audio data output to session")
-            }
+        guard audioDataOutput == nil else {
+            logger.info("Audio data output already configured.")
+            return
+        }
+        audioDataOutput = AVCaptureAudioDataOutput()
+        audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
+        if session.canAddOutput(audioDataOutput!) {
+            session.addOutput(audioDataOutput!)
+            logger.info("Added audio data output to session")
+        } else {
+            logger.error("Failed to add audio data output to session")
         }
     }
     
     func startRecording(orientation: CGFloat) async {
         guard !isRecording else { return }
+        let startTime = Date.nowTimestamp() // START TIMER
+        logger.info("REC_PERF: startRecording BEGIN")
         
         // Enhanced orientation logging
         let deviceOrientation = await UIDevice.current.orientation
@@ -173,10 +190,10 @@ class RecordingService: NSObject {
             let tempURL = tempDir.appendingPathComponent(fileName)
             currentRecordingURL = tempURL
             
-            logger.info("Creating asset writer at \(tempURL.path)")
-            
+            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] Before AVAssetWriter setup") // LOG TIME
             // Create asset writer
             assetWriter = try AVAssetWriter(url: tempURL, fileType: .mov)
+            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After AVAssetWriter setup") // LOG TIME
             
             // Get dimensions from current format
             guard let device = device else {
@@ -284,7 +301,7 @@ class RecordingService: NSObject {
             // Add inputs to writer
             if assetWriter!.canAdd(assetWriterInput!) {
                 assetWriter!.add(assetWriterInput!)
-                logger.info("Successfully added video input to asset writer.")
+                logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After adding video input") // LOG TIME
             } else {
                 logger.error("Could not add video input to asset writer: \\(error.localizedDescription)")
                 assetWriter = nil
@@ -294,7 +311,7 @@ class RecordingService: NSObject {
             
             if assetWriter!.canAdd(audioInput) {
                 assetWriter!.add(audioInput)
-                logger.info("Successfully added audio input to asset writer.")
+                logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After adding audio input") // LOG TIME
             } else {
                 logger.error("Could not add audio input to asset writer: \\(error.localizedDescription)")
                 assetWriter = nil
@@ -303,14 +320,16 @@ class RecordingService: NSObject {
             }
             
             // Ensure video and audio outputs are configured
-            setupVideoDataOutput()
-            setupAudioDataOutput()
+            // REMOVED: setupVideoDataOutput()
+            // REMOVED: setupAudioDataOutput()
+            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After setup outputs (skipped, done in init)") // LOG TIME
             
             // Start writing
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
             assetWriter!.startWriting()
             assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
-            
+            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After startWriting/startSession") // LOG TIME
+
             logger.info("Started asset writer session at time: \(self.recordingStartTime!.seconds)")
             
             isRecording = true
@@ -318,6 +337,7 @@ class RecordingService: NSObject {
             
             logger.info("Recording started successfully at URL: \\(tempURL.path)")
             logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC"), Frame Rate: \(self.selectedFrameRate)")
+            logger.info("REC_PERF: startRecording END [Total: \(String(format: "%.3f", Date.nowTimestamp() - startTime))s]") // LOG TOTAL TIME
             
         } catch {
             delegate?.didEncounterError(.recordingFailed)
@@ -327,6 +347,8 @@ class RecordingService: NSObject {
     
     func stopRecording() async {
         guard isRecording else { return }
+        let startTime = Date.nowTimestamp() // START TIMER
+        logger.info("REC_PERF: stopRecording BEGIN")
         
         // Clear stored recording orientation
         recordingOrientation = nil
@@ -341,12 +363,14 @@ class RecordingService: NSObject {
         // Mark all inputs as finished
         assetWriterInput?.markAsFinished()
         logger.info("Marked asset writer inputs as finished")
+        logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After markAsFinished") // LOG TIME
         
         // Wait for asset writer to finish
         if let assetWriter = assetWriter {
             logger.info("Waiting for asset writer to finish writing...")
             await assetWriter.finishWriting()
             logger.info("Asset writer finished with status: \(assetWriter.status.rawValue)")
+            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After finishWriting") // LOG TIME
             
             if let error = assetWriter.error {
                 logger.error("Asset writer error: \(error.localizedDescription)")
@@ -354,18 +378,22 @@ class RecordingService: NSObject {
         }
         
         // Clean up recording resources
+        // REMOVED: Output removal - keep them attached
+        /*
         if let videoDataOutput = videoDataOutput {
             session.removeOutput(videoDataOutput)
             self.videoDataOutput = nil
             logger.info("Removed video data output from session")
         }
-        
+
         if let audioDataOutput = audioDataOutput {
             session.removeOutput(audioDataOutput)
             self.audioDataOutput = nil
             logger.info("Removed audio data output from session")
         }
-        
+        */
+        logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After removing outputs (skipped)") // LOG TIME
+
         // Reset recording state
         isRecording = false
         delegate?.didStopRecording()
@@ -373,13 +401,16 @@ class RecordingService: NSObject {
         
         // Save to photo library if we have a valid recording
         if let outputURL = currentRecordingURL {
+            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] Before thumbnail generation") // LOG TIME
             logger.info("Saving video to photo library: \(outputURL.path)")
             
             // Generate thumbnail before saving
             let thumbnail = await generateThumbnail(from: outputURL)
+            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After thumbnail generation") // LOG TIME
             
             // Save the video
             await saveToPhotoLibrary(outputURL, thumbnail: thumbnail)
+            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After saveToPhotoLibrary") // LOG TIME
         }
         
         // Clean up
@@ -393,6 +424,7 @@ class RecordingService: NSObject {
         }
         
         logger.info("Recording session completed")
+        logger.info("REC_PERF: stopRecording END [Total: \(String(format: "%.3f", Date.nowTimestamp() - startTime))s]") // LOG TOTAL TIME
     }
     
     private func saveToPhotoLibrary(_ outputURL: URL, thumbnail: UIImage?) async {
@@ -413,6 +445,7 @@ class RecordingService: NSObject {
             }
             
             await MainActor.run {
+                logger.info("REC_PERF: saveToPhotoLibrary: PHPhotoLibrary changes performed") // LOG TIME
                 logger.info("Video saved to photo library")
                 delegate?.didFinishSavingVideo(thumbnail: thumbnail)
             }
@@ -472,9 +505,17 @@ class RecordingService: NSObject {
 
 extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard isRecording,
-              let assetWriter = assetWriter,
+        // --- ADD CHECK: Only process if recording --- 
+        guard isRecording else {
+            return // Ignore frames if not recording
+        }
+        // --- END CHECK --- 
+
+        let processingStartTime = Date.nowTimestamp() // START FRAME TIMER
+        guard let assetWriter = assetWriter,
               assetWriter.status == .writing else {
+            // Added isRecording check above, so this path might be less likely,
+            // but keep as safety check for writer status.
             return
         }
         
@@ -488,7 +529,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             // Log every 30 frames to avoid flooding
             let shouldLog = videoFrameCount % 30 == 0
             if shouldLog {
-                logger.debug("Processing video frame #\(self.videoFrameCount), writer status: \(assetWriter.status.rawValue)")
+                logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] BEGIN, writer status: \(assetWriter.status.rawValue)") // LOG FRAME START
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
@@ -497,15 +538,11 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 
                 // Check if LUT processing is enabled and possible with METAL
                 if isBakeInLUTEnabled, let processor = metalFrameProcessor {
-                    logger.trace("Attempting Metal LUT bake-in for frame #\(self.videoFrameCount)")
                     // Attempt to process the pixel buffer using Metal
                     if let processedMetalBuffer = processor.processPixelBuffer(pixelBuffer) {
                         // Successfully processed with Metal
                         finalPixelBuffer = processedMetalBuffer
                         processed = true
-                         if shouldLog {
-                             logger.trace("Successfully processed frame #\(self.videoFrameCount) using Metal LUT bake-in.")
-                         }
                     } else {
                         // Metal processing failed or returned nil (e.g., no LUT set on processor)
                         failedVideoFrames += 1
@@ -567,11 +604,13 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 
                 // Append the appropriate sample buffer 
                 if let bufferToAppend = finalSampleBuffer {
+                    let appendStartTime = Date.nowTimestamp() // START APPEND TIMER
                     assetWriterInput.append(bufferToAppend)
+                    let appendEndTime = Date.nowTimestamp() // END APPEND TIMER
                     successfulVideoFrames += 1
                     if shouldLog {
                         // Log whether the appended buffer was the result of processing
-                        logger.debug("Successfully appended frame #\(self.successfulVideoFrames) (processed: \(processed))") 
+                        logger.debug("REC_PERF: captureOutput [Video Frame #\(self.successfulVideoFrames)] Appended (processed: \(processed)) - Append took \(String(format: "%.4f", appendEndTime - appendStartTime))s") // LOG APPEND TIME
                     }
                 } else {
                      // This case should theoretically not happen based on the logic above
@@ -583,6 +622,8 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
         
         // Handle audio data
         if output == audioDataOutput,
+           // ADD CHECK: Make sure we have a valid writer and the correct input
+           assetWriter.status == .writing, 
            let audioInput = assetWriter.inputs.first(where: { $0.mediaType == .audio }),
            audioInput.isReadyForMoreMediaData {
             audioFrameCount += 1
@@ -590,6 +631,12 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             if audioFrameCount % 100 == 0 {
                 logger.debug("Processed audio frame #\(self.audioFrameCount)")
             }
+        }
+
+        // Redefine shouldLog here for the final log statement
+        let shouldLog = (output == videoDataOutput) && (videoFrameCount % 30 == 0)
+        if shouldLog { // Only log frame end if we logged frame start
+            logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] END - Total time: \(String(format: "%.4f", Date.nowTimestamp() - processingStartTime))s") // LOG FRAME END
         }
     }
 } 

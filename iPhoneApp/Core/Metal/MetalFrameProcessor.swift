@@ -264,7 +264,6 @@ class MetalFrameProcessor {
         // Flush the cache before returning the processed buffer
         CVMetalTextureCacheFlush(cache, 0)
 
-        logger.trace("Successfully processed frame using Metal compute kernel (\(requiresYUVProcessing ? "YUV" : "RGB")).")
         return outPixelBuffer // Return the BGRA output buffer
     }
 } 
