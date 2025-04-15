@@ -16,7 +16,7 @@ This document provides a detailed overview of key classes, components, and their
 *   **`AppDelegate` (`AppDelegate.swift`)**: 
     *   UIKit App Delegate (`@UIApplicationDelegateAdaptor`).
     *   Handles app lifecycle (`didFinishLaunching`, `applicationWillTerminate`), mainly for setting up/tearing down `UIDevice.begin/endGeneratingDeviceOrientationNotifications()`.
-    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control device orientation based on the topmost view controller. Checks `OrientationFixViewController.allowsLandscapeMode` or if the view controller is in `landscapeEnabledViewControllers`. Defaults to portrait. (Simplified: Removed `isVideoLibraryPresented` flag check).
+    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control *interface* orientation based on the topmost view controller. Checks `OrientationFixViewController.allowsLandscapeMode`. Defaults to portrait. (Simplified: Removed internal flags).
     *   Provides a helper extension `UIViewController.topMostViewController()`.
 
 ### Core (`iPhoneApp/Core`)
@@ -70,26 +70,28 @@ This document provides a detailed overview of key classes, components, and their
         *   Provides `startRecording`/`stopRecording` async methods, configuring `RecordingService` with current settings (including LUT bake-in state and texture) before starting.
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
-        *   (Orientation logic removed - relies on `DeviceOrientationViewModel` for UI and `RecordingService` for metadata).
+        *   (Orientation logic fully delegated: Relies on `DeviceOrientationViewModel` for physical orientation, `AppDelegate`/`OrientationFixView` for interface lock, `RotatingView` for UI element rotation, and `CameraDeviceService`/`RecordingService` for preview/file metadata respectively).
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `GeometryReader` for layout.
         *   Displays `CameraPreviewView` (embedding `MetalPreviewView`).
         *   Overlays `FunctionButtonsView` and `ZoomSliderView`.
         *   Includes Record, Library, and Settings buttons.
+        *   Uses `RotatingView` to rotate specific UI elements (e.g., Settings icon) based on physical device orientation.
         *   Manages presentation state for Settings (`.fullScreenCover`), Library (`.fullScreenCover` with `OrientationFixView(allowsLandscapeMode: true)`), and LUT Document Picker (`.sheet`).
         *   Handles `onAppear`/`onDisappear` to start/stop session via ViewModel.
-        *   Responds to `UIApplication.willResignActiveNotification`. (Removed `didBecomeActiveNotification` and `orientationDidChangeNotification` handlers).
+        *   Responds to `UIApplication.willResignActiveNotification`.
+        *   (Orientation logic fully delegated: Does not directly handle orientation changes or notifications).
     *   **`CameraPreviewView` (`CameraPreviewView.swift`)**: 
         *   `UIViewRepresentable` for `MTKView`.
         *   `makeUIView`: Creates `MTKView`, sets up `MetalPreviewView` as its delegate (passing `LUTManager`), creates and adds `AVCaptureVideoDataOutput` to the session, sets the delegate to its `Coordinator`.
         *   `Coordinator`: `AVCaptureVideoDataOutputSampleBufferDelegate`. Receives frames and passes them to `metalDelegate.updateTexture(with:)`.
     *   **Services (`iPhoneApp/Features/Camera/Services`)**: 
         *   `CameraSetupService`: Initializes session, requests permissions, adds initial video/audio inputs, sets initial preset, starts session.
-        *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), setting output orientation, and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
+        *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), setting the `AVCaptureConnection.videoRotationAngle` for correct *preview* orientation, and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
         *   `VideoFormatService`: Finds and applies `AVCaptureDevice.Format` based on resolution, FPS, and Apple Log requirement (`findBestFormat`). Updates frame rate durations (`updateFrameRate`). Configures device for Apple Log or resets it (`configureAppleLog`, `resetAppleLog`). Reapplies color space based on `isAppleLogEnabled` state (`reapplyColorSpaceSettings`).
         *   `ExposureService`: Sets white balance gains, ISO, exposure duration (`setExposureModeCustom`), and exposure mode (`.continuousAutoExposure` vs `.custom`). Calculates shutter duration from angle/FPS.
-        *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Sets video transform based on calculated `recordingOrientation`. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` and `AVCaptureAudioDataOutputSampleBufferDelegate` to receive buffers during recording. If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer` before appending to the writer. (Default bake-in is now false). Saves finished video to `PHPhotoLibrary` and generates a thumbnail.
+        *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Before recording starts, calculates the `recordingOrientation` angle based on device/interface orientation and applies the corresponding `CGAffineTransform` to the `AVAssetWriterInput.transform` property to ensure correct *video file* metadata orientation. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` and `AVCaptureAudioDataOutputSampleBufferDelegate` to receive buffers during recording. If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer` before appending to the writer. (Default bake-in is now false). Saves finished video to `PHPhotoLibrary` and generates a thumbnail.
         *   `VolumeButtonHandler`: Uses `AVCaptureEventInteraction` (iOS 17.2+) to trigger `viewModel.start/stopRecording()` on volume button presses (began phase), includes debouncing.
     *   **`FlashlightManager` (`FlashlightManager.swift`)**: Uses `AVCaptureDevice` torch controls (`setTorchModeOn(level:)`) to manage the flashlight state and intensity. Includes an async startup sequence (`performStartupSequence`) with timed flashes.
 *   **LUT (`iPhoneApp/Features/LUT`)**

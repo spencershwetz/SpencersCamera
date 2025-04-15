@@ -46,12 +46,12 @@ This document outlines the technical specifications and requirements for the Spe
     *   Uses `PHPhotoLibrary.requestAuthorization` for permissions.
     *   Uses `PHPhotoLibraryChangeObserver` to refresh on library changes.
     *   Uses `PHImageManager` to request thumbnails (`requestImage`) and `AVAsset`s for playback (`requestAVAsset`).
-*   **Orientation Handling**: 
-    *   UI Rotation: `DeviceOrientationViewModel` detects device rotation; `RotatingView` applies rotation transform to specific UI elements (internal logging reduced).
-    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`'s `supportedInterfaceOrientationsFor` and `UIViewController.supportedInterfaceOrientations`) restricts screen orientation, typically locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`. (Simplified: Removed `isVideoLibraryPresented` flag, relies on `allowsLandscapeMode` property).
-    *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed.
-    *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue`) based on device/interface orientation and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`.
-    *   Simplified: `CameraViewModel` and `CameraView` no longer directly handle orientation changes.
+*   **Orientation Handling**:
+    *   UI Rotation: `DeviceOrientationViewModel` detects physical device rotation; `RotatingView` applies rotation transform to specific UI elements (e.g., icons).
+    *   View Orientation Lock: `OrientationFixView` (via `AppDelegate`) restricts screen orientation, locking `CameraView` to portrait but allowing landscape for `VideoLibraryView`.
+    *   Preview Orientation: `MetalPreviewView` renders frames based on buffer data; visual orientation is fixed portrait.
+    *   Recording Orientation: `RecordingService` calculates the correct rotation angle (`videoRotationAngleValue` from `UIDeviceOrientation` or `UIInterfaceOrientation`) and applies it as a `CGAffineTransform` to the `AVAssetWriterInput`'s `transform` property to ensure correct video file metadata.
+    *   Centralized Logic: `CameraViewModel` and `CameraView` are passive regarding orientation; `DeviceOrientationViewModel` provides physical orientation, `AppDelegate`/`OrientationFixView` control interface lock, `RotatingView` rotates specific UI, and `RecordingService` handles video metadata.
 *   **Real-time Preview**: 
     *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
     *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
@@ -85,8 +85,8 @@ This document outlines the technical specifications and requirements for the Spe
 ## Key Technical Decisions & Trade-offs
 
 *   **Metal vs. Core Image for LUTs**: Chose Metal for primary preview/bake-in path likely for performance benefits and finer control over rendering pipeline compared to `CIFilter`, especially for compute tasks. Core Image (`LUTProcessor`) might be a legacy or fallback path.
-*   **Fixed Portrait UI**: Simplifies `CameraView` layout but necessitates complex orientation handling for rotating elements (`RotatingView`) and video metadata (`RecordingService`). Trade-off between UI simplicity and orientation complexity.
-    *   Update: Some complexity reduced by centralizing orientation logic. `CameraView` itself is now simpler regarding orientation.
+*   **Fixed Portrait UI**: Simplifies `CameraView` layout. Orientation complexity is managed by dedicated components (`DeviceOrientationViewModel`, `RotatingView`, `OrientationFixView`, `RecordingService`) rather than within `CameraView`/`CameraViewModel`.
+    *   Update: Centralized orientation logic significantly reduced complexity compared to previous approaches.
 *   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
 *   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
