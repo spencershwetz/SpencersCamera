@@ -2,6 +2,8 @@ import Foundation
 import Metal
 import CoreVideo
 import OSLog
+import MetalKit
+import VideoToolbox
 
 class MetalFrameProcessor {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "MetalFrameProcessor")
@@ -63,12 +65,15 @@ class MetalFrameProcessor {
         }
     }
     
-    /// Processes a CVPixelBuffer using the appropriate Metal compute kernel based on pixel format.
-    /// - Parameter pixelBuffer: The input CVPixelBuffer.
-    /// - Returns: A new CVPixelBuffer (always BGRA format) with the LUT applied, or nil if processing fails.
-    func processPixelBuffer(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
-         guard let cache = textureCache else {
-            logger.error("Metal texture cache not initialized.")
+    /// Processes a CVPixelBuffer using the currently set LUT via Metal compute shaders.
+    /// Supports BGRA and specific YUV formats (v210, x422, 420v/f).
+    /// - Parameters:
+    ///   - pixelBuffer: The input CVPixelBuffer.
+    ///   - bakeInLUT: Flag indicating whether the LUT should be baked into the output, primarily relevant for YUV formats during recording.
+    /// - Returns: A new CVPixelBuffer in BGRA format with the LUT applied (if applicable), or nil if processing fails or is skipped.
+    func processFrame(pixelBuffer: CVPixelBuffer, bakeInLUT: Bool) -> CVPixelBuffer? {
+        guard let cache = textureCache else {
+            logger.error("Texture cache is not available.")
             return nil
         }
 
@@ -76,29 +81,42 @@ class MetalFrameProcessor {
         let height = CVPixelBufferGetHeight(pixelBuffer)
         let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
 
-        // --- Select Kernel and Prepare Input Textures ---
-        var inputTextureY: MTLTexture? // For Y plane (YUV) or single plane (RGB)
-        var inputTextureCbCr: MTLTexture? // For CbCr plane (YUV only)
+        var inputTextureY: MTLTexture?         // For BGRA or Y plane of YUV
+        var inputTextureCbCr: MTLTexture?      // For CbCr plane of YUV
         var pipelineState: MTLComputePipelineState?
         var requiresYUVProcessing = false
 
         switch pixelFormat {
         case kCVPixelFormatType_32BGRA:
-            logger.trace("Processing BGRA frame.")
-            pipelineState = computePipelineStateRGB
-            var cvTextureIn: CVMetalTexture?
-            let status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, pixelBuffer, nil, .bgra8Unorm, width, height, 0, &cvTextureIn)
-            guard status == kCVReturnSuccess, let cvTexIn = cvTextureIn else {
-                logger.error("Failed to create input BGRA Metal texture: \(status)")
+            requiresYUVProcessing = false
+            pipelineState = computePipelineStateRGB // Use BGRA kernel
+
+            // Texture for BGRA (Plane 0)
+            var cvTextureBGRA: CVMetalTexture?
+            let status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, pixelBuffer, nil, .bgra8Unorm, width, height, 0, &cvTextureBGRA)
+            guard status == kCVReturnSuccess, let cvTexBGRA = cvTextureBGRA else {
+                logger.error("Failed to create input Metal texture (BGRA): \(status)")
                 CVMetalTextureCacheFlush(cache, 0)
                 return nil
             }
-            inputTextureY = CVMetalTextureGetTexture(cvTexIn) // Use Y texture slot for single plane
+            inputTextureY = CVMetalTextureGetTexture(cvTexBGRA) // Use inputTextureY slot for BGRA too
 
-        case kCVPixelFormatType_422YpCbCr10: // Apple Log 10-bit 4:2:2 YpCbCr ('v210')
-             logger.trace("Processing YUV ('v210') frame.")
+        case kCVPixelFormatType_422YpCbCr16BiPlanarVideoRange: // ProRes 422 HQ / v210 10/12/16-bit 4:2:2 YpCbCr - Bi-Planar
              requiresYUVProcessing = true
              pipelineState = computePipelineStateYUV
+
+             // --- Bake-in Check for YUV ---
+             if !bakeInLUT {
+                 logger.debug("YUV format (v210) detected, but bakeInLUT is false. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0) // Flush if we created textures before this check? Maybe not needed yet.
+                 return nil // Signal to use original buffer
+             }
+             guard let currentLUTTexture = lutTexture else {
+                 logger.warning("Bake-in requested for YUV (v210) but no LUT texture set. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0)
+                 return nil
+             }
+             // --- End Bake-in Check ---
 
              // Texture for Y plane (Plane 0) - Use r16Unorm for 10/12/16-bit Y data
              var cvTextureY: CVMetalTexture?
@@ -112,7 +130,7 @@ class MetalFrameProcessor {
 
              // Texture for CbCr plane (Plane 1) - Use rg16Unorm for 10/12/16-bit UV data
              var cvTextureCbCr: CVMetalTexture?
-            // Note: Width for CbCr plane is half the Luma width in 4:2:2
+             // Note: Width for CbCr plane is half the Luma width in 4:2:2
              status = CVMetalTextureCacheCreateTextureFromImage(kCFAllocatorDefault, cache, pixelBuffer, nil, .rg16Unorm, width / 2, height, 1, &cvTextureCbCr)
              guard status == kCVReturnSuccess, let cvTexCbCr = cvTextureCbCr else {
                  logger.error("Failed to create input CbCr Metal texture (rg16Unorm) for v210: \(status)")
@@ -120,10 +138,23 @@ class MetalFrameProcessor {
                  return nil
              }
              inputTextureCbCr = CVMetalTextureGetTexture(cvTexCbCr)
-        
+
         case kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange: // Apple Log 10-bit 4:2:2 YpCbCr ('x422') - Bi-Planar
              requiresYUVProcessing = true
              pipelineState = computePipelineStateYUV
+
+             // --- Bake-in Check for YUV ---
+             if !bakeInLUT {
+                 logger.debug("YUV format (x422 - Apple Log) detected, but bakeInLUT is false. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0)
+                 return nil // Signal to use original buffer
+             }
+             guard let currentLUTTexture = lutTexture else {
+                 logger.warning("Bake-in requested for YUV (x422 - Apple Log) but no LUT texture set. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0)
+                 return nil
+             }
+             // --- End Bake-in Check ---
 
              // Texture for Y plane (Plane 0) - Use r16Unorm for 10/12/16-bit Y data
              var cvTextureY_x422: CVMetalTexture?
@@ -149,6 +180,19 @@ class MetalFrameProcessor {
         case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: // 8-bit 4:2:0 YUV ('420v' or '420f')
             requiresYUVProcessing = true
             pipelineState = computePipelineStateYUV
+
+            // --- Bake-in Check for YUV ---
+             if !bakeInLUT {
+                 logger.debug("YUV format (420v/f) detected, but bakeInLUT is false. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0)
+                 return nil // Signal to use original buffer
+             }
+             guard let currentLUTTexture = lutTexture else {
+                 logger.warning("Bake-in requested for YUV (420v/f) but no LUT texture set. Skipping Metal processing.")
+                 // CVMetalTextureCacheFlush(cache, 0)
+                 return nil
+             }
+             // --- End Bake-in Check ---
 
             // Texture for Y plane (Plane 0) - Use r8Unorm for 8-bit Y data
             var cvTextureY_420: CVMetalTexture?
@@ -176,19 +220,43 @@ class MetalFrameProcessor {
             return nil // Cannot process this format
         }
 
+        // --- Guard against missing pipeline state or input textures ---
+        // Note: currentLUTTexture is now checked specifically within the YUV bake-in logic path
         guard let selectedPipelineState = pipelineState,
-              let currentLUTTexture = lutTexture, // Ensure a LUT is set for processing
-              let firstInputTexture = inputTextureY else { // Y texture is always needed
-             logger.error("Metal processor prerequisites failed: PipelineState=\(pipelineState != nil), LUT=\(self.lutTexture != nil), InputY=\(inputTextureY != nil)")
+              let firstInputTexture = inputTextureY else {
+             logger.error("Metal processor prerequisites failed: PipelineState=\(pipelineState != nil), InputY=\(inputTextureY != nil)")
              CVMetalTextureCacheFlush(cache, 0)
              return nil
          }
-        
+
          if requiresYUVProcessing && inputTextureCbCr == nil {
              logger.error("Metal processor YUV prerequisites failed: CbCr texture is nil.")
              CVMetalTextureCacheFlush(cache, 0)
              return nil
          }
+        
+        // --- Handle Non-YUV LUT application (e.g., for BGRA preview) ---
+        // Apply LUT if available, otherwise skip (effectively pass-through for BGRA if no LUT)
+        // For YUV, lutTexture presence is checked earlier within the bakeInLUT logic.
+        var lutToApply: MTLTexture? = nil
+        if !requiresYUVProcessing {
+             if let currentLUT = lutTexture {
+                 lutToApply = currentLUT
+             } else {
+                 // BGRA input and no LUT means no processing is needed.
+                 // However, the current structure assumes output is always BGRA.
+                 // If we want true pass-through, we might need to return the original buffer earlier.
+                 // For now, let's assume processing to BGRA (even identity) is intended.
+                 // If identity processing is complex, consider returning original pixelBuffer here.
+                 logger.trace("BGRA format and no LUT set. Proceeding with potential identity transform to output BGRA buffer.")
+                 // To truly skip, uncomment below and adjust return logic:
+                 // return pixelBuffer // Or handle appropriately in caller
+             }
+         } else {
+             // For YUV, we already guarded that lutTexture is non-nil if bakeInLUT is true.
+             lutToApply = lutTexture! // Safe to force unwrap due to earlier guard
+         }
+
 
         // --- Prepare Output Texture (Always BGRA) ---
         var outputPixelBuffer: CVPixelBuffer?
@@ -229,14 +297,31 @@ class MetalFrameProcessor {
 
         // Set textures based on processing type
         if requiresYUVProcessing {
+            // We already guarded that lutToApply is non-nil if requiresYUVProcessing is true and bakeInLUT is true
+            guard let definiteLUT = lutToApply else {
+                // This should theoretically not happen due to checks above
+                logger.error("Internal error: LUT expected for YUV processing but not found.")
+                CVMetalTextureCacheFlush(cache, 0)
+                return nil
+            }
             computeCommandEncoder.setTexture(firstInputTexture, index: 0) // Y Plane
             computeCommandEncoder.setTexture(inputTextureCbCr!, index: 1) // CbCr Plane
             computeCommandEncoder.setTexture(outputTexture, index: 2)    // Output BGRA
-            computeCommandEncoder.setTexture(currentLUTTexture, index: 3) // LUT
-        } else {
+            computeCommandEncoder.setTexture(definiteLUT, index: 3)      // LUT (Guaranteed non-nil)
+        } else { // BGRA Processing
             computeCommandEncoder.setTexture(firstInputTexture, index: 0) // Input BGRA
             computeCommandEncoder.setTexture(outputTexture, index: 1)    // Output BGRA
-            computeCommandEncoder.setTexture(currentLUTTexture, index: 2) // LUT
+            if let definiteLUT = lutToApply { // Only set LUT if one is available for BGRA
+                 computeCommandEncoder.setTexture(definiteLUT, index: 2) // LUT
+            } else {
+                 // If no LUT for BGRA, we might need a different kernel or handle identity transform.
+                 // Current shaders likely expect a LUT. This needs review based on shader code.
+                 // Assuming computePipelineStateBGRA handles nil LUT gracefully or expects one.
+                 // If it breaks, we need an identity BGRA->BGRA kernel or skip Metal pass.
+                 logger.warning("Processing BGRA without a LUT texture. Shader must handle this.")
+                 // Potential issue: If shader *requires* index 2, this might fail.
+                 // A dummy 1x1 texture could be set, or the shader needs adjustment.
+            }
         }
 
 
@@ -265,5 +350,10 @@ class MetalFrameProcessor {
         CVMetalTextureCacheFlush(cache, 0)
 
         return outPixelBuffer // Return the BGRA output buffer
+    }
+
+    func setLUT(_ texture: MTLTexture?) {
+        self.lutTexture = texture
+        logger.debug("LUT Texture \(texture == nil ? "cleared" : "set") on MetalFrameProcessor.")
     }
 } 

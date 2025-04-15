@@ -546,37 +546,26 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                var finalPixelBuffer: CVPixelBuffer? = pixelBuffer // Start with original buffer
-                var processed = false // Track if processing occurred
+                var pixelBufferToAppend: CVPixelBuffer? = nil
+                var isProcessed = false
                 
-                // Check if LUT processing is enabled and possible with METAL
-                if isBakeInLUTEnabled, let processor = metalFrameProcessor {
-                    // Attempt to process the pixel buffer using Metal
-                    if let processedMetalBuffer = processor.processPixelBuffer(pixelBuffer) {
-                        // Successfully processed with Metal
-                        finalPixelBuffer = processedMetalBuffer
-                        processed = true
-                    } else {
-                        // Metal processing failed or returned nil (e.g., no LUT set on processor)
-                        failedVideoFrames += 1
-                        if shouldLog {
-                           logger.warning("Metal LUT processing failed or no LUT set for frame #\(self.videoFrameCount). Using original.")
-                        }
-                        finalPixelBuffer = pixelBuffer // Fallback to original
-                    }
+                // Apply LUT via Metal only if bake-in is enabled and processor exists
+                if let processor = metalFrameProcessor,
+                   let processedPixelBuffer = processor.processFrame(pixelBuffer: pixelBuffer, bakeInLUT: self.isBakeInLUTEnabled) { // Pass the bake-in flag
+                    logger.info("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Metal Processing Applied (LUT Bake-in: \(self.isBakeInLUTEnabled)).")
+                    pixelBufferToAppend = processedPixelBuffer
+                    isProcessed = true
                 } else {
-                    // Bake-in is disabled or Metal processor is not available
-                    if shouldLog {
-                         logger.trace("Metal LUT Bake-in disabled or processor unavailable for frame #\(self.videoFrameCount), using original.")
-                    }
-                    finalPixelBuffer = pixelBuffer // Use original
+                    // Use original pixel buffer if processing is skipped or fails
+                    logger.info("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Metal LUT Bake-in disabled (\(self.isBakeInLUTEnabled)) or processor unavailable, using original.")
+                    pixelBufferToAppend = pixelBuffer // Use the original buffer
+                    isProcessed = false
                 }
                 
-                // Create the final CMSampleBuffer (either original or processed)
-                guard let bufferToUse = finalPixelBuffer else {
-                    // This should not happen if finalPixelBuffer always starts as pixelBuffer
+                // Ensure we have a valid pixel buffer to append
+                guard let finalPixelBuffer = pixelBufferToAppend else {
+                    logger.error("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Failed: No valid pixel buffer (original or processed) to append.")
                     failedVideoFrames += 1
-                    logger.error("Error: finalPixelBuffer was unexpectedly nil before creating sample buffer for frame #\(self.videoFrameCount). Skipping frame.")
                     return
                 }
                 
@@ -584,7 +573,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 // For simplicity here, we always create a new one if processed, otherwise use original sampleBuffer.
                 var finalSampleBuffer: CMSampleBuffer? = sampleBuffer // Default to original sample buffer
                 
-                if processed {
+                if isProcessed {
                     // We have a processed pixel buffer, need to create a new sample buffer
                     var timing = CMSampleTimingInfo()
                     CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
@@ -592,13 +581,13 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                     var info: CMFormatDescription?
                     let status = CMVideoFormatDescriptionCreateForImageBuffer(
                         allocator: kCFAllocatorDefault,
-                        imageBuffer: bufferToUse, // Use the (potentially processed) pixel buffer
+                        imageBuffer: finalPixelBuffer, // Use the (potentially processed) pixel buffer
                         formatDescriptionOut: &info
                     )
                     
                     if status == noErr, let formatDesc = info,
                        let newSampleBuffer = createSampleBuffer(
-                           from: bufferToUse, 
+                           from: finalPixelBuffer, 
                            formatDescription: formatDesc, 
                            timing: &timing
                        ) {
@@ -608,7 +597,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                         failedVideoFrames += 1
                         logger.warning("Failed to create new sample buffer from processed pixel buffer #\(self.videoFrameCount). Using original sample buffer.")
                         finalSampleBuffer = sampleBuffer // Fallback to original sample buffer
-                        processed = false // Mark as not processed since we fell back
+                        isProcessed = false // Mark as not processed since we fell back
                     }
                 } else {
                     // No processing occurred, use the original sample buffer directly
@@ -623,7 +612,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                     successfulVideoFrames += 1
                     if shouldLog {
                         // Log whether the appended buffer was the result of processing
-                        logger.debug("REC_PERF: captureOutput [Video Frame #\(self.successfulVideoFrames)] Appended (processed: \(processed)) - Append took \(String(format: "%.4f", appendEndTime - appendStartTime))s") // LOG APPEND TIME
+                        logger.debug("REC_PERF: captureOutput [Video Frame #\(self.successfulVideoFrames)] Appended (processed: \(isProcessed)) - Append took \(String(format: "%.4f", appendEndTime - appendStartTime))s") // LOG APPEND TIME
                     }
                 } else {
                      // This case should theoretically not happen based on the logic above
