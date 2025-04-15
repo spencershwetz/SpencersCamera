@@ -302,21 +302,21 @@ class RecordingService: NSObject {
             // Add inputs to writer
             if assetWriter!.canAdd(assetWriterInput!) {
                 assetWriter!.add(assetWriterInput!)
-                logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After adding video input") // LOG TIME
             } else {
-                logger.error("Could not add video input to asset writer: \\(error.localizedDescription)")
+                let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding video input"]) // Capture or create error
+                logger.error("Could not add video input to asset writer: \(error.localizedDescription)")
                 assetWriter = nil
-                delegate?.didEncounterError(.custom(message: "Failed to add video input: \\(error.localizedDescription)"))
+                delegate?.didEncounterError(.custom(message: "Failed to add video input: \(error.localizedDescription)"))
                 return
             }
             
             if assetWriter!.canAdd(audioInput) {
                 assetWriter!.add(audioInput)
-                logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After adding audio input") // LOG TIME
             } else {
-                logger.error("Could not add audio input to asset writer: \\(error.localizedDescription)")
+                let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding audio input"]) // Capture or create error
+                logger.error("Could not add audio input to asset writer: \(error.localizedDescription)")
                 assetWriter = nil
-                delegate?.didEncounterError(.custom(message: "Failed to add audio input: \\(error.localizedDescription)"))
+                delegate?.didEncounterError(.custom(message: "Failed to add audio input: \(error.localizedDescription)"))
                 return
             }
             
@@ -329,16 +329,9 @@ class RecordingService: NSObject {
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
             assetWriter!.startWriting()
             assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
-            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After startWriting/startSession") // LOG TIME
 
-            logger.info("Started asset writer session at time: \(self.recordingStartTime!.seconds)")
-            
             isRecording = true
             delegate?.didStartRecording()
-            
-            logger.info("Recording started successfully at URL: \\(tempURL.path)")
-            logger.info("Recording settings - Resolution: \(videoWidth)x\(videoHeight), Codec: \(self.selectedCodec == .proRes ? "ProRes 422 HQ" : "HEVC"), Frame Rate: \(self.selectedFrameRate)")
-            logger.info("REC_PERF: startRecording END [Total: \(String(format: "%.3f", Date.nowTimestamp() - startTime))s]") // LOG TOTAL TIME
             
         } catch {
             delegate?.didEncounterError(.recordingFailed)
@@ -530,19 +523,14 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             // Log every 30 frames to avoid flooding
             let shouldLog = videoFrameCount % 30 == 0
             if shouldLog {
-                logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] BEGIN, writer status: \(assetWriter.status.rawValue)") // LOG FRAME START
                 
                 // Log sample buffer orientation info
                 if let orientationAttachment = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data {
                     // The presence of this attachment often implies orientation info, though not directly the angle.
-                    logger.info("REC_ORIENT: SampleBuffer #\(self.videoFrameCount) has CameraIntrinsicMatrix attachment (size: \(orientationAttachment.count))")
                 } else {
-                    logger.info("REC_ORIENT: SampleBuffer #\(self.videoFrameCount) does NOT have CameraIntrinsicMatrix attachment.")
                 }
                 
                 // Log connection orientation at this point
-                logger.info("REC_ORIENT: Connection videoRotationAngle at frame #\(self.videoFrameCount): \(connection.videoRotationAngle)°")
-                logger.info("REC_ORIENT: Connection videoOrientation at frame #\(self.videoFrameCount): \(connection.videoOrientation.rawValue)")
             }
             
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
@@ -625,7 +613,6 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             audioFrameCount += 1
             audioInput.append(sampleBuffer)
             if audioFrameCount % 100 == 0 {
-                logger.debug("Processed audio frame #\(self.audioFrameCount)")
             }
         }
 
