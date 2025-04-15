@@ -46,7 +46,6 @@ class MetalFrameProcessor {
                 return nil
             }
             computePipelineStateRGB = try device.makeComputePipelineState(function: rgbKernelFunction)
-            logger.debug("Successfully created compute pipeline state for RGB LUT application.")
 
             // Load YUV kernel ( Placeholder name - will be created in metal file next)
             guard let yuvKernelFunction = library.makeFunction(name: "applyLUTComputeYUV") else {
@@ -57,7 +56,6 @@ class MetalFrameProcessor {
                 return nil // Ensure guard body exits
             }
             computePipelineStateYUV = try device.makeComputePipelineState(function: yuvKernelFunction)
-            logger.debug("Successfully created compute pipeline state for YUV LUT application.")
 
         } catch {
             logger.error("Failed to create compute pipeline state: \(error.localizedDescription)")
