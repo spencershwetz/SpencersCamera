@@ -552,12 +552,10 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 // Apply LUT via Metal only if bake-in is enabled and processor exists
                 if let processor = metalFrameProcessor,
                    let processedPixelBuffer = processor.processFrame(pixelBuffer: pixelBuffer, bakeInLUT: self.isBakeInLUTEnabled) { // Pass the bake-in flag
-                    logger.info("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Metal Processing Applied (LUT Bake-in: \(self.isBakeInLUTEnabled)).")
                     pixelBufferToAppend = processedPixelBuffer
                     isProcessed = true
                 } else {
                     // Use original pixel buffer if processing is skipped or fails
-                    logger.info("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Metal LUT Bake-in disabled (\(self.isBakeInLUTEnabled)) or processor unavailable, using original.")
                     pixelBufferToAppend = pixelBuffer // Use the original buffer
                     isProcessed = false
                 }
@@ -610,10 +608,6 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                     assetWriterInput.append(bufferToAppend)
                     let appendEndTime = Date.nowTimestamp() // END APPEND TIMER
                     successfulVideoFrames += 1
-                    if shouldLog {
-                        // Log whether the appended buffer was the result of processing
-                        logger.debug("REC_PERF: captureOutput [Video Frame #\(self.successfulVideoFrames)] Appended (processed: \(isProcessed)) - Append took \(String(format: "%.4f", appendEndTime - appendStartTime))s") // LOG APPEND TIME
-                    }
                 } else {
                      // This case should theoretically not happen based on the logic above
                      failedVideoFrames += 1

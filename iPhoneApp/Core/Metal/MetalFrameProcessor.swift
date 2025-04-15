@@ -105,7 +105,6 @@ class MetalFrameProcessor {
 
              // --- Bake-in Check for YUV ---
              if !bakeInLUT {
-                 logger.debug("YUV format (v210) detected, but bakeInLUT is false. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0) // Flush if we created textures before this check? Maybe not needed yet.
                  return nil // Signal to use original buffer
              }
@@ -143,7 +142,6 @@ class MetalFrameProcessor {
 
              // --- Bake-in Check for YUV ---
              if !bakeInLUT {
-                 logger.debug("YUV format (x422 - Apple Log) detected, but bakeInLUT is false. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil // Signal to use original buffer
              }
@@ -181,7 +179,6 @@ class MetalFrameProcessor {
 
             // --- Bake-in Check for YUV ---
              if !bakeInLUT {
-                 logger.debug("YUV format (420v/f) detected, but bakeInLUT is false. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil // Signal to use original buffer
              }
