@@ -20,8 +20,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - Application Lifecycle
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        print("DEBUG: AppDelegate - Application launching")
-        
         // REMOVED: Manual window setup, root view controller assignment, and appearance settings.
         // The SwiftUI App lifecycle (@main, WindowGroup) will handle this.
 
@@ -29,8 +27,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         logger.info("Setting up AppDelegate for iOS 18+")
         // Register for device orientation notifications
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        logger.info("Began generating device orientation notifications.")
-        
         // REMOVED: Setup orientation lock observer (using custom CameraOrientationLock)
         // UIWindowScene.setupOrientationLockSupport()
         
