@@ -45,11 +45,24 @@ struct FunctionButtonsView: View {
     @ViewBuilder
     private func functionButton(index: Int, assignedAbility: Binding<FunctionButtonAbility>) -> some View {
         RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
-            Button(getButtonLabel(for: assignedAbility.wrappedValue)) {
-                handleButtonTap(ability: assignedAbility.wrappedValue)
+            Group {
+                if assignedAbility.wrappedValue == .shutterPriority {
+                    Button {
+                        handleButtonTap(ability: .shutterPriority)
+                    } label: {
+                        Image(systemName: "angle")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundColor(viewModel.isShutterPriorityEnabled ? .yellow : .white)
+                    .buttonStyle(FunctionButtonStyle())
+                } else {
+                    Button(getButtonLabel(for: assignedAbility.wrappedValue)) {
+                        handleButtonTap(ability: assignedAbility.wrappedValue)
+                    }
+                    .foregroundColor(assignedAbility.wrappedValue == .lockExposure && viewModel.isExposureLocked ? .red : .white)
+                    .buttonStyle(FunctionButtonStyle())
+                }
             }
-            .foregroundColor(assignedAbility.wrappedValue == .lockExposure && viewModel.isExposureLocked ? .red : .white)
-            .buttonStyle(FunctionButtonStyle())
         }
         .frame(width: 40, height: 30)
         .contextMenu {
