@@ -22,6 +22,25 @@ class ExposureService {
     
     func setDevice(_ device: AVCaptureDevice) {
         self.device = device
+        
+        // Initialize exposure mode to auto when device is set
+        do {
+            try device.lockForConfiguration()
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+                isAutoExposureEnabled = true
+                logger.info("Initial exposure mode set to continuousAutoExposure")
+            }
+            device.unlockForConfiguration()
+        } catch {
+            logger.error("Failed to set initial exposure mode: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed)
+        }
+    }
+    
+    /// Helper function to get the name of the currently configured device.
+    func getCurrentDeviceName() -> String {
+        return device?.localizedName ?? "No Device Set"
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -189,10 +208,13 @@ class ExposureService {
     /// - Parameter locked: A Boolean value indicating whether to lock the exposure.
     func setExposureLock(locked: Bool) {
         guard let device = device else {
-            logger.error("Cannot set exposure lock: No camera device available")
+            logger.error("[ExposureLock] Cannot set exposure lock: No camera device available")
             delegate?.didEncounterError(.configurationFailed(message: "No camera device for exposure lock"))
             return
         }
+        
+        let deviceName = device.localizedName
+        logger.info("[ExposureLock] Request to set lock=\(locked) for device: \(deviceName)")
 
         // Determine the target mode based on lock state and current settings
         let targetMode: AVCaptureDevice.ExposureMode
@@ -211,9 +233,13 @@ class ExposureService {
             }
         }
         
+        logger.debug("[ExposureLock] Determined target exposure mode: \(String(describing: targetMode))")
+        
         // Check if the target mode is supported
-        guard device.isExposureModeSupported(targetMode) else {
-            logger.warning("Exposure mode \(String(describing: targetMode)) is not supported by the current device.")
+        let isSupported = device.isExposureModeSupported(targetMode)
+        logger.info("[ExposureLock] Device \(deviceName) supports mode \(String(describing: targetMode)): \(isSupported)")
+        guard isSupported else {
+            logger.warning("[ExposureLock] Exposure mode \(String(describing: targetMode)) is not supported by \(deviceName). Cannot set.")
             // Optionally, inform the delegate or handle this case appropriately.
             // For now, we just log and return, leaving the mode unchanged.
             return
@@ -221,17 +247,21 @@ class ExposureService {
         
         // Only apply if the mode needs to change
         if device.exposureMode != targetMode {
+            logger.debug("[ExposureLock] Current mode (\(device.exposureMode.rawValue)) differs from target (\(targetMode.rawValue)). Attempting change on \(deviceName)...")
             do {
+                logger.debug("[ExposureLock] Attempting lockForConfiguration on \(deviceName)...)")
                 try device.lockForConfiguration()
+                logger.debug("[ExposureLock] lockForConfiguration succeeded. Setting exposureMode to \(targetMode.rawValue) on \(deviceName)...")
                 device.exposureMode = targetMode
+                logger.debug("[ExposureLock] Setting exposureMode completed. Unlocking configuration on \(deviceName)...")
                 device.unlockForConfiguration()
-                logger.info("Successfully set exposure mode to \(String(describing: targetMode))")
+                logger.info("[ExposureLock] Successfully set exposure mode to \(String(describing: targetMode)) for \(deviceName)")
             } catch {
-                logger.error("Error setting exposure mode to \(String(describing: targetMode)): \(error.localizedDescription)")
-                delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure mode: \(error.localizedDescription)"))
+                logger.error("[ExposureLock] Error setting exposure mode to \(String(describing: targetMode)) for \(deviceName): \(error.localizedDescription)")
+                delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure mode for \(deviceName): \(error.localizedDescription)"))
             }
         } else {
-            logger.info("Exposure mode is already \(String(describing: targetMode)), no change needed.")
+            logger.info("[ExposureLock] Exposure mode on \(deviceName) is already \(String(describing: targetMode)), no change needed.")
         }
     }
     

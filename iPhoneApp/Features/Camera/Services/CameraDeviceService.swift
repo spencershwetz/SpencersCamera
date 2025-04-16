@@ -7,6 +7,7 @@ protocol CameraDeviceServiceDelegate: AnyObject {
     func didUpdateCurrentLens(_ lens: CameraLens)
     func didUpdateZoomFactor(_ factor: CGFloat)
     func didEncounterError(_ error: CameraError)
+    var isExposureCurrentlyLocked: Bool { get }
 }
 
 class CameraDeviceService {
@@ -18,15 +19,17 @@ class CameraDeviceService {
     private var lastZoomFactor: CGFloat = 1.0
     private let cameraQueue = DispatchQueue(label: "com.camera.device-service")
     private var videoFormatService: VideoFormatService
+    private var exposureService: ExposureService
     
     // Public computed property to access the current device
     var currentDevice: AVCaptureDevice? {
         return device
     }
     
-    init(session: AVCaptureSession, videoFormatService: VideoFormatService, delegate: CameraDeviceServiceDelegate) {
+    init(session: AVCaptureSession, videoFormatService: VideoFormatService, exposureService: ExposureService, delegate: CameraDeviceServiceDelegate) {
         self.session = session
         self.videoFormatService = videoFormatService
+        self.exposureService = exposureService
         self.delegate = delegate
     }
     
@@ -61,6 +64,10 @@ class CameraDeviceService {
         session.addInput(newInput)
         videoDeviceInput = newInput
         device = newDevice
+        
+        // ADDED: Update ExposureService's device reference
+        exposureService.setDevice(newDevice)
+        logger.info("⚙️ [configureSession] Updated ExposureService device to \(newDevice.localizedName)")
 
         // === ADDED: Re-add audio input ===
         if let audioInput = audioInput {
@@ -220,24 +227,6 @@ class CameraDeviceService {
             
             logger.debug("🔄 Lens switch: Committing configuration...")
             session.commitConfiguration()
-            logger.debug("🔄 Lens switch: Configuration committed.")
-            
-            // *** REMOVE code setting data output orientation here ***
-            /*
-            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
-               let connection = videoDataOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                    logger.info("🔄 Lens switch: Set VideoDataOutput connection angle to 90° after config commit.")
-                } else {
-                    logger.warning("🔄 Lens switch: 90° angle not supported for VideoDataOutput after config commit.")
-                }
-            } else {
-                logger.warning("🔄 Lens switch: Could not find VideoDataOutput or connection after config commit.")
-            }
-            */
-            logger.info("🔄 Lens switch: Skipping explicit VideoDataOutput connection angle setting.") // Add log indicating skip
-            // *** End removal ***
             
             // Apply digital zoom INSTANTLY if needed after the physical switch
             if zoomFactor != 1.0 {
@@ -250,6 +239,20 @@ class CameraDeviceService {
                 logger.debug("🔄 Lens switch: Starting session...")
                 session.startRunning()
                 logger.debug("🔄 Lens switch: Session started.")
+            }
+
+            // ADDED: Delay and re-apply exposure lock state AFTER starting session
+            Task { // Use a Task for sleep
+                try? await Task.sleep(for: .milliseconds(50)) // Short delay
+                
+                if self.delegate?.isExposureCurrentlyLocked == true {
+                    self.logger.info("🔄 Lens switch (Delayed): Exposure lock is active, re-applying lock via ExposureService...")
+                    self.exposureService.setExposureLock(locked: true)
+                } else {
+                    self.logger.info("🔄 Lens switch (Delayed): Exposure lock is not active, ensuring device is in auto/custom mode.")
+                    // Explicitly ensure it's NOT locked if the delegate says it shouldn't be
+                    self.exposureService.setExposureLock(locked: false)
+                }
             }
             
             // Notify delegate *after* orientation is set and digital zoom (if any) is applied

@@ -14,9 +14,11 @@ class CameraSetupService {
     private var session: AVCaptureSession
     private weak var delegate: CameraSetupServiceDelegate?
     private var videoDeviceInput: AVCaptureDeviceInput?
+    private var exposureService: ExposureService
     
-    init(session: AVCaptureSession, delegate: CameraSetupServiceDelegate) {
+    init(session: AVCaptureSession, exposureService: ExposureService, delegate: CameraSetupServiceDelegate) {
         self.session = session
+        self.exposureService = exposureService
         self.delegate = delegate
     }
     
@@ -37,6 +39,37 @@ class CameraSetupService {
         }
         
         logger.info("Found camera device: \(videoDevice.localizedName)")
+        
+        // Configure device within session configuration block
+        do {
+            try videoDevice.lockForConfiguration()
+            
+            // Reset all exposure settings first
+            if videoDevice.isExposureModeSupported(.locked) {
+                videoDevice.exposureMode = .locked
+                logger.info("Reset: Set exposure mode to locked first")
+            }
+            
+            // Configure white balance mode
+            if videoDevice.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                videoDevice.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            // Configure focus mode
+            if videoDevice.isFocusModeSupported(.continuousAutoFocus) {
+                videoDevice.focusMode = .continuousAutoFocus
+            }
+            
+            // Finally set exposure mode to auto
+            if videoDevice.isExposureModeSupported(.continuousAutoExposure) {
+                videoDevice.exposureMode = .continuousAutoExposure
+                logger.info("Initial configuration: Set exposure mode to continuousAutoExposure")
+            }
+            
+            videoDevice.unlockForConfiguration()
+        } catch {
+            logger.error("Failed to configure device: \(error.localizedDescription)")
+        }
         
         do {
             let input = try AVCaptureDeviceInput(device: videoDevice)
@@ -65,6 +98,7 @@ class CameraSetupService {
             return
         }
         
+        // Commit configuration after all settings are applied
         session.commitConfiguration()
         
         if session.canSetSessionPreset(.hd4K3840x2160) {
@@ -123,7 +157,42 @@ class CameraSetupService {
             
             self.logger.info("Starting camera session...")
             if !self.session.isRunning {
+                // Begin a new configuration before starting
+                self.session.beginConfiguration()
+                
+                // Ensure device is still in auto mode before starting
+                if let device = self.videoDeviceInput?.device {
+                    do {
+                        try device.lockForConfiguration()
+                        if device.exposureMode != .continuousAutoExposure && device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposureMode = .continuousAutoExposure
+                            self.logger.info("Pre-start: Reconfirmed exposure mode to continuousAutoExposure")
+                        }
+                        device.unlockForConfiguration()
+                    } catch {
+                        self.logger.error("Pre-start: Failed to reconfirm exposure mode: \(error.localizedDescription)")
+                    }
+                }
+                
+                // Commit configuration before starting
+                self.session.commitConfiguration()
+                
+                // Start the session
                 self.session.startRunning()
+                
+                // Wait for session to stabilize
+                Thread.sleep(forTimeInterval: 0.2)
+                
+                // Verify final state
+                if let device = self.videoDeviceInput?.device {
+                    let finalMode = device.exposureMode
+                    self.logger.info("Final Device Exposure Mode: \(finalMode.rawValue) (0:Locked, 1:Auto, 2:ContinuousAuto, 3:Custom)")
+                    
+                    // Update exposure service state
+                    DispatchQueue.main.async {
+                        self.exposureService.setAutoExposureEnabled(finalMode == .continuousAutoExposure)
+                    }
+                }
                 
                 DispatchQueue.main.async {
                     let isRunning = self.session.isRunning

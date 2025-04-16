@@ -420,13 +420,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     private func setupServices() {
         // Initialize services with self as delegate
-        cameraSetupService = CameraSetupService(session: session, delegate: self)
+        // Ensure ExposureService is initialized before CameraSetupService
         exposureService = ExposureService(delegate: self)
+        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self) // Pass exposureService
         recordingService = RecordingService(session: session, delegate: self)
         // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
         recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
         videoFormatService = VideoFormatService(session: session, delegate: self)
-        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, delegate: self)
+        // Pass exposureService to CameraDeviceService initializer
+        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, exposureService: exposureService, delegate: self)
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -834,6 +836,21 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         
         // Initialize available lenses
         availableLenses = CameraLens.availableLenses()
+        
+        // Ensure auto exposure is set on initialization
+        do {
+            try device.lockForConfiguration()
+            if device.exposureMode != .continuousAutoExposure {
+                device.exposureMode = .continuousAutoExposure
+                logger.info("Initial exposure mode set to continuousAutoExposure")
+            }
+            device.unlockForConfiguration()
+            // Update view model state to match
+            self.isAutoExposureEnabled = true
+            self.isExposureLocked = false
+        } catch {
+            logger.error("Failed to set initial exposure mode: \(error.localizedDescription)")
+        }
     }
     
     func didStartRunning(_ isRunning: Bool) {
@@ -893,6 +910,10 @@ extension CameraViewModel: RecordingServiceDelegate {
 // MARK: - CameraDeviceServiceDelegate
 
 extension CameraViewModel: CameraDeviceServiceDelegate {
+    var isExposureCurrentlyLocked: Bool {
+        return self.isExposureLocked
+    }
+    
     func didUpdateCurrentLens(_ lens: CameraLens) {
         logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
         // Update properties on the main thread
@@ -900,6 +921,16 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             self.currentLens = lens
             self.lastLensSwitchTimestamp = Date() // Trigger preview update
             self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
+            
+            // REMOVED: Re-applying exposure lock logic (now handled by CameraDeviceService)
+            /*
+            if self.isExposureLocked {
+                // Log the device name from the exposureService before attempting the lock
+                let deviceName = self.exposureService?.getCurrentDeviceName() ?? "Unknown"
+                self.logger.info("🔄 [didUpdateCurrentLens] Re-applying exposure lock for device: \(deviceName)")
+                self.exposureService?.setExposureLock(locked: true)
+            }
+            */
         }
     }
     
