@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+*   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
+
 ### Removed
 
 ## [2024-08-10]
