@@ -4,6 +4,7 @@ import Foundation
 enum FunctionButtonAbility: String, CaseIterable, Identifiable {
     case none = "None"
     case lockExposure = "Lock Exposure"
+    case shutterPriority = "Shutter Priority"
     // Add more abilities here in the future
 
     var id: String { self.rawValue }

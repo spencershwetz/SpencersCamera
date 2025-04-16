@@ -78,6 +78,8 @@ struct FunctionButtonsView: View {
             return "F?"
         case .lockExposure:
             return "AE"
+        case .shutterPriority:
+            return "180°"
         // Add cases for future abilities
         }
     }
@@ -91,6 +93,8 @@ struct FunctionButtonsView: View {
             print("Function button has no ability assigned.")
         case .lockExposure:
             viewModel.toggleExposureLock() // Call the new method on CameraViewModel
+        case .shutterPriority:
+            viewModel.toggleShutterPriority()
         // Add cases for future abilities
         }
     }

@@ -77,6 +77,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             updateExposureLock() 
         }
     }
+    @Published var isShutterPriorityEnabled: Bool = false
     
     // Storage for temporarily disabling LUT preview without losing the filter
     var tempLUTFilter: CIFilter? {
@@ -792,6 +793,23 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private func updateExposureLock() {
         logger.info("Updating exposure lock state in service to: \(self.isExposureLocked)")
         exposureService?.setExposureLock(locked: self.isExposureLocked)
+    }
+
+    // MARK: - Shutter Priority Toggle
+    /// Toggles 180° shutter‑priority mode on/off.
+    func toggleShutterPriority() {
+        // Toggle the mode
+        isShutterPriorityEnabled.toggle()
+        if isShutterPriorityEnabled {
+            // Disable auto exposure and set shutter to 180° mode
+            isAutoExposureEnabled = false
+            logger.info("Shutter Priority enabled: locking shutter to 180°")
+            updateShutterAngle(180.0)
+        } else {
+            // Revert to continuous auto-exposure
+            isAutoExposureEnabled = true
+            logger.info("Shutter Priority disabled: reverting to auto-exposure")
+        }
     }
 }
 
