@@ -213,6 +213,9 @@ struct CameraView: View {
             Text("FPS: \(String(format: "%.2f", viewModel.selectedFrameRate))")
             Text("Codec: \(viewModel.selectedCodec.rawValue)")
             Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
+            Text("ISO: \(Int(viewModel.iso))")
+            Text("WB: \(Int(viewModel.whiteBalance))K")
+            Text("Shutter Angle: \(String(format: "%.0f°", viewModel.shutterSpeed.seconds * viewModel.selectedFrameRate * 360))")
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))
         .foregroundColor(.white)
