@@ -130,7 +130,11 @@ class RecordingService: NSObject {
         guard !isRecording else { return }
         let startTime = Date.nowTimestamp() // START TIMER
         logger.info("REC_PERF: startRecording BEGIN")
-        
+
+        // ---> ADD LOGGING HERE <---
+        logger.info("DEBUG_FRAMERATE: RecordingService startRecording called. Internal selectedFrameRate: \\(self.selectedFrameRate)")
+        // ---> END LOGGING <---
+
         // Enhanced orientation logging
         let deviceOrientation = await UIDevice.current.orientation
         let activeScene = await MainActor.run {
@@ -239,6 +243,10 @@ class RecordingService: NSObject {
                     "EncoderID": "com.apple.videotoolbox.videoencoder.hevc.422v2"
                 ]
                 
+                // ---> ADD LOGGING HERE <---
+                logger.info("DEBUG_FRAMERATE: Setting AVVideoExpectedSourceFrameRateKey to \\(self.selectedFrameRate)")
+                // ---> END LOGGING <---
+
                 videoSettings[AVVideoCompressionPropertiesKey] = compressionProperties
             }
             
@@ -591,15 +599,33 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 }
                 
                 // Append the appropriate sample buffer 
-                if let bufferToAppend = finalSampleBuffer {
+                if let bufferToAppend = finalSampleBuffer, // Keep check for valid buffer
+                   let pixelBuffer = CMSampleBufferGetImageBuffer(bufferToAppend) { // Get pixel buffer from the final sample buffer
+                    
+                    let presentationTime = CMSampleBufferGetPresentationTimeStamp(bufferToAppend)
                     let appendStartTime = Date.nowTimestamp() // START APPEND TIMER
-                    assetWriterInput.append(bufferToAppend)
+
+                    // --> Use the Pixel Buffer Adaptor <--
+                    if let adaptor = assetWriterPixelBufferAdaptor {
+                         adaptor.append(pixelBuffer, withPresentationTime: presentationTime)
+                         successfulVideoFrames += 1
+                    } else {
+                         // This should ideally not happen if setup is correct
+                         failedVideoFrames += 1
+                         logger.error("Error: assetWriterPixelBufferAdaptor is nil for frame #\(self.videoFrameCount). Skipping append.")
+                    }
+                    // --> END Use the Pixel Buffer Adaptor <--
+
                     let appendEndTime = Date.nowTimestamp() // END APPEND TIMER
-                    successfulVideoFrames += 1
+                    
+                    // Optional: Log append time if needed
+                    // if shouldLog {
+                    //     logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Append time: \(String(format: "%.6f", appendEndTime - appendStartTime))s")
+                    // }
                 } else {
-                     // This case should theoretically not happen based on the logic above
+                     // This case handles if bufferToAppend is nil OR getting pixelBuffer failed
                      failedVideoFrames += 1
-                     logger.error("Error: finalSampleBuffer was nil for frame #\(self.videoFrameCount). Skipping append.")
+                     logger.error("Error: Could not get final sample buffer or pixel buffer for frame #\(self.videoFrameCount). Skipping append.")
                 }
             }
         }

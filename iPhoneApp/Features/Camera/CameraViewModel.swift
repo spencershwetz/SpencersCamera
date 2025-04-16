@@ -509,6 +509,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // lutProcessor.setLogEnabled(self.isAppleLogEnabled) // REMOVED old CI processor log setting
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+
+        // ---> ADD LOGGING HERE <---
+        logger.info("DEBUG_FRAMERATE: Configuring RecordingService with selectedFrameRate: \\(self.selectedFrameRate)")
+        // ---> END LOGGING <---
+
         recordingService.setVideoConfiguration(
             frameRate: selectedFrameRate,
             resolution: selectedResolution,

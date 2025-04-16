@@ -42,6 +42,9 @@ struct SettingsView: View {
                                 .tag(fps)
                         }
                     }
+                    .onChange(of: viewModel.selectedFrameRate) { _, newFps in
+                        viewModel.updateFrameRate(newFps)
+                    }
                 } header: {
                     Text("Camera 🎥")
                 }

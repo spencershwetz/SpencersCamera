@@ -190,6 +190,38 @@ class VideoFormatService {
         return findBestFormat(for: device, resolution: currentResolution, frameRate: fps, requireAppleLog: isAppleLogEnabled)
     }
 
+    // ---> ADDED HELPER FUNCTION <---
+    /// Calculates the specific CMTime duration for a given frame rate.
+    func getFrameDuration(for fps: Double) -> CMTime {
+        let frameDuration: CMTime
+        switch fps {
+        case 23.976:
+            frameDuration = CMTime(value: 1001, timescale: 24000)
+        case 29.97:
+            frameDuration = CMTime(value: 1001, timescale: 30000)
+        case 24:
+            frameDuration = CMTime(value: 1, timescale: 24)
+        case 25:
+            frameDuration = CMTime(value: 1, timescale: 25)
+        case 30:
+            frameDuration = CMTime(value: 1, timescale: 30)
+        default:
+            // Handle potential higher frame rates if added later
+            if fps > 30 {
+                 // Attempt standard calculation, log if unusual
+                 logger.debug("Using standard CMTimeMake for potentially high frame rate: \(fps)")
+                 frameDuration = CMTimeMake(value: 1, timescale: Int32(fps))
+            } else {
+                 // Default to 30fps if value is unexpected low
+                 logger.warning("Unexpected FPS value \(fps) in getFrameDuration. Defaulting to 30fps duration.")
+                 frameDuration = CMTime(value: 1, timescale: 30)
+            }
+        }
+        logger.trace("[getFrameDuration] Calculated duration for \(fps) FPS: {\(frameDuration.value)/\(frameDuration.timescale)}")
+        return frameDuration
+    }
+    // ---> END ADDED HELPER FUNCTION <---
+
     // New function to find the best format based on criteria
     func findBestFormat(for device: AVCaptureDevice, resolution: CameraViewModel.Resolution, frameRate: Double, requireAppleLog: Bool) -> AVCaptureDevice.Format? {
         logger.info("🔍 findBestFormat called for \(device.localizedName): Res=\(resolution.rawValue), FPS=\(frameRate), requireAppleLog=\(requireAppleLog)")
