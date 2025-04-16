@@ -71,6 +71,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Add thumbnail property
     @Published var lastRecordedVideoThumbnail: UIImage?
     
+    // Exposure Lock
+    @Published var isExposureLocked: Bool = false {
+        didSet {
+            updateExposureLock() 
+        }
+    }
+    
     // Storage for temporarily disabling LUT preview without losing the filter
     var tempLUTFilter: CIFilter? {
         didSet {
@@ -770,6 +777,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self?.wcLogger.error("Error sending launch command to watch: \(error.localizedDescription)")
         }
         wcLogger.info("Sent launch command to watch: \(message)")
+    }
+
+    // MARK: - Exposure Lock
+
+    /// Toggles the exposure lock state.
+    func toggleExposureLock() {
+        isExposureLocked.toggle()
+        logger.info("Exposure lock toggled to: \(self.isExposureLocked)")
+    }
+
+    private func updateExposureLock() {
+        logger.info("Updating exposure lock state in service to: \(self.isExposureLocked)")
+        exposureService?.setExposureLock(locked: self.isExposureLocked)
     }
 }
 

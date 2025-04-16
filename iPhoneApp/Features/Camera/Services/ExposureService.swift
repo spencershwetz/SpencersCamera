@@ -185,6 +185,56 @@ class ExposureService {
         }
     }
     
+    /// Sets the exposure lock on the capture device.
+    /// - Parameter locked: A Boolean value indicating whether to lock the exposure.
+    func setExposureLock(locked: Bool) {
+        guard let device = device else {
+            logger.error("Cannot set exposure lock: No camera device available")
+            delegate?.didEncounterError(.configurationFailed(message: "No camera device for exposure lock"))
+            return
+        }
+
+        // Determine the target mode based on lock state and current settings
+        let targetMode: AVCaptureDevice.ExposureMode
+        if locked {
+            targetMode = .locked
+        } else {
+            // If unlocking, revert to auto or custom based on isAutoExposureEnabled
+            if isAutoExposureEnabled {
+                targetMode = .continuousAutoExposure
+            } else {
+                targetMode = .custom
+                // Note: When switching to .custom, device might reset ISO/shutter.
+                // Ideally, we should re-apply the last known manual settings here,
+                // but that requires ExposureService to store them.
+                // For now, just switching to .custom might suffice, but could be improved.
+            }
+        }
+        
+        // Check if the target mode is supported
+        guard device.isExposureModeSupported(targetMode) else {
+            logger.warning("Exposure mode \(String(describing: targetMode)) is not supported by the current device.")
+            // Optionally, inform the delegate or handle this case appropriately.
+            // For now, we just log and return, leaving the mode unchanged.
+            return
+        }
+        
+        // Only apply if the mode needs to change
+        if device.exposureMode != targetMode {
+            do {
+                try device.lockForConfiguration()
+                device.exposureMode = targetMode
+                device.unlockForConfiguration()
+                logger.info("Successfully set exposure mode to \(String(describing: targetMode))")
+            } catch {
+                logger.error("Error setting exposure mode to \(String(describing: targetMode)): \(error.localizedDescription)")
+                delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure mode: \(error.localizedDescription)"))
+            }
+        } else {
+            logger.info("Exposure mode is already \(String(describing: targetMode)), no change needed.")
+        }
+    }
+    
     func updateTint(_ tintValue: Double, currentWhiteBalance: Float) {
         guard let device = device else { 
             logger.error("No camera device available")

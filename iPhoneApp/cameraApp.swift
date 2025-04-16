@@ -15,6 +15,7 @@ struct cameraApp: App {
     
     // Create a StateObject for the CameraViewModel
     @StateObject private var cameraViewModel = CameraViewModel()
+    @StateObject private var settingsModel = SettingsModel() // Create SettingsModel instance
     
     // Get the scene phase
     @Environment(\.scenePhase) private var scenePhase
@@ -51,6 +52,7 @@ struct cameraApp: App {
                 OrientationFixView {
                     // Pass the viewModel instance to CameraView
                     CameraView(viewModel: cameraViewModel)
+                        .environmentObject(settingsModel) // Inject SettingsModel
                 }
             }
             .ignoresSafeArea(.all, edges: .all) // Use standard modifier

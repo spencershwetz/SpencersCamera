@@ -83,13 +83,19 @@ This file tracks necessary technical improvements, refactoring tasks, technical 
 
 This section lists potential features and improvements for future consideration.
 
-1.  **Manual/Auto Exposure Controls & 180-Degree Shutter Mode**
+1.  **Expand Function Button Abilities**
+    *   **Description**: Add more options to the `FunctionButtonAbility` enum and implement their corresponding actions in `CameraViewModel` and relevant services. Examples: Toggle Focus Peaking, Toggle Zebras, Toggle Histogram, Cycle WB Presets, Reset Focus/Exposure, etc. (Approx. 20 planned).
+    *   **Priority**: Medium (Feature Expansion)
+    *   **Files**: `FunctionButtonAbility.swift`, `FunctionButtonsView.swift` (update `getButtonLabel`, `handleButtonTap`), `CameraViewModel.swift` (add new action methods), relevant services (`ExposureService`, `FocusService` [if created], etc.), potentially new UI elements/overlays.
+    *   **Dependencies**: Depends on the implementation of the features being toggled (e.g., Focus Peaking - Future Task #4).
+
+2.  **Manual/Auto Exposure Controls & 180-Degree Shutter Mode**
     *   **Description**: Implement controls for switching between Auto Exposure (AE), Manual Exposure (setting ISO and Shutter Speed), and potentially a "180-Degree Shutter Priority" mode. This mode would attempt to keep the shutter speed at `1 / (2 * FrameRate)` while adjusting ISO automatically for correct exposure. Requires UI elements for selection and manual adjustment (sliders/steppers).
     *   **Priority**: Medium/High (Core Camera Functionality)
     *   **Files**: `CameraViewModel.swift`, `CameraDeviceService.swift` (for `AVCaptureDevice` exposure controls), new UI components in `CameraView.swift` or subviews.
     *   **Dependencies**: `AVFoundation` exposure APIs (`setExposureModeCustom`, `setExposureTargetBias`, `exposureDuration`, `iso`).
 
-2.  **Exposure Analysis Tools (Histogram, False Color, Zebras)**
+3.  **Exposure Analysis Tools (Histogram, False Color, Zebras)**
     *   **Description**: Implement real-time video analysis tools displayed as overlays. 
         *   **Histogram**: Display luminance and/or RGB channel distribution.
         *   **False Color**: Map luminance ranges to specific colors to visualize exposure levels across the image.
@@ -98,19 +104,19 @@ This section lists potential features and improvements for future consideration.
     *   **Files**: Likely requires updates to `MetalFrameProcessor.swift` (or a new analysis processor), new Metal shaders (`AnalysisShaders.metal`?), new UI overlay views integrated into `CameraView.swift`, settings for configuration.
     *   **Dependencies**: Metal Performance Shaders (`MPSImageHistogram`?) or custom Metal compute kernels for analysis. Requires efficient data transfer from GPU to CPU/UI or GPU-based overlay rendering.
 
-3.  **Camera Data Heads-Up Display (HUD)**
+4.  **Camera Data Heads-Up Display (HUD)**
     *   **Description**: Create an overlay view (HUD) on the `CameraView` to display critical real-time camera settings and status information. This includes Timecode, ISO, Shutter Speed, Aperture (if available/variable), White Balance (Kelvin/Tint), Resolution, Frame Rate (FPS), Recording Codec, Color Space (e.g., Rec.709, Apple Log), active LUT name, Recording Status (Rec/Standby), remaining storage time estimate, audio levels meter.
     *   **Priority**: Medium (Usability/Information)
     *   **Files**: New `CameraHUDView.swift`, integrated into `CameraView.swift`, data sourced from `CameraViewModel.swift`.
     *   **Dependencies**: Relies on accurate state being published by `CameraViewModel`. Timecode generation/display might need a dedicated utility or rely on `AVAssetWriter`.
 
-4.  **Focus Peaking**
+5.  **Focus Peaking**
     *   **Description**: Highlight edges that are in sharp focus with a configurable color overlay. Helps confirm focus, especially during manual focusing.
     *   **Priority**: Medium (Focus Assist Feature)
     *   **Files**: `MetalFrameProcessor.swift` (or similar), new Metal shader for edge detection/highlighting, integrated into `CameraPreviewView`/`CameraView.swift`, settings for color/threshold.
     *   **Dependencies**: Metal compute kernel for edge detection (e.g., Sobel operator) and overlay rendering.
 
-5.  **Composition Overlays (Horizon Level, Rule of Thirds)**
+6.  **Composition Overlays (Horizon Level, Rule of Thirds)**
     *   **Description**: Provide optional visual guides for composition.
         *   **Horizon/Level Indicator**: Display a line or graphic indicating camera tilt based on motion data (`CoreMotion`).
         *   **Rule of Thirds Grid**: Overlay simple lines dividing the frame into thirds horizontally and vertically.
@@ -118,49 +124,49 @@ This section lists potential features and improvements for future consideration.
     *   **Files**: New SwiftUI overlay views (`LevelIndicatorView.swift`, `GridOverlayView.swift`) integrated into `CameraView.swift`, potentially a service using `CoreMotion` (`MotionService.swift`).
     *   **Dependencies**: `CoreMotion` for level indicator. Simple drawing for grid overlay.
 
-6.  **External USB-C Recording & Destination Indicator**
+7.  **External USB-C Recording & Destination Indicator**
     *   **Description**: Enable recording directly to an external storage device connected via USB-C (relevant for iPhone 15 Pro and later). Includes adding a UI indicator (e.g., in the HUD) to clearly show whether recording is targeted to internal storage or the external device.
     *   **Priority**: Medium (Pro Feature / Hardware Dependent)
     *   **Files**: `RecordingService.swift` (to handle different output URLs), `CameraViewModel.swift` (to manage state and destination selection), `CameraView.swift`/`CameraHUDView.swift` (for the indicator), potentially new UI for destination selection.
     *   **Dependencies**: Requires handling external volume access permissions and monitoring connection status. `AVAssetWriter` needs to be configured with the correct file URL.
 
-7.  **Expanded Codec Selection (ProRes/HEVC Variants)**
+8.  **Expanded Codec Selection (ProRes/HEVC Variants)**
     *   **Description**: Provide granular control over the recording codec beyond the basic type. Allow users to select specific variants like ProRes 422 HQ, ProRes 422, ProRes 422 LT, ProRes 4444, ProRes 4444 XQ (if supported by hardware), and potentially different HEVC profiles (e.g., 10-bit HEVC).
     *   **Priority**: Medium (Pro Feature)
     *   **Files**: `SettingsView.swift` (for UI selection), `CameraViewModel.swift` (to store selection), `VideoFormatService.swift`/`RecordingService.swift` (to configure `AVCaptureSession` and `AVAssetWriter` outputs based on selected format identifier).
     *   **Dependencies**: Relies on querying device capabilities (`AVCaptureDevice.Format.supportedProResCodecTypes`, etc.) and configuring `AVOutputSettingsAssistant` or `AVAssetWriterInput` settings correctly.
 
-8.  **Onboarding / Permissions Primer Screen**
+9.  **Onboarding / Permissions Primer Screen**
     *   **Description**: Implement an initial onboarding flow or context-specific primer screens presented *before* the system permission prompts (Camera, Microphone, Photo Library, Location). These screens should clearly explain *why* each permission is needed for the app's functionality, increasing the likelihood of user acceptance.
     *   **Priority**: Medium (User Experience / Onboarding)
     *   **Files**: New SwiftUI Views (`OnboardingView.swift`, `PermissionPrimerView.swift`), integrated early in the app lifecycle or before permission-requiring features are accessed.
     *   **Dependencies**: Relies on the robust permission handling logic (Active Task #2).
 
-9.  **GPS Data Tagging for Videos**
+10. **GPS Data Tagging for Videos**
     *   **Description**: Capture the user's location (with permission) while recording and embed GPS coordinates (latitude, longitude, altitude, timestamp) into the video file's metadata (e.g., using `AVMetadataItem`).
     *   **Priority**: Low/Medium (Feature)
     *   **Files**: `RecordingService.swift`, potentially a new `LocationService.swift` (using `CoreLocation`).
     *   **Dependencies**: Requires adding `CoreLocation` framework and handling location permissions (`Info.plist` keys).
 
-10. **Apple Watch Companion Display Enhancements**
+11. **Apple Watch Companion Display Enhancements**
     *   **Description**: Update the SC Watch App interface to display the current Resolution, Color Space, and Recording Codec/File Type being used by the connected iPhone app. This provides quick glanceable information during recording setup or monitoring.
     *   **Priority**: Low/Medium (Companion App Feature)
     *   **Files**: `SC Watch App/ContentView.swift` (or relevant Watch App views), `WatchConnectivityService.swift` (for data transfer), `CameraViewModel.swift` (to send updated settings).
     *   **Dependencies**: Relies on `WatchConnectivity` framework for communication between iPhone and Watch.
 
-11. **Custom Recording Save Location (incl. iCloud Drive)**
+12. **Custom Recording Save Location (incl. iCloud Drive)**
     *   **Description**: Allow the user to select a specific folder as the destination for saved recordings, including locations within iCloud Drive or potentially other cloud storage providers via the document picker/file system APIs.
     *   **Priority**: Low/Medium (Usability/Flexibility)
     *   **Files**: `RecordingService.swift` (to use the selected URL), `SettingsView.swift` or a dedicated file picker UI, potentially a `StorageManager` service to handle bookmarking/accessing selected locations.
     *   **Dependencies**: Requires using `UIDocumentPickerViewController` or file system APIs to select folders, handling security-scoped bookmarks for persistent access, managing potential network/iCloud delays or errors.
 
-12. **DockKit Integration**
+13. **DockKit Integration**
     *   **Description**: Implement support for DockKit-compatible motorized stands. Allow the app to detect connection, potentially control pan/tilt for subject tracking, and query dock status.
     *   **Priority**: Low (Feature / Accessory Support)
     *   **Files**: New services/managers related to DockKit framework (`DockKit`), potentially impacting `CameraViewModel.swift` or a dedicated `DockManager.swift`.
     *   **Dependencies**: Requires adding `DockKit` framework, handling relevant entitlements and permissions.
 
-13. **External Camera Control Button Support**
+14. **External Camera Control Button Support**
     *   **Description**: Allow external hardware buttons (e.g., volume buttons, dedicated Bluetooth shutter remotes, potentially MFi accessory buttons) to trigger actions like starting/stopping recording or taking a photo (if photo mode is added).
     *   **Priority**: Low (Feature / Usability)
     *   **Files**: Potentially `CameraViewModel.swift`, `AppDelegate.swift` (for handling certain system events), or a dedicated input handling service.

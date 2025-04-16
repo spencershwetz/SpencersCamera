@@ -4,62 +4,94 @@ import UIKit
 /// View containing the main function buttons (Record, Flip Camera, Settings, Library).
 struct FunctionButtonsView: View {
     @ObservedObject var viewModel: CameraViewModel
+    @ObservedObject var settingsModel: SettingsModel // Inject SettingsModel
     @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
     @Binding var isShowingSettings: Bool
-    @Binding var isShowingLibrary: Bool // Add binding for library presentation
+    @Binding var isShowingLibrary: Bool
     @State private var topSafeAreaHeight: CGFloat = 44 // Default value
     
     var body: some View {
         GeometryReader { geometry in
-            HStack(spacing: 0) { // Set HStack spacing to 0 to have full control
+            HStack(spacing: 0) {
                 // Left side buttons
                 HStack {
-                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
-                        Button("F1") {
-                            print("F1 tapped")
-                        }
-                        .buttonStyle(FunctionButtonStyle())
-                    }
-                    .frame(width: 40, height: 30)
-                    .padding(.trailing, 16) // Space between F1 and F2
+                    functionButton(index: 1, assignedAbility: $settingsModel.functionButton1Ability)
+                        .padding(.trailing, 16) // Space between F1 and F2
                     
-                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
-                        Button("F2") {
-                            print("F2 tapped")
-                        }
-                        .buttonStyle(FunctionButtonStyle())
-                    }
-                    .frame(width: 40, height: 30)
+                    functionButton(index: 2, assignedAbility: $settingsModel.functionButton2Ability)
                 }
-                .padding(.leading, geometry.size.width * 0.15) // Keep F2 in current position
+                .padding(.leading, geometry.size.width * 0.15)
                 
                 Spacer()
-                    .frame(minWidth: geometry.size.width * 0.3) // Ensure minimum space for Dynamic Island
+                    .frame(minWidth: geometry.size.width * 0.3)
                 
-                // Right side buttons
+                // Right side buttons (Placeholder for F3, F4)
                 HStack {
-                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
-                        Button("F3") {
-                            print("F3 tapped")
-                        }
-                        .buttonStyle(FunctionButtonStyle())
-                    }
-                    .frame(width: 40, height: 30)
-                    .padding(.trailing, 16) // Space between F3 and F4
-                    
-                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
-                        Button("F4") {
-                            print("F4 tapped")
-                        }
-                        .buttonStyle(FunctionButtonStyle())
-                    }
-                    .frame(width: 40, height: 30)
+                    // Placeholder for F3
+                    Spacer().frame(width: 40, height: 30)
+                        .padding(.trailing, 16)
+                    // Placeholder for F4
+                    Spacer().frame(width: 40, height: 30)
                 }
-                .padding(.trailing, geometry.size.width * 0.15) // Keep F3 in current position
+                .padding(.trailing, geometry.size.width * 0.15)
             }
-            .padding(.top, 20) // INCREASED: Add more padding below the safe area
+            .padding(.top, 20)
             .frame(width: geometry.size.width, height: 44)
             .background(Color.black.opacity(0.01))
+        }
+    }
+    
+    // Reusable view for a function button with context menu
+    @ViewBuilder
+    private func functionButton(index: Int, assignedAbility: Binding<FunctionButtonAbility>) -> some View {
+        RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+            Button(getButtonLabel(for: assignedAbility.wrappedValue)) {
+                handleButtonTap(ability: assignedAbility.wrappedValue)
+            }
+            .foregroundColor(assignedAbility.wrappedValue == .lockExposure && viewModel.isExposureLocked ? .red : .white)
+            .buttonStyle(FunctionButtonStyle())
+        }
+        .frame(width: 40, height: 30)
+        .contextMenu {
+            Text("Assign to F\(index)")
+            Divider()
+            ForEach(FunctionButtonAbility.allCases) { ability in
+                Button {
+                    assignedAbility.wrappedValue = ability
+                } label: {
+                    HStack {
+                        Text(ability.displayName)
+                        Spacer()
+                        if assignedAbility.wrappedValue == ability {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Helper to get button label (can be customized later)
+    private func getButtonLabel(for ability: FunctionButtonAbility) -> String {
+        switch ability {
+        case .none:
+            return "F?"
+        case .lockExposure:
+            return "AE"
+        // Add cases for future abilities
+        }
+    }
+    
+    // Placeholder for button tap action
+    private func handleButtonTap(ability: FunctionButtonAbility) {
+        print("Tapped button with ability: \(ability.displayName)")
+        switch ability {
+        case .none:
+            // Do nothing or perhaps show an alert/hint to assign an ability
+            print("Function button has no ability assigned.")
+        case .lockExposure:
+            viewModel.toggleExposureLock() // Call the new method on CameraViewModel
+        // Add cases for future abilities
         }
     }
 }

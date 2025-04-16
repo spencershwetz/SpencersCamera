@@ -51,7 +51,7 @@ struct CameraView: View {
                     .edgesIgnoringSafeArea(.all)
                 
                 // Function buttons overlay
-                FunctionButtonsView(viewModel: viewModel, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
+                FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
                     .zIndex(100)
                     .allowsHitTesting(true)
                 
