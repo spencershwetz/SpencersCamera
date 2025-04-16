@@ -158,7 +158,6 @@ struct FunctionButtonStyle: ButtonStyle {
             .padding(.horizontal, 8)
             .background(Color.gray.opacity(0.3))
             .cornerRadius(5)
-            .foregroundColor(.white)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
     }
