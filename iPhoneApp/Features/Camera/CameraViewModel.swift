@@ -7,6 +7,7 @@ import os.log
 import CoreImage
 import CoreMedia
 import WatchConnectivity
+import Combine
 
 extension CFString {
     var string: String {
@@ -335,6 +336,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private let wcLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "WatchConnectivity")
     private var isAppCurrentlyActive = false // Track app active state
     
+    // Timer for polling WB
+    private var wbPollingTimerCancellable: AnyCancellable?
+    private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
+    
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -409,6 +414,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Ensure app active state is set before sending initial context if possible
         // If init runs before scenePhase updates, initial context might show inactive
         sendStateToWatch()
+
+        // Observe session running state to start/stop timer
+        $isSessionRunning
+            .sink { [weak self] isRunning in
+                self?.handleSessionRunningStateChange(isRunning)
+            }
+            .store(in: &cancellables) // Assuming you have a cancellables set
     }
     
     deinit {
@@ -811,6 +823,51 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             logger.info("Shutter Priority disabled: reverting to auto-exposure")
         }
     }
+
+    // Add a property to store cancellables if it doesn't exist
+    private var cancellables = Set<AnyCancellable>()
+
+    private func handleSessionRunningStateChange(_ isRunning: Bool) {
+        if isRunning {
+            startPollingWhiteBalance()
+        } else {
+            stopPollingWhiteBalance()
+        }
+    }
+
+    private func startPollingWhiteBalance() {
+        logger.info("Starting WB polling timer.")
+        // Invalidate existing timer just in case
+        stopPollingWhiteBalance()
+        
+        wbPollingTimerCancellable = Timer.publish(every: wbPollingInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.pollCurrentWhiteBalance()
+            }
+    }
+
+    private func stopPollingWhiteBalance() {
+        logger.info("Stopping WB polling timer.")
+        wbPollingTimerCancellable?.cancel()
+        wbPollingTimerCancellable = nil
+    }
+
+    private func pollCurrentWhiteBalance() {
+        guard let currentTemperature = exposureService.getCurrentWhiteBalanceTemperature() else {
+            // logger.trace("WB Poll: Exposure service returned nil, skipping update.")
+            return
+        }
+        
+        // Only update if the value actually changed significantly to avoid needless UI churn
+        // Using a threshold of 1 Kelvin change
+        if abs(self.whiteBalance - currentTemperature) >= 1.0 {
+            // logger.debug("WB Poll: Updating white balance from \(self.whiteBalance) to \(currentTemperature)")
+            self.whiteBalance = currentTemperature
+        } else {
+             // logger.trace("WB Poll: Temperature \(currentTemperature) hasn't changed significantly from \(self.whiteBalance). Skipping update.")
+        }
+    }
 }
 
 // MARK: - VideoFormatServiceDelegate
@@ -883,6 +940,7 @@ extension CameraViewModel: CameraSetupServiceDelegate {
 extension CameraViewModel: ExposureServiceDelegate {
     func didUpdateWhiteBalance(_ temperature: Float) {
         DispatchQueue.main.async {
+            self.logger.debug("Delegate: didUpdateWhiteBalance called with temperature: \(temperature)")
             self.whiteBalance = temperature
         }
     }

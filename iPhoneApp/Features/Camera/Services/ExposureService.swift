@@ -32,27 +32,17 @@ class ExposureService: NSObject {
         logger.info("ExposureService deinitialized, observers removed.")
     }
     
-    func setDevice(_ device: AVCaptureDevice) {
-        // Remove observers from the old device before setting the new one
+    func setDevice(_ device: AVCaptureDevice?) {
+        logger.info("ExposureService setDevice called with: \(device?.localizedName ?? "nil")")
         removeDeviceObservers()
-        
         self.device = device
-        
-        // Set up observers for the new device
-        setupDeviceObservers()
-        
-        // Initialize exposure mode to auto when device is set
-        do {
-            try device.lockForConfiguration()
-            if device.isExposureModeSupported(.continuousAutoExposure) {
-                device.exposureMode = .continuousAutoExposure
-                isAutoExposureEnabled = true
-                logger.info("Initial exposure mode set to continuousAutoExposure")
-            }
-            device.unlockForConfiguration()
-        } catch {
-            logger.error("Failed to set initial exposure mode: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+        if let device = device {
+            logger.info("ExposureService setupDeviceObservers called for device: \(device.localizedName)")
+            setupDeviceObservers(for: device)
+            self.isAutoExposureEnabled = (device.exposureMode == .continuousAutoExposure)
+            logger.info("Initial auto exposure state set to: \(self.isAutoExposureEnabled)")
+        } else {
+             logger.info("ExposureService setDevice called with nil, observers removed.")
         }
     }
     
@@ -63,9 +53,7 @@ class ExposureService: NSObject {
     
     // MARK: - KVO Setup and Teardown
     
-    private func setupDeviceObservers() {
-        guard let device = device else { return }
-        
+    private func setupDeviceObservers(for device: AVCaptureDevice) {
         logger.info("Setting up KVO observers for device: \(device.localizedName)")
         
         // Observe ISO changes
@@ -101,7 +89,7 @@ class ExposureService: NSObject {
                  // Convert gains to temperature
                 let tempAndTint = device.temperatureAndTintValues(for: newGains)
                 let temperature = tempAndTint.temperature
-                // logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature)")
+                logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature)")
                 DispatchQueue.main.async {
                     self.delegate?.didUpdateWhiteBalance(temperature)
                 }
@@ -113,7 +101,7 @@ class ExposureService: NSObject {
     }
     
     private func removeDeviceObservers() {
-        logger.info("Removing KVO observers.")
+        logger.info("Removing KVO observers. Stack trace: \(Thread.callStackSymbols.joined(separator: "\\n"))")
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
         whiteBalanceGainsObservation?.invalidate()
@@ -456,5 +444,32 @@ class ExposureService: NSObject {
             logger.error("Error setting tint: \(error.localizedDescription)")
             delegate?.didEncounterError(.whiteBalanceError)
         }
+    }
+    
+    /// Directly queries the current device white balance temperature.
+    /// Returns the temperature in Kelvin, or nil if device is unavailable or mode doesn't support it.
+    func getCurrentWhiteBalanceTemperature() -> Float? {
+        guard let device = device else { 
+            logger.error("Cannot get current WB temperature: No device")
+            return nil 
+        }
+        
+        // WB temperature is typically relevant in auto or locked modes
+        guard device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked else {
+            // logger.debug("Cannot get current WB temperature: WB mode is not auto or locked (\(device.whiteBalanceMode.rawValue))")
+            // Return nil or perhaps a default? Returning nil seems clearer.
+            return nil
+        }
+        
+        // Ensure gains are valid before converting
+        let gains = device.deviceWhiteBalanceGains
+        guard gains.redGain > 0, gains.greenGain > 0, gains.blueGain > 0 else {
+            logger.warning("Cannot get current WB temperature: Invalid device gains (\(String(describing: gains))")
+            return nil
+        }
+
+        let tempAndTint = device.temperatureAndTintValues(for: gains)
+        // logger.debug("Queried current WB temp: \(tempAndTint.temperature)K")
+        return tempAndTint.temperature
     }
 } 
