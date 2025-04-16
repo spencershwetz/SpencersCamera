@@ -397,7 +397,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         // Set initial shutter angle
-        updateShutterAngle(180.0)
+        // updateShutterAngle(180.0)  // temporarily disabled to avoid forcing custom exposure
         
         print("📱 LUT Loading: No default LUTs will be loaded")
         
