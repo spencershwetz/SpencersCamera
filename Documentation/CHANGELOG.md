@@ -8,8 +8,14 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+*   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` on the `AVCaptureDevice`. This ensures the delegate (and thus the UI/debug overlay) receives real-time updates for these values even when the camera is in automatic exposure or white balance modes.
+
 ### Fixed
 
+*   Corrected KVO KeyPath syntax in `ExposureService`.
+*   Added missing explicit `self` references within closures in `ExposureService`.
+*   Removed incorrect optional chaining `?.` on non-optional `self` in `ExposureService`.
+*   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService`.
 *   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
 
 ### Removed

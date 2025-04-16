@@ -9,19 +9,37 @@ protocol ExposureServiceDelegate: AnyObject {
     func didEncounterError(_ error: CameraError)
 }
 
-class ExposureService {
+// Inherit from NSObject to support KVO
+class ExposureService: NSObject {
     private let logger = Logger(subsystem: "com.camera", category: "ExposureService")
     private weak var delegate: ExposureServiceDelegate?
     
     private var device: AVCaptureDevice?
     private var isAutoExposureEnabled = true
     
+    // KVO Observation tokens
+    private var isoObservation: NSKeyValueObservation?
+    private var exposureDurationObservation: NSKeyValueObservation?
+    private var whiteBalanceGainsObservation: NSKeyValueObservation?
+    
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
     }
     
+    // Clean up observers on deinitialization
+    deinit {
+        removeDeviceObservers()
+        logger.info("ExposureService deinitialized, observers removed.")
+    }
+    
     func setDevice(_ device: AVCaptureDevice) {
+        // Remove observers from the old device before setting the new one
+        removeDeviceObservers()
+        
         self.device = device
+        
+        // Set up observers for the new device
+        setupDeviceObservers()
         
         // Initialize exposure mode to auto when device is set
         do {
@@ -43,6 +61,89 @@ class ExposureService {
         return device?.localizedName ?? "No Device Set"
     }
     
+    // MARK: - KVO Setup and Teardown
+    
+    private func setupDeviceObservers() {
+        guard let device = device else { return }
+        
+        logger.info("Setting up KVO observers for device: \(device.localizedName)")
+        
+        // Observe ISO changes
+        isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
+            guard let self = self, let newISO = change.newValue else { return }
+            // Only report if in auto mode (or potentially locked, where value is still useful)
+            if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+                // logger.debug("[KVO] ISO changed to: \(newISO)")
+                // Update delegate on the main thread as it might trigger UI updates
+                DispatchQueue.main.async {
+                    self.delegate?.didUpdateISO(newISO)
+                }
+            }
+        }
+        
+        // Observe exposure duration (shutter speed) changes
+        exposureDurationObservation = device.observe(\.exposureDuration, options: [.new]) { [weak self] device, change in
+            guard let self = self, let newDuration = change.newValue else { return }
+            if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+                // logger.debug("[KVO] Exposure duration changed to: \(CMTimeGetSeconds(newDuration))")
+                DispatchQueue.main.async {
+                    self.delegate?.didUpdateShutterSpeed(newDuration)
+                }
+            }
+        }
+        
+        // Observe white balance gains changes
+        whiteBalanceGainsObservation = device.observe(\.deviceWhiteBalanceGains, options: [.new]) { [weak self] device, change in
+            guard let self = self, let newGains = change.newValue else { return }
+            // Always report WB changes if the delegate is available, regardless of mode?
+            // Let the ViewModel decide if it cares based on its own state.
+            // if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
+                 // Convert gains to temperature
+                let tempAndTint = device.temperatureAndTintValues(for: newGains)
+                let temperature = tempAndTint.temperature
+                // logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature)")
+                DispatchQueue.main.async {
+                    self.delegate?.didUpdateWhiteBalance(temperature)
+                }
+            // }
+        }
+        
+        // Report initial values immediately after setting observers
+        reportCurrentDeviceValues()
+    }
+    
+    private func removeDeviceObservers() {
+        logger.info("Removing KVO observers.")
+        isoObservation?.invalidate()
+        exposureDurationObservation?.invalidate()
+        whiteBalanceGainsObservation?.invalidate()
+        isoObservation = nil
+        exposureDurationObservation = nil
+        whiteBalanceGainsObservation = nil
+    }
+
+    /// Helper function to report the current values after setting observers or device change.
+    private func reportCurrentDeviceValues() {
+        guard let device = device else { return }
+        logger.debug("Reporting initial device values after observer setup.")
+        DispatchQueue.main.async { [weak self] in
+             guard let self = self else { return }
+             // Report ISO
+             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+                 self.delegate?.didUpdateISO(device.iso)
+             }
+             // Report Shutter Speed
+             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+                 self.delegate?.didUpdateShutterSpeed(device.exposureDuration)
+             }
+             // Report White Balance
+             if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
+                 let tempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
+                 self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature)
+             }
+        }
+    }
+    
     func updateWhiteBalance(_ temperature: Float) {
         guard let device = device else { 
             logger.error("No camera device available")
@@ -59,10 +160,22 @@ class ExposureService {
             gains.greenGain = min(max(1.0, gains.greenGain), maxGain)
             gains.blueGain  = min(max(1.0, gains.blueGain), maxGain)
             
-            device.setWhiteBalanceModeLocked(with: gains) { _ in }
+            // Set mode to locked when manually setting WB
+            if device.isWhiteBalanceModeSupported(.locked) {
+                device.whiteBalanceMode = .locked
+                device.setWhiteBalanceModeLocked(with: gains) { [weak self] _ in
+                    // Report the value back via delegate *after* it's set
+                    DispatchQueue.main.async {
+                        self?.delegate?.didUpdateWhiteBalance(temperature)
+                    }
+                }
+            } else {
+                 logger.warning("Locked white balance mode not supported.")
+            }
             device.unlockForConfiguration()
-            
-            delegate?.didUpdateWhiteBalance(temperature)
+
+            // Delegate call moved inside completion handler to reflect actual set value timing
+            // delegate?.didUpdateWhiteBalance(temperature) 
         } catch {
             logger.error("White balance error: \(error.localizedDescription)")
             delegate?.didEncounterError(.whiteBalanceError)
@@ -95,14 +208,22 @@ class ExposureService {
             // Set exposure mode to custom
             if device.isExposureModeSupported(.custom) {
                 device.exposureMode = .custom
-                device.setExposureModeCustom(duration: device.exposureDuration, iso: clampedISO) { _ in }
+                device.setExposureModeCustom(duration: device.exposureDuration, iso: clampedISO) { [weak self] _ in
+                     // Report the value back via delegate *after* it's set
+                     DispatchQueue.main.async {
+                          self?.delegate?.didUpdateISO(clampedISO)
+                          self?.logger.debug("Successfully set ISO to \(clampedISO)")
+                     }
+                }
+            } else {
+                 logger.warning("Custom exposure mode not supported.")
             }
             
             device.unlockForConfiguration()
             
-            // Update the delegate with the actual value used
-            delegate?.didUpdateISO(clampedISO)
-            logger.debug("Successfully set ISO to \(clampedISO)")
+            // Delegate call moved inside completion handler
+            // delegate?.didUpdateISO(clampedISO)
+            // logger.debug("Successfully set ISO to \(clampedISO)")
         } catch {
             logger.error("ISO update error: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)
@@ -133,17 +254,30 @@ class ExposureService {
             
             if device.isExposureModeSupported(.custom) {
                 device.exposureMode = .custom
-                device.setExposureModeCustom(duration: speed, iso: safeISO) { _ in }
+                device.setExposureModeCustom(duration: speed, iso: safeISO) { [weak self] timestamp in
+                    // Report the value back via delegate *after* it's set
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        self.delegate?.didUpdateShutterSpeed(speed)
+                        // If we had to correct ISO, update that too
+                        if safeISO != currentISO {
+                            self.delegate?.didUpdateISO(safeISO)
+                        }
+                        self.logger.debug("Successfully set shutter speed to \(CMTimeGetSeconds(speed))s")
+                    }
+                }
+            } else {
+                 logger.warning("Custom exposure mode not supported.")
             }
             
             device.unlockForConfiguration()
             
-            delegate?.didUpdateShutterSpeed(speed)
-            
+            // Delegate calls moved inside completion handler
+            // delegate?.didUpdateShutterSpeed(speed)
             // If we had to correct ISO, update that too
-            if safeISO != currentISO {
-                delegate?.didUpdateISO(safeISO)
-            }
+            // if safeISO != currentISO {
+            //     delegate?.didUpdateISO(safeISO)
+            // }
         } catch {
             logger.error("Shutter speed error: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)
@@ -158,6 +292,9 @@ class ExposureService {
     }
     
     func setAutoExposureEnabled(_ enabled: Bool) {
+        // Only update if the state actually changes
+        guard isAutoExposureEnabled != enabled else { return }
+        
         isAutoExposureEnabled = enabled
         updateExposureMode()
     }
@@ -175,6 +312,8 @@ class ExposureService {
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                     logger.info("Auto exposure enabled")
+                    // Report current values when switching back to auto
+                    reportCurrentDeviceValues()
                 }
             } else {
                 if device.isExposureModeSupported(.custom) {
@@ -187,12 +326,18 @@ class ExposureService {
                     let clampedISO = min(max(minISO, currentISO), maxISO)
                     
                     device.setExposureModeCustom(duration: device.exposureDuration,
-                                                 iso: clampedISO) { _ in }
-                    logger.info("Manual exposure enabled with ISO \(clampedISO)")
+                                                 iso: clampedISO) { [weak self] _ in
+                         // Report the value back via delegate *after* it's set
+                         DispatchQueue.main.async {
+                              self?.delegate?.didUpdateISO(clampedISO)
+                              self?.logger.debug("Successfully set ISO to \(clampedISO)")
+                         }
+                    }
+                    self.logger.info("Manual exposure enabled with ISO \(clampedISO)")
                     
                     // If we had to adjust the ISO, update the delegate
                     if clampedISO != currentISO {
-                        delegate?.didUpdateISO(clampedISO)
+                        self.delegate?.didUpdateISO(clampedISO)
                     }
                 }
             }
@@ -256,12 +401,20 @@ class ExposureService {
                 logger.debug("[ExposureLock] Setting exposureMode completed. Unlocking configuration on \(deviceName)...")
                 device.unlockForConfiguration()
                 logger.info("[ExposureLock] Successfully set exposure mode to \(String(describing: targetMode)) for \(deviceName)")
+
+                // Report current device values after mode change completes
+                 reportCurrentDeviceValues()
+
             } catch {
                 logger.error("[ExposureLock] Error setting exposure mode to \(String(describing: targetMode)) for \(deviceName): \(error.localizedDescription)")
                 delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure mode for \(deviceName): \(error.localizedDescription)"))
+                // Attempt to unlock configuration if lock failed during change
+                device.unlockForConfiguration()
             }
         } else {
             logger.info("[ExposureLock] Exposure mode on \(deviceName) is already \(String(describing: targetMode)), no change needed.")
+             // Even if no change, report current values in case lock state affects interpretation
+             reportCurrentDeviceValues()
         }
     }
     
