@@ -59,9 +59,11 @@ class ExposureService: NSObject {
         // Observe ISO changes
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
-            // Only report if in auto mode (or potentially locked, where value is still useful)
-            if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
-                // logger.debug("[KVO] ISO changed to: \(newISO)")
+            // Report if in auto, locked, OR custom mode (since ISO can auto-adjust in custom mode too)
+            if device.exposureMode == .continuousAutoExposure || 
+               device.exposureMode == .locked || 
+               device.exposureMode == .custom {
+                // logger.debug("[KVO] ISO changed to: \(newISO) while mode is \(device.exposureMode.rawValue)")
                 // Update delegate on the main thread as it might trigger UI updates
                 DispatchQueue.main.async {
                     self.delegate?.didUpdateISO(newISO)
@@ -110,19 +112,25 @@ class ExposureService: NSObject {
         whiteBalanceGainsObservation = nil
     }
 
-    /// Helper function to report the current values after setting observers or device change.
-    private func reportCurrentDeviceValues() {
+    /// Helper function to report the current values after setting observers or device change. Internal access needed by ViewModel.
+    func reportCurrentDeviceValues() {
         guard let device = device else { return }
         logger.debug("Reporting initial device values after observer setup.")
         DispatchQueue.main.async { [weak self] in
              guard let self = self else { return }
-             // Report ISO
-             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+             // Report ISO - Allow reporting in .custom mode as well
+             if device.exposureMode == .continuousAutoExposure || 
+                device.exposureMode == .locked || 
+                device.exposureMode == .custom { // <-- Allow reporting in .custom mode
                  self.delegate?.didUpdateISO(device.iso)
+                 logger.debug("Reporting current ISO: \(device.iso) in mode \(device.exposureMode.rawValue)")
              }
-             // Report Shutter Speed
-             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+             // Report Shutter Speed - Allow reporting in .custom mode as well
+             if device.exposureMode == .continuousAutoExposure || 
+                device.exposureMode == .locked || 
+                device.exposureMode == .custom { // <-- Allow reporting in .custom mode
                  self.delegate?.didUpdateShutterSpeed(device.exposureDuration)
+                  logger.debug("Reporting current Shutter: \(CMTimeGetSeconds(device.exposureDuration))s in mode \(device.exposureMode.rawValue)")
              }
              // Report White Balance
              if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
@@ -390,8 +398,11 @@ class ExposureService: NSObject {
                 device.unlockForConfiguration()
                 logger.info("[ExposureLock] Successfully set exposure mode to \(String(describing: targetMode)) for \(deviceName)")
 
-                // Report current device values after mode change completes
-                 reportCurrentDeviceValues()
+                // Report current values ONLY if we locked or unlocked to AUTO.
+                // If we unlocked to CUSTOM, rely solely on KVO updates to avoid reporting a potentially stale value immediately after mode switch.
+                if targetMode == .locked || targetMode == .continuousAutoExposure {
+                    reportCurrentDeviceValues()
+                }
 
             } catch {
                 logger.error("[ExposureLock] Error setting exposure mode to \(String(describing: targetMode)) for \(deviceName): \(error.localizedDescription)")
@@ -401,8 +412,12 @@ class ExposureService: NSObject {
             }
         } else {
             logger.info("[ExposureLock] Exposure mode on \(deviceName) is already \(String(describing: targetMode)), no change needed.")
-             // Even if no change, report current values in case lock state affects interpretation
-             reportCurrentDeviceValues()
+            // Even if no mode change occurred, report values if the target was lock or auto, 
+            // as the interpretation might change (e.g., KVO reporting might differ).
+            // Avoid reporting if target was .custom and already .custom to prevent potential stale values.
+            if targetMode == .locked || targetMode == .continuousAutoExposure {
+                reportCurrentDeviceValues()
+            }
         }
     }
     

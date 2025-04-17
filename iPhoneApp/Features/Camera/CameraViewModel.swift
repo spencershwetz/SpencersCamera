@@ -602,12 +602,26 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         self.recordingStartTime = nil // Clear start time
         logger.info("Recording state set to false.")
         
-        // Restore exposure lock state if auto-lock was enabled
+        // Restore exposure state after recording, considering Shutter Priority
         let settings = SettingsModel()
         if settings.isExposureLockEnabledDuringRecording {
-            logger.info("Auto-restoring exposure lock state after recording stop.")
-            if self.isExposureLocked != exposureLockStateBeforeRecording { // Only restore if different
-                self.isExposureLocked = exposureLockStateBeforeRecording // Restore previous state
+            if self.isShutterPriorityEnabled {
+                // If shutter priority was active, re-apply it instead of just unlocking
+                logger.info("Recording stopped: Re-applying Shutter Priority (180°).")
+                self.updateShutterAngle(180.0) // Re-sets mode to .custom
+                // Ensure the UI reflects that exposure isn't strictly 'locked' anymore
+                if self.isExposureLocked { 
+                    self.isExposureLocked = false // Triggers updateExposureLock -> setExposureLock(locked: false)
+                }
+                // Explicitly report values AFTER mode is set back to custom and lock state updated
+                // to ensure UI reflects the newly adjusting ISO/Shutter.
+                exposureService.reportCurrentDeviceValues()
+            } else {
+                // Otherwise, restore the lock state from before recording started
+                logger.info("Recording stopped: Restoring previous exposure lock state: \(self.exposureLockStateBeforeRecording).")
+                if self.isExposureLocked != self.exposureLockStateBeforeRecording { // Only restore if different
+                    self.isExposureLocked = self.exposureLockStateBeforeRecording // Restore previous state (triggers service call)
+                }
             }
         }
         
@@ -842,13 +856,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         isShutterPriorityEnabled.toggle()
         if isShutterPriorityEnabled {
             // Disable auto exposure and set shutter to 180° mode
-            isAutoExposureEnabled = false
             logger.info("Shutter Priority enabled: locking shutter to 180°")
             updateShutterAngle(180.0)
+            // Ensure AE and Lock states reflect the .custom mode change
+            isAutoExposureEnabled = false 
+            isExposureLocked = false
         } else {
             // Revert to continuous auto-exposure
-            isAutoExposureEnabled = true
             logger.info("Shutter Priority disabled: reverting to auto-exposure")
+            // Ensure AE and Lock states reflect the .continuousAutoExposure mode change
+            isAutoExposureEnabled = true 
+            isExposureLocked = false 
         }
     }
 
