@@ -45,6 +45,17 @@ struct SettingsView: View {
                     .onChange(of: viewModel.selectedFrameRate) { _, newFps in
                         viewModel.updateFrameRate(newFps)
                     }
+
+                    Toggle(isOn: $settingsModel.isWhiteBalanceLockEnabled) {
+                        HStack {
+                            Text("Lock White Balance During Recording")
+                            if settingsModel.isWhiteBalanceLockEnabled {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                    .tint(.blue)
                 } header: {
                     Text("Camera 🎥")
                 }

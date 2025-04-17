@@ -32,6 +32,13 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var isWhiteBalanceLockEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isWhiteBalanceLockEnabled, forKey: Keys.isWhiteBalanceLockEnabled)
+            NotificationCenter.default.post(name: .whiteBalanceLockSettingChanged, object: nil)
+        }
+    }
+    
     // MARK: - Function Button Assignments
     @Published var functionButton1Ability: FunctionButtonAbility {
         didSet {
@@ -69,6 +76,7 @@ class SettingsModel: ObservableObject {
         let bakeInLUTValue = UserDefaults.standard.object(forKey: Keys.isBakeInLUTEnabled)
         let rawFn1Ability = UserDefaults.standard.string(forKey: Keys.functionButton1Ability)
         let rawFn2Ability = UserDefaults.standard.string(forKey: Keys.functionButton2Ability)
+        let initialWhiteBalanceLockEnabled = UserDefaults.standard.bool(forKey: Keys.isWhiteBalanceLockEnabled)
 
         // 2. Determine final initial values, applying defaults
         var finalFlashlightIntensity = initialFlashlightIntensity
@@ -97,6 +105,7 @@ class SettingsModel: ObservableObject {
         self.isBakeInLUTEnabled = finalBakeInLUTEnabled
         self.functionButton1Ability = finalFn1Ability
         self.functionButton2Ability = finalFn2Ability
+        self.isWhiteBalanceLockEnabled = initialWhiteBalanceLockEnabled
 
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
@@ -122,6 +131,7 @@ class SettingsModel: ObservableObject {
         static let isBakeInLUTEnabled = "isBakeInLUTEnabled"
         static let functionButton1Ability = "functionButton1Ability"
         static let functionButton2Ability = "functionButton2Ability"
+        static let isWhiteBalanceLockEnabled = "isWhiteBalanceLockSettingChanged"
     }
 }
 
@@ -130,5 +140,6 @@ extension Notification.Name {
     static let appleLogSettingChanged = Notification.Name("appleLogSettingChanged")
     static let flashlightSettingChanged = Notification.Name("flashlightSettingChanged")
     static let bakeInLUTSettingChanged = Notification.Name("bakeInLUTSettingChanged")
+    static let whiteBalanceLockSettingChanged = Notification.Name("whiteBalanceLockSettingChanged")
     // Add notifications for function button changes if needed later
 } 

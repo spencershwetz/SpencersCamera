@@ -521,6 +521,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Get current settings
         let settings = SettingsModel()
         
+        // Lock white balance if enabled in settings
+        if settings.isWhiteBalanceLockEnabled {
+            exposureService.updateWhiteBalance(self.whiteBalance)
+        }
+        
         // Set the selected LUT TEXTURE onto the METAL processor BEFORE configuring the recording service
         logger.debug("Setting Metal LUT texture for bake-in: \(self.lutManager.currentLUTTexture != nil ? "Available" : "None")")
         recordingService.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
