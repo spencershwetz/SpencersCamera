@@ -319,6 +319,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Store recording orientation
     private var recordingOrientation: CGFloat?
     
+    // Store exposure lock state before recording starts if auto-lock is enabled
+    private var exposureLockStateBeforeRecording: Bool = false
+    
     // Service Instances
     private var cameraSetupService: CameraSetupService!
     private var exposureService: ExposureService!
@@ -522,7 +525,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let settings = SettingsModel()
         
         // Lock white balance if enabled in settings
+        // Lock exposure if enabled in settings
+        if settings.isExposureLockEnabledDuringRecording {
+            logger.info("Auto-locking exposure for recording start.")
+            exposureLockStateBeforeRecording = self.isExposureLocked // Store current state
+            if !self.isExposureLocked { // Only lock if not already locked
+                self.isExposureLocked = true // This triggers updateExposureLock() via didSet
+            }
+        }
+        
+        // Lock white balance if enabled in settings
         if settings.isWhiteBalanceLockEnabled {
+            logger.info("Auto-locking white balance for recording start.")
             exposureService.updateWhiteBalance(self.whiteBalance)
         }
         
@@ -587,6 +601,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         self.isRecording = false
         self.recordingStartTime = nil // Clear start time
         logger.info("Recording state set to false.")
+        
+        // Restore exposure lock state if auto-lock was enabled
+        let settings = SettingsModel()
+        if settings.isExposureLockEnabledDuringRecording {
+            logger.info("Auto-restoring exposure lock state after recording stop.")
+            if self.isExposureLocked != exposureLockStateBeforeRecording { // Only restore if different
+                self.isExposureLocked = exposureLockStateBeforeRecording // Restore previous state
+            }
+        }
         
         // Notify RotationLockedContainer about recording state change
         NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)

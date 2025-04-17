@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+*   Setting: Added "Lock Exposure During Recording" toggle in Settings.
+*   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts and restore the previous state when recording stops, if the setting is enabled.
+
 ### Changed
 
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` on the `AVCaptureDevice`. This ensures the delegate (and thus the UI/debug overlay) receives real-time updates for these values even when the camera is in automatic exposure or white balance modes.

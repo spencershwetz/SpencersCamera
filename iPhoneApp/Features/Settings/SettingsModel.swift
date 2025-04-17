@@ -1,6 +1,18 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import SwiftUI
+import Combine
+
+// MARK: - Notification Names
+extension Notification.Name {
+    static let appleLogSettingChanged = Notification.Name("appleLogSettingChanged")
+    static let flashlightSettingChanged = Notification.Name("flashlightSettingChanged")
+    static let bakeInLUTSettingChanged = Notification.Name("bakeInLUTSettingChanged")
+    static let whiteBalanceLockSettingChanged = Notification.Name("whiteBalanceLockSettingChanged")
+    static let exposureLockDuringRecordingSettingChanged = Notification.Name("exposureLockDuringRecordingSettingChanged")
+    // Add notifications for function button changes if needed later
+}
 
 class SettingsModel: ObservableObject {
     // MARK: - Existing Settings
@@ -8,6 +20,7 @@ class SettingsModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(isAppleLogEnabled, forKey: Keys.isAppleLogEnabled)
             NotificationCenter.default.post(name: .appleLogSettingChanged, object: nil)
+            print("Apple Log Enabled: \(isAppleLogEnabled)")
         }
     }
     
@@ -15,6 +28,7 @@ class SettingsModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(isFlashlightEnabled, forKey: Keys.isFlashlightEnabled)
             NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
+            print("Flashlight Enabled: \(isFlashlightEnabled)")
         }
     }
     
@@ -22,6 +36,7 @@ class SettingsModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(flashlightIntensity, forKey: Keys.flashlightIntensity)
             NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
+            print("Flashlight Intensity: \(flashlightIntensity)")
         }
     }
     
@@ -29,6 +44,15 @@ class SettingsModel: ObservableObject {
         didSet {
             UserDefaults.standard.set(isBakeInLUTEnabled, forKey: Keys.isBakeInLUTEnabled)
             NotificationCenter.default.post(name: .bakeInLUTSettingChanged, object: nil)
+            print("Bake In LUT Enabled: \(isBakeInLUTEnabled)")
+        }
+    }
+    
+    @Published var isExposureLockEnabledDuringRecording: Bool {
+        didSet {
+            UserDefaults.standard.set(isExposureLockEnabledDuringRecording, forKey: Keys.isExposureLockEnabledDuringRecording)
+            NotificationCenter.default.post(name: .exposureLockDuringRecordingSettingChanged, object: nil)
+            print("Exposure Lock During Recording Enabled: \(isExposureLockEnabledDuringRecording)")
         }
     }
     
@@ -43,14 +67,14 @@ class SettingsModel: ObservableObject {
     @Published var functionButton1Ability: FunctionButtonAbility {
         didSet {
             UserDefaults.standard.set(functionButton1Ability.rawValue, forKey: Keys.functionButton1Ability)
-            // Consider if a notification is needed here
+            print("Function Button 1 Ability: \(functionButton1Ability.rawValue)")
         }
     }
     
     @Published var functionButton2Ability: FunctionButtonAbility {
         didSet {
             UserDefaults.standard.set(functionButton2Ability.rawValue, forKey: Keys.functionButton2Ability)
-            // Consider if a notification is needed here
+            print("Function Button 2 Ability: \(functionButton2Ability.rawValue)")
         }
     }
 
@@ -77,6 +101,7 @@ class SettingsModel: ObservableObject {
         let rawFn1Ability = UserDefaults.standard.string(forKey: Keys.functionButton1Ability)
         let rawFn2Ability = UserDefaults.standard.string(forKey: Keys.functionButton2Ability)
         let initialWhiteBalanceLockEnabled = UserDefaults.standard.bool(forKey: Keys.isWhiteBalanceLockEnabled)
+        let initialExposureLockEnabledDuringRecording = UserDefaults.standard.bool(forKey: Keys.isExposureLockEnabledDuringRecording)
 
         // 2. Determine final initial values, applying defaults
         var finalFlashlightIntensity = initialFlashlightIntensity
@@ -106,6 +131,7 @@ class SettingsModel: ObservableObject {
         self.functionButton1Ability = finalFn1Ability
         self.functionButton2Ability = finalFn2Ability
         self.isWhiteBalanceLockEnabled = initialWhiteBalanceLockEnabled
+        self.isExposureLockEnabledDuringRecording = initialExposureLockEnabledDuringRecording
 
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
@@ -121,6 +147,15 @@ class SettingsModel: ObservableObject {
          if rawFn2Ability == nil {
             UserDefaults.standard.set(finalFn2Ability.rawValue, forKey: Keys.functionButton2Ability)
         }
+
+        print("SettingsModel initialized:")
+        print("- Apple Log: \(isAppleLogEnabled)")
+        print("- Flashlight: \(isFlashlightEnabled)")
+        print("- Flashlight Intensity: \(flashlightIntensity)")
+        print("- Bake LUT: \(isBakeInLUTEnabled)")
+        print("- Lock Exposure During Recording: \(isExposureLockEnabledDuringRecording)")
+        print("- Fn1: \(functionButton1Ability.rawValue)")
+        print("- Fn2: \(functionButton2Ability.rawValue)")
     }
     
     // MARK: - Keys for UserDefaults
@@ -132,14 +167,6 @@ class SettingsModel: ObservableObject {
         static let functionButton1Ability = "functionButton1Ability"
         static let functionButton2Ability = "functionButton2Ability"
         static let isWhiteBalanceLockEnabled = "isWhiteBalanceLockSettingChanged"
+        static let isExposureLockEnabledDuringRecording = "isExposureLockEnabledDuringRecording"
     }
 }
-
-// MARK: - Notification Names
-extension Notification.Name {
-    static let appleLogSettingChanged = Notification.Name("appleLogSettingChanged")
-    static let flashlightSettingChanged = Notification.Name("flashlightSettingChanged")
-    static let bakeInLUTSettingChanged = Notification.Name("bakeInLUTSettingChanged")
-    static let whiteBalanceLockSettingChanged = Notification.Name("whiteBalanceLockSettingChanged")
-    // Add notifications for function button changes if needed later
-} 

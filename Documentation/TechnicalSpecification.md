@@ -65,6 +65,8 @@ This document outlines the technical specifications and requirements for the Spe
     *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.
     *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
     *   Startup sequence implemented with `Task.sleep` for timing.
+*   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`.
+*   **Recording Service (`RecordingService`)**: Handles video/audio recording using `AVAssetWriter`. Configures inputs/outputs based on selected codec/resolution/log state. Applies orientation transform to video track. Optionally bakes in LUTs using `MetalFrameProcessor`. Saves final file to Photos library.
 
 ## Technical Requirements & Dependencies
 

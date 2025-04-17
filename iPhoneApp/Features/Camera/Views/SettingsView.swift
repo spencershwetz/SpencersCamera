@@ -125,6 +125,22 @@ struct SettingsView: View {
                     }
                 }
                 
+                // Exposure Settings Section
+                Section {
+                    Toggle(isOn: $settingsModel.isExposureLockEnabledDuringRecording) {
+                        HStack {
+                            Text("Lock Exposure During Recording")
+                            if settingsModel.isExposureLockEnabledDuringRecording {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                    .tint(.blue)
+                } header: {
+                    Text("Exposure")
+                }
+                
                 // Flashlight Settings
                 FlashlightSettingsView(settingsModel: settingsModel)
                 
