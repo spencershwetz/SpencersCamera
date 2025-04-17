@@ -71,39 +71,6 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
         *   (Orientation logic fully delegated: Relies on `DeviceOrientationViewModel` for physical orientation, `AppDelegate`/`OrientationFixView` for interface lock, `RotatingView` for UI element rotation, and `CameraDeviceService`/`RecordingService` for preview/file metadata respectively).
-        *   MARK: - White Balance Handling
-
-        /// Publishes the current white balance temperature and tint, typically updated via polling.
-        @Published var currentWhiteBalanceTemperature: Float = 6500
-        @Published var currentWhiteBalanceTint: Float = 0 // Tint is not directly polled currently.
-
-        private var whiteBalancePollTimer: AnyCancellable?
-
-        /// Starts polling the `ExposureService` for white balance temperature updates.
-        func startWhiteBalancePolling() {
-          stopWhiteBalancePolling() // Ensure no duplicate timers
-          whiteBalancePollTimer = Timer.publish(every: 0.5, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-              self?.updateWhiteBalanceFromService()
-            }
-          updateWhiteBalanceFromService() // Initial fetch
-        }
-
-        /// Stops the white balance polling timer.
-        func stopWhiteBalancePolling() {
-          whiteBalancePollTimer?.cancel()
-          whiteBalancePollTimer = nil
-        }
-
-        /// Fetches the current white balance temperature from the `ExposureService` and updates the published property.
-        private func updateWhiteBalanceFromService() {
-          let temperatureAndTint = exposureService.getCurrentWhiteBalanceTemperature()
-          currentWhiteBalanceTemperature = temperatureAndTint.temperature
-          // currentWhiteBalanceTint = temperatureAndTint.tint // Uncomment if tint is needed
-        }
-
-        /// Sets the white balance mode and applies specific gains if in locked mode.
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `GeometryReader` for layout.

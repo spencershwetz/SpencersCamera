@@ -20,7 +20,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
     *   Lens switching logic in `CameraDeviceService` handles physical switching (reconfiguring session) and digital zoom (setting `videoZoomFactor` on wide lens for 2x).
     *   Format selection (Resolution, FPS, Color Space) managed by `VideoFormatService`, finding optimal `AVCaptureDevice.Format` based on requested criteria.
-    *   Manual Exposure/WB/Tint controls managed by `ExposureService`, locking device configuration and setting properties like `exposureMode`, `setExposureModeCustom(duration:iso:)`, `setWhiteBalanceModeLocked(with:)`. It uses KVO to observe `iso` and `exposureDuration` for real-time delegate updates. It also provides `getCurrentWhiteBalanceTemperature()` for direct querying. White balance updates for the UI are now handled primarily by a polling mechanism in `CameraViewModel` querying this method, due to potential KVO unreliability.
+    *   Manual Exposure/WB/Tint controls managed by `ExposureService`, locking device configuration and setting properties like `exposureMode`, `setExposureModeCustom(duration:iso:)`, `setWhiteBalanceModeLocked(with:)`. It also uses KVO to observe `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` for real-time delegate updates.
 *   **Video Recording**: 
     *   Handled by `RecordingService` using `AVAssetWriter`.
     *   Video Input (`AVAssetWriterInput`): Configured with dimensions from active format, codec type (`.hevc` or `.proRes422HQ`), and compression properties (bitrate, keyframe interval, profile level, color primaries based on `isAppleLogEnabled`).
@@ -65,16 +65,6 @@ This document outlines the technical specifications and requirements for the Spe
     *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.
     *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
     *   Startup sequence implemented with `Task.sleep` for timing.
-*   **Metal vs. Core Image for LUTs**: Chose Metal for primary preview/bake-in path likely for performance benefits and finer control over rendering pipeline compared to `CIFilter`, especially for compute tasks. Core Image (`LUTProcessor`) might be a legacy or fallback path.
-*   **White Balance UI Updates**: Implemented a polling mechanism in `CameraViewModel` (using a `Timer` publisher) calling `ExposureService.getCurrentWhiteBalanceTemperature()` to update the UI's white balance display. This was added as a workaround for observed inconsistencies with KVO updates for `deviceWhiteBalanceGains` on newer iOS versions. KVO remains for ISO and Shutter Speed updates.
-*   **Fixed Portrait UI**: Simplifies `CameraView` layout. Orientation complexity is managed by dedicated components (`DeviceOrientationViewModel`, `RotatingView`, `OrientationFixView`, `RecordingService`) rather than within `CameraView`/`CameraViewModel`.
-    *   Update: Centralized orientation logic significantly reduced complexity compared to previous approaches.
-*   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
-*   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
-*   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
-*   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
-
-*(This specification includes deeper implementation details.)*
 
 ## Technical Requirements & Dependencies
 
@@ -101,7 +91,6 @@ This document outlines the technical specifications and requirements for the Spe
 
 *   **Initial Exposure Mode**: Ensuring the device reliably starts in `.continuousAutoExposure` mode required setting it at multiple points in the initialization lifecycle (before session start, after session start with verification) due to potential AVFoundation state resets during session startup.
 *   **Metal vs. Core Image for LUTs**: Chose Metal for primary preview/bake-in path likely for performance benefits and finer control over rendering pipeline compared to `CIFilter`, especially for compute tasks. Core Image (`LUTProcessor`) might be a legacy or fallback path.
-*   **White Balance UI Updates**: Implemented a polling mechanism in `CameraViewModel` (using a `Timer` publisher) calling `ExposureService.getCurrentWhiteBalanceTemperature()` to update the UI's white balance display. This was added as a workaround for observed inconsistencies with KVO updates for `deviceWhiteBalanceGains` on newer iOS versions. KVO remains for ISO and Shutter Speed updates.
 *   **Fixed Portrait UI**: Simplifies `CameraView` layout. Orientation complexity is managed by dedicated components (`DeviceOrientationViewModel`, `RotatingView`, `OrientationFixView`, `RecordingService`) rather than within `CameraView`/`CameraViewModel`.
     *   Update: Centralized orientation logic significantly reduced complexity compared to previous approaches.
 *   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
@@ -110,10 +99,3 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
 
 *(This specification includes deeper implementation details.)*
-
-### White Balance
-
-*   **Control:** The app allows locking the white balance using `device.setWhiteBalanceModeLocked(with: gains)` and allows continuous auto white balance with `device.whiteBalanceMode = .continuousAutoWhiteBalance`.
-*   **Monitoring:** Key-Value Observing (KVO) is used to monitor `device.deviceWhiteBalanceGains` for real-time updates in the UI/debug overlay.
-*   **Fallback Mechanism:** If KVO updates for white balance gains are not received consistently (a potential issue observed in some scenarios), a polling mechanism implemented in `ExposureService` periodically fetches the current `deviceWhiteBalanceGains` and updates the `CameraViewModel`. This ensures the UI reflects the current white balance state even if KVO fails. The polling interval is managed within `ExposureService`.
-*   **Temperature/Tint Calculation:** The raw RGB gain values are converted to Temperature (Kelvin) and Tint for display using `AVCaptureDevice.WhiteBalanceGains` convenience methods.
