@@ -14,7 +14,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
 
 ## Phase 1: Modifying `ExposureService.swift`
 
-1.  **Add State Properties:**
+~~1.  **Add State Properties:**~~
     Add the following private properties to the `ExposureService` class:
 
     ```swift
@@ -31,7 +31,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     private let exposureAdjustmentQueue = DispatchQueue(label: "com.camera.exposureAdjustmentQueue", qos: .userInitiated)
     ```
 
-2.  **Update KVO Setup (`setupDeviceObservers`):**
+~~2.  **Update KVO Setup (`setupDeviceObservers`):**~~
     *   Add a new observer for `exposureTargetOffset`:
 
     ```swift
@@ -41,7 +41,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     }
     ```
 
-3.  **Update KVO Teardown (`removeDeviceObservers`):**
+~~3.  **Update KVO Teardown (`removeDeviceObservers`):**~~
     *   Invalidate and nil out the new observation:
 
     ```swift

@@ -17,6 +17,22 @@ class ExposureService: NSObject {
     private var device: AVCaptureDevice?
     private var isAutoExposureEnabled = true
     
+    // --- Shutter Priority State ---
+    private var isShutterPriorityActive: Bool = false
+    private var targetShutterDuration: CMTime?
+    private var exposureTargetOffsetObservation: NSKeyValueObservation?
+    private var lastIsoAdjustmentTime: Date = .distantPast // For rate limiting
+
+    // --- Tuning Parameters (Adjust as needed) ---
+    private let isoAdjustmentInterval: TimeInterval = 0.1 // Max 10 ISO adjustments/sec
+    private let isoPercentageThreshold: Float = 0.05 // 5% change needed to trigger adjustment
+    private let evOffsetThreshold: Float = 0.1 // 0.1 EV offset needed to trigger adjustment
+
+    // --- Dispatch Queue ---
+    // Add a dedicated serial queue for exposure adjustments to avoid blocking KVO/session queues
+    private let exposureAdjustmentQueue = DispatchQueue(label: "com.camera.exposureAdjustmentQueue", qos: .userInitiated)
+    // ------------------------------
+
     // KVO Observation tokens
     private var isoObservation: NSKeyValueObservation?
     private var exposureDurationObservation: NSKeyValueObservation?
@@ -109,9 +125,11 @@ class ExposureService: NSObject {
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
         whiteBalanceGainsObservation?.invalidate()
+        exposureTargetOffsetObservation?.invalidate()
         isoObservation = nil
         exposureDurationObservation = nil
         whiteBalanceGainsObservation = nil
+        exposureTargetOffsetObservation = nil
     }
 
     /// Helper function to report the current values after setting observers or device change. Internal access needed by ViewModel.
