@@ -6,19 +6,25 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+*   Feature: Implemented Shutter Priority mode (Function Button 2). Locks shutter speed (180°) and automatically adjusts ISO based on scene brightness changes (`ExposureService`, `CameraViewModel`).
+*   Feature: Added temporary exposure lock during recording when Shutter Priority is active and "Lock Exposure During Recording" setting is enabled (`ExposureService`, `CameraViewModel`).
 *   Setting: Added "Lock Exposure During Recording" toggle in Settings.
 *   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts and restore the previous state when recording stops, if the setting is enabled.
 
 ### Changed
 
-*   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` on the `AVCaptureDevice`. This ensures the delegate (and thus the UI/debug overlay) receives real-time updates for these values even when the camera is in automatic exposure or white balance modes.
+*   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice`.
 
 ### Fixed
 
+*   Resolved issue where ISO would incorrectly continue to adjust during recording when Shutter Priority and "Lock Exposure During Recording" were both enabled. Decoupled UI lock state (`isExposureLocked`) from internal SP recording lock logic in `CameraViewModel`.
+*   Prevented manual exposure lock (`toggleExposureLock`) from being activated while Shutter Priority is enabled (`CameraViewModel`).
+*   Ensured manual exposure lock UI state (`isExposureLocked`) is correctly turned off when Shutter Priority is enabled (`CameraViewModel`).
 *   Corrected KVO KeyPath syntax in `ExposureService`.
 *   Added missing explicit `self` references within closures in `ExposureService`.
 *   Removed incorrect optional chaining `?.` on non-optional `self` in `ExposureService`.
-*   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService`.
+*   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService` error handling blocks.
+*   Fixed logging string interpolation syntax errors in `ExposureService`.
 *   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
 
 ### Removed

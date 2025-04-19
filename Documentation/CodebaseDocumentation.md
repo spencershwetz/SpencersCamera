@@ -63,7 +63,7 @@ This document provides a detailed overview of key classes, components, and their
     *   **`CameraViewModel` (`CameraViewModel.swift`)**: 
         *   Acts as central coordinator, holding references to all camera-related services and the `LUTManager`.
         *   Manages `AVCaptureSession` state (`session`, `isSessionRunning`, `status`, `error`).
-        *   Handles user settings (`selectedResolution`, `selectedCodec`, `selectedFrameRate`, `isAppleLogEnabled`, `currentLens`, `currentZoomFactor`, `whiteBalance`, `iso`, `shutterSpeed`, `currentTint`, `isAutoExposureEnabled`).
+        *   Handles user settings (`selectedResolution`, `selectedCodec`, `selectedFrameRate`, `isAppleLogEnabled`, `currentLens`, `currentZoomFactor`, `whiteBalance`, `iso`, `shutterSpeed`, `currentTint`, `isAutoExposureEnabled`, `isExposureLocked`, `isShutterPriorityEnabled`).
         *   Coordinates service interactions for setup, lens/zoom changes, format changes (resolution, FPS, Apple Log), exposure/WB changes, recording start/stop.
         *   Acts as delegate for all services (`CameraSetupServiceDelegate`, `RecordingServiceDelegate`, etc.) and `WCSessionDelegate`.
         *   Handles state updates from services/delegates and publishes changes via `@Published` properties.
@@ -71,7 +71,9 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
         *   (Orientation logic fully delegated: Relies on `DeviceOrientationViewModel` for physical orientation, `AppDelegate`/`OrientationFixView` for interface lock, `RotatingView` for UI element rotation, and `CameraDeviceService`/`RecordingService` for preview/file metadata respectively).
-        *   Handles the "Lock Exposure During Recording" setting: Stores the current exposure lock state before recording starts if the setting is enabled, forces exposure lock, and restores the previous state when recording stops.
+        *   Handles the "Lock Exposure During Recording" setting: If enabled, it stores the previous exposure state before recording. If Shutter Priority is *not* active, it calls `ExposureService.setExposureLock(locked: true)`. If Shutter Priority *is* active, it calls `ExposureService.lockShutterPriorityExposureForRecording()` to initiate the SP-specific lock. On stop, it calls the corresponding unlock/restore methods (`ExposureService.unlockShutterPriorityExposureAfterRecording()` or standard restore logic). Logic is designed to prevent conflicts between the standard AE lock (`isExposureLocked` state) and the internal SP recording lock.
+        *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
+        *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `GeometryReader` for layout.
@@ -107,9 +109,15 @@ This document provides a detailed overview of key classes, components, and their
         *   `ExposureService`: Holds a reference to the current `AVCaptureDevice`.
         *   Initializes its internal `isAutoExposureEnabled` state based on the device's state when `setDevice` is called, attempting to set `.continuousAutoExposure` if supported.
         *   Provides methods to update white balance (`updateWhiteBalance`), ISO (`updateISO`), shutter speed (`updateShutterSpeed`), shutter angle (`updateShutterAngle`), tint (`updateTint`), and exposure lock (`setExposureLock`).
-        *   **Shutter Priority (Current Behavior)**: Implemented in `updateShutterSpeed`/`updateShutterAngle` by setting the mode to `.custom` and then calling `setExposureModeCustom(duration: clampedSpeed, iso: AVCaptureDevice.currentISO)`. This locks **both** the shutter speed to the specified value and the ISO to its current value.
+        *   **Shutter Priority**: 
+            *   `enableShutterPriority(duration:)`: Sets mode to `.custom` with fixed `duration` and current ISO. Activates KVO on `exposureTargetOffset`.
+            *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
+            *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
+            *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true` to pause auto-ISO adjustments.
+            *   `unlockShutterPriorityExposureAfterRecording()`: Sets `isTemporarilyLockedForRecording = false` to resume auto-ISO adjustments.
         *   Manages transitions between `.continuousAutoExposure` and `.custom` exposure modes via `setAutoExposureEnabled` and `updateExposureMode`. Ensures values (like ISO) are clamped within device limits when setting custom exposure.
-        *   Communicates errors and manual value updates (ISO, WB, Shutter) back to the delegate (`CameraViewModel`). The initial auto mode state is primarily managed and verified by `CameraSetupService` after the session starts.
+        *   Communicates errors and manual value updates (ISO, WB, Shutter) back to the delegate (`CameraViewModel`). Uses KVO on device properties (`iso`, `exposureDuration`, `deviceWhiteBalanceGains`, `exposureTargetOffset`) for real-time updates.
+        *   The initial auto mode state is primarily managed and verified by `CameraSetupService` after the session starts.
         *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Before recording starts, calculates the `recordingOrientation` angle based on device/interface orientation and applies the corresponding `CGAffineTransform` to the `AVAssetWriterInput.transform` property to ensure correct *video file* metadata orientation. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` and `AVCaptureAudioDataOutputSampleBufferDelegate` to receive buffers during recording. If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer`. Appends video frames using `AVAssetWriterInputPixelBufferAdaptor.append(_:withPresentationTime:)` to handle frame timing correctly, especially for high frame rates. Saves finished video to `PHPhotoLibrary` and generates a thumbnail.
         *   `VolumeButtonHandler`: Uses `AVCaptureEventInteraction` (iOS 17.2+) to trigger `viewModel.start/stopRecording()` on volume button presses (began phase), includes debouncing.
     *   **`FlashlightManager` (`FlashlightManager.swift`)**: Uses `AVCaptureDevice` torch controls (`setTorchModeOn(level:)`) to manage the flashlight state and intensity. Includes an async startup sequence (`performStartupSequence`) with timed flashes.

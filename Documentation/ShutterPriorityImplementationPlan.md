@@ -9,10 +9,11 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
 3.  If the offset is significant, calculate a new target ISO to counteract the offset.
 4.  Apply the new ISO (keeping the shutter fixed) using `setExposureModeCustom`.
 5.  Use thresholds and rate-limiting to prevent unstable oscillations.
+6.  Implement logic to temporarily pause auto-ISO adjustments during recording if the "Lock Exposure During Recording" setting is enabled.
 
 ---
 
-## Phase 1: Modifying `ExposureService.swift`
+## Phase 1: Modifying `ExposureService.swift` (KVO & Base Logic)
 
 ~~1.  **Add State Properties:**~~
     Add the following private properties to the `ExposureService` class:
@@ -280,79 +281,60 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
 
     *   **Note:** There's a design decision here: should changing the shutter angle/speed slider *while SP is active* update the SP target duration, or should it do nothing? The code above assumes it *should* update the SP target.
 
-## Phase 2: Modifying `CameraViewModel.swift`
+## Phase 2: Modifying `CameraViewModel.swift` (Basic Toggle)
 
 ~~1.  **Add State:**~~
     *   Ensure you have the `@Published var isShutterPriorityEnabled: Bool = false` property.
 
 ~~2.  **Modify `toggleShutterPriority()`:**~~
-    *   Implement the logic to calculate the duration and call the new `ExposureService` methods:
+    *   Implement the logic to calculate the 180° duration and call `ExposureService.enable/disableShutterPriority()`.
 
-    ```swift
-    func toggleShutterPriority() {
-        // Ensure frame rate is valid
-        guard selectedFrameRate > 0 else {
-            logger.error("Cannot toggle Shutter Priority: Invalid frame rate (0).")
-            // Optionally show an error to the user
-            return
-        }
+## Phase 3: Implementing Recording Lock for SP
 
-        // Calculate target duration for 180 degrees
-        let targetDurationSeconds = 1.0 / (selectedFrameRate * 2.0)
-        let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000) // High precision
+~~1.  **Add Recording Lock State to `ExposureService`:**~~
+    *   Add `private var isTemporarilyLockedForRecording: Bool = false`.
 
-        if !isShutterPriorityEnabled {
-            logger.info("ViewModel: Enabling Shutter Priority.")
-            exposureService.enableShutterPriority(duration: targetDuration)
-            isShutterPriorityEnabled = true // Update state AFTER calling service
-        } else {
-            logger.info("ViewModel: Disabling Shutter Priority.")
-            exposureService.disableShutterPriority()
-            isShutterPriorityEnabled = false // Update state AFTER calling service
-        }
-    }
-    ```
+~~2.  **Implement Lock/Unlock Methods in `ExposureService`:**~~
+    *   `lockShutterPriorityExposureForRecording()`: Sets mode to `.custom` with current SP duration/ISO and sets `isTemporarilyLockedForRecording = true`.
+    *   `unlockShutterPriorityExposureAfterRecording()`: Sets `isTemporarilyLockedForRecording = false`.
 
-~~3.  **Handle Interaction with Recording Lock (Option C Implementation):**~~
-    *   Modify `startRecording` and `stopRecording` to check `isShutterPriorityEnabled`.
+~~3.  **Update `handleExposureTargetOffsetUpdate`:**~~
+    *   Add a guard at the beginning to return if `isTemporarilyLockedForRecording` is `true`.
 
-    ```swift
-    // --- Inside startRecording ---
-    if settingsModel.isExposureLockEnabledDuringRecording {
-        // Only apply standard lock if Shutter Priority is NOT active
-        if !isShutterPriorityEnabled {
-            logger.info("Auto-locking exposure for recording start.")
-            // Store previous state only if not already custom (or handle custom state)
-            // ... (Store previous lock state, likely needs isAutoExposureEnabled check) ...
-            storeAndLockExposureForRecording() // Refactor lock logic if needed
-        } else {
-            logger.info("Shutter Priority active, skipping standard exposure lock during recording.")
-        }
-        // ... White balance lock logic ...
-    }
-    // --- Inside stopRecording ---
-     // Restore exposure state if it was locked
-     if settingsModel.isExposureLockEnabledDuringRecording {
-         // Only restore standard lock if Shutter Priority is NOT active
-         if !isShutterPriorityEnabled {
-             logger.info("Recording stopped: Restoring previous exposure state.")
-             restoreExposureAfterRecording() // Refactor unlock logic if needed
-         } else {
-             logger.info("Shutter Priority active, skipping standard exposure restore after recording.")
-         }
-         // ... White balance unlock logic ...
-     }
-    ```
-    *   **Note:** You might need to refactor the existing `storeAndLockExposureForRecording()` and `restoreExposureAfterRecording()` logic slightly to handle the `isShutterPriorityEnabled` check cleanly. The key is to *not* call `exposureService.setCustomExposure` or `exposureService.setExposureLock(locked:)` if SP is active during the start/stop recording phase when the "Lock Exposure During Recording" setting is enabled.
+~~4.  **Update `enableShutterPriority`/`disableShutterPriority`:**~~
+    *   Ensure `isTemporarilyLockedForRecording` is reset to `false` when SP is enabled or disabled.
 
-## Phase 3: Build & Test
+~~5.  **Update `CameraViewModel.startRecording`:**~~
+    *   Inside the `if settingsModel.isExposureLockEnabledDuringRecording` block, add a check for `isShutterPriorityEnabled`.
+    *   If SP is enabled, call `exposureService.lockShutterPriorityExposureForRecording()` instead of the standard AE lock logic.
 
-1.  **Build:** Run `xcodebuild` after applying the code changes. Fix any compilation errors.
+~~6.  **Update `CameraViewModel.stopRecording`:**~~
+    *   Inside the restore logic (if `settingsModel.isExposureLockEnabledDuringRecording` was true), add a check for `isShutterPriorityEnabled`.
+    *   If SP was enabled, call `exposureService.unlockShutterPriorityExposureAfterRecording()` instead of the standard AE restore logic.
+
+## Phase 4: Decoupling UI Lock State from SP Lock
+
+~~1.  **Modify `CameraViewModel.startRecording`:**~~
+    *   When SP is active and lock-during-recording is enabled, **remove** the line `self.isExposureLocked = false` after calling `exposureService.lockShutterPriorityExposureForRecording()`.
+
+~~2.  **Modify `CameraViewModel.stopRecording`:**~~
+    *   When restoring state after recording with SP active and lock-during-recording enabled, **remove** the line `self.isExposureLocked = false` after calling `exposureService.unlockShutterPriorityExposureAfterRecording()`.
+
+~~3.  **Modify `CameraViewModel.toggleExposureLock`:**~~
+    *   Add a guard at the beginning to prevent toggling the standard AE lock if `isShutterPriorityEnabled` is true.
+
+~~4.  **Modify `CameraViewModel.toggleShutterPriority`:**~~
+    *   When enabling SP (`if !isShutterPriorityEnabled`), add logic to explicitly set `self.isExposureLocked = false` to ensure the standard AE lock UI turns off.
+
+## Phase 5: Build & Test
+
+1.  **Build:** Run `xcodebuild` after applying the code changes. Fix any compilation errors. (Successfully built after Phase 4). 
 2.  **Test:**
-    *   **Basic SP:** Enable SP. Point the camera at different light levels. Verify the Shutter Speed display remains fixed (e.g., 1/60s for 30fps/180°) while the ISO display changes automatically. Check logs for `SP Adjust` messages and ensure they aren't firing too rapidly or oscillating wildly.
-    *   **SP Toggle:** Disable SP. Verify ISO and Shutter return to auto behavior.
-    *   **SP + Recording (Lock On):** Enable SP, turn ON "Lock Exposure During Recording". Start recording. Verify shutter remains fixed and ISO *continues to adjust* during recording (per Option C). Stop recording. Verify SP remains active and ISO continues adjusting.
-    *   **SP + Recording (Lock Off):** Enable SP, turn OFF "Lock Exposure During Recording". Start recording. Verify shutter remains fixed and ISO continues to adjust during recording. Stop recording. Verify SP remains active.
-    *   **Angle Change during SP:** Enable SP. Adjust the shutter angle slider (if implemented). Verify the target shutter speed updates and the ISO continues to adjust around the new fixed shutter speed.
-    *   **SP Toggle During Recording:** (Optional) Decide if this should be allowed. If so, test toggling SP on/off during an active recording. Ensure smooth transitions.
-    *   **Edge Cases:** Test with very bright and very dark scenes to ensure ISO clamping (`minISO`, `maxISO`) works correctly and doesn't cause crashes. Check behavior when switching cameras while SP is active (it should probably be disabled automatically). 
+    *   **Basic SP:** (Passed) Enable SP. Point camera at different light levels. Shutter Speed remains fixed, ISO adjusts automatically.
+    *   **SP Toggle:** (Passed) Disable SP. Exposure returns to auto.
+    *   **SP + Recording (Lock On):** (Passed) Enable SP, turn ON "Lock Exposure During Recording". Start recording. Verify shutter remains fixed and ISO **remains locked** during recording. Stop recording. Verify SP remains active and ISO resumes adjusting automatically.
+    *   **SP + Recording (Lock Off):** (Passed) Enable SP, turn OFF "Lock Exposure During Recording". Start recording. Verify shutter remains fixed and ISO *continues to adjust* during recording. Stop recording. Verify SP remains active.
+    *   **Standard Lock + Recording (Lock On):** (Passed - Existing) Disable SP, turn ON "Lock Exposure During Recording". Tap AE Lock button. Start recording. Verify exposure remains locked. Stop recording. Verify AE lock remains active.
+    *   **Angle Change during SP:** (Passed) Enable SP. Adjust shutter angle slider. Verify target shutter speed updates and ISO continues to adjust.
+    *   **Edge Cases:** (Passed) Test with very bright/dark scenes. ISO clamps correctly.
+    *   **Interaction with Standard AE Lock:** (Passed) Ensure enabling SP disables the standard AE Lock button/state, and toggling standard AE Lock is prevented while SP is active. 
