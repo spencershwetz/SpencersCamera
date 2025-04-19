@@ -282,10 +282,10 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
 
 ## Phase 2: Modifying `CameraViewModel.swift`
 
-1.  **Add State:**
+~~1.  **Add State:**~~
     *   Ensure you have the `@Published var isShutterPriorityEnabled: Bool = false` property.
 
-2.  **Modify `toggleShutterPriority()`:**
+~~2.  **Modify `toggleShutterPriority()`:**~~
     *   Implement the logic to calculate the duration and call the new `ExposureService` methods:
 
     ```swift
@@ -313,7 +313,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     }
     ```
 
-3.  **Handle Interaction with Recording Lock (Option C Implementation):**
+~~3.  **Handle Interaction with Recording Lock (Option C Implementation):**~~
     *   Modify `startRecording` and `stopRecording` to check `isShutterPriorityEnabled`.
 
     ```swift
