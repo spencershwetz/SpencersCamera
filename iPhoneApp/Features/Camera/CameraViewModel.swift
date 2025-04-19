@@ -537,32 +537,26 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Handle auto-locking exposure if enabled
         if settings.isExposureLockEnabledDuringRecording {
             // --- Modification Start ---
-            // Only apply standard lock if Shutter Priority is NOT active
-            if !isShutterPriorityEnabled {
-                logger.info("Auto-locking exposure for recording start (SP OFF).")
-                // Capture current state *before* locking
-                previousExposureMode = currentDevice.exposureMode
-                if previousExposureMode == .custom {
-                    previousISO = currentDevice.iso
-                    previousExposureDuration = currentDevice.exposureDuration
-                    logger.info("Storing previous custom exposure: ISO \\(String(describing: self.previousISO)), Duration \\(self.previousExposureDuration?.seconds ?? 0)s")
-                } else {
-                    previousISO = nil
-                    previousExposureDuration = nil
-                    logger.info("Storing previous exposure mode: \\(String(describing: self.previousExposureMode)) ('.custom' values not stored)")
-                }
-
-                // Standard AE Lock: Lock both current ISO and Duration
-                logger.info("Applying standard AE lock for recording.")
-                exposureService.setExposureLock(locked: true)
-                // Only update UI state for standard AE lock
-                self.isExposureLocked = true
-
-                // REMOVED the isShutterPriorityEnabled check block that was here
-            } else {
-                 logger.info("Shutter Priority active, skipping standard exposure lock during recording.")
+            // Store the actual current mode before applying any lock
+            previousExposureMode = currentDevice.exposureMode
+            if previousExposureMode == .custom {
+                previousISO = currentDevice.iso
+                previousExposureDuration = currentDevice.exposureDuration
             }
-             // --- Modification End ---
+            logger.info("Storing previous exposure state: Mode \\(String(describing: previousExposureMode))")
+            
+            if isShutterPriorityEnabled {
+                // Shutter Priority Lock (SP is ON)
+                logger.info("SP active and lock enabled: Locking Shutter Priority exposure for recording.")
+                exposureService.lockShutterPriorityExposureForRecording() // Use new service method
+                // No need to store ISO/Duration here anymore, service handles it
+            } else {
+                // Standard AE Lock (SP is OFF)
+                logger.info("Standard AE lock enabled: Locking exposure for recording.")
+                exposureService.setExposureLock(locked: true)
+                self.isExposureLocked = true // Update UI for standard lock
+            }
+            // --- Modification End ---
         }
 
         // Lock white balance if enabled in settings
@@ -633,56 +627,52 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Restore exposure state if it was automatically locked for recording
         let settings = SettingsModel()
-        if settings.isExposureLockEnabledDuringRecording { // Check setting first
+        if settings.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
+            logger.info("Recording stopped: Restoring previous exposure state. SP Active: \\(isShutterPriorityEnabled), Stored Mode: \\(String(describing: modeToRestore))")
+
             // --- Modification Start ---
-            // Only restore standard lock if Shutter Priority is NOT active AND a mode was stored
-            if !isShutterPriorityEnabled, let modeToRestore = previousExposureMode {
-                 logger.info("Recording stopped: Restoring previous exposure state (SP OFF, Mode: \\(String(describing: modeToRestore)))")
-
-                 switch modeToRestore {
-                 case .continuousAutoExposure:
-                     exposureService.setAutoExposureEnabled(true)
-                     self.isExposureLocked = false // Update UI state
-                     logger.info("Restored to .continuousAutoExposure.")
-
-                 case .custom:
-                      // Standard custom exposure (both ISO and Shutter) - SP handled separately
-                     exposureService.setAutoExposureEnabled(false) // Ensure custom mode is allowed
-                     self.isExposureLocked = false // Update UI state
-                     logger.info("Set mode to .custom.")
-                     if let iso = previousISO, let duration = previousExposureDuration {
-                         logger.info("Attempting to restore custom ISO: \\(iso) and Duration: \\(duration.seconds)s")
-                         exposureService.setCustomExposure(duration: duration, iso: iso) // Use combined setter
-                     } else {
-                          logger.warning("Previous mode was .custom, but ISO/Duration were not stored. Cannot restore specific values.")
-                     }
-
-                 case .locked:
-                     exposureService.setExposureLock(locked: true)
-                     self.isExposureLocked = true // Update UI state
-                     logger.info("Restored to .locked (was locked before recording started)." )
-
-                 default:
-                     logger.warning("Could not restore unknown previous exposure mode: \\(String(describing: modeToRestore)). Reverting to auto.")
-                     exposureService.setAutoExposureEnabled(true)
-                     self.isExposureLocked = false // Update UI state
-                 }
-
-                 // Clear the stored state only if we actually restored it
-                 previousExposureMode = nil
-                 previousISO = nil
-                 previousExposureDuration = nil
-
-            } else if isShutterPriorityEnabled {
-                 logger.info("Shutter Priority active, skipping standard exposure restore after recording.")
-                 // Clear any potentially stored standard lock state (shouldn't be set, but just in case)
-                 previousExposureMode = nil
-                 previousISO = nil
-                 previousExposureDuration = nil
-            } else if previousExposureMode == nil {
-                 logger.warning("Lock during recording enabled, but no previous exposure mode was stored. Cannot restore.")
+            if isShutterPriorityEnabled {
+                // Restore Shutter Priority auto-ISO (if it was locked for recording)
+                logger.info("SP is active, unlocking SP exposure after recording.")
+                exposureService.unlockShutterPriorityExposureAfterRecording() // Use new service method
+            } else {
+                // Restore standard lock state (SP was OFF when recording started)
+                logger.info("SP is OFF, restoring standard exposure state based on stored mode: \\(String(describing: modeToRestore))")
+                switch modeToRestore {
+                case .continuousAutoExposure:
+                    exposureService.setAutoExposureEnabled(true) // This implicitly sets mode to auto
+                    self.isExposureLocked = false // Update UI state
+                    logger.info("Restored to .continuousAutoExposure.")
+                case .custom:
+                    // If the stored mode was custom (e.g., manual ISO/Shutter before recording without SP)
+                    exposureService.setAutoExposureEnabled(false) // Set to manual mode first
+                    self.isExposureLocked = false // Update UI state
+                    if let iso = previousISO, let duration = previousExposureDuration {
+                        logger.info("Attempting to restore previous custom ISO: \\(iso) and Duration: \\(duration.seconds)s")
+                        exposureService.setCustomExposure(duration: duration, iso: iso) // Reapply specific values
+                    } else {
+                         logger.warning("Stored mode was .custom, but ISO/Duration not available. Reverting to manual mode without specific values.")
+                    }
+                case .locked:
+                    // If the stored mode was already locked (unlikely if lock-on-record is true, but handle anyway)
+                    exposureService.setExposureLock(locked: true) // Re-apply lock
+                    self.isExposureLocked = true // Update UI state
+                    logger.info("Restored to .locked.")
+                default:
+                    // Fallback: revert to auto if modeToRestore is unexpected
+                    logger.warning("Could not restore unknown previous standard exposure mode: \\(String(describing: modeToRestore)). Reverting to auto.")
+                    exposureService.setAutoExposureEnabled(true)
+                    self.isExposureLocked = false
+                }
             }
             // --- Modification End ---
+
+            // Clear the stored state regardless of which path was taken
+            previousExposureMode = nil
+            previousISO = nil
+            previousExposureDuration = nil
+        } else if settings.isExposureLockEnabledDuringRecording {
+             logger.warning("Lock during recording enabled, but no previous exposure mode was stored. Cannot restore.")
         }
 
         // Notify RotationLockedContainer about recording state change
@@ -900,11 +890,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     /// Toggles the exposure lock state.
     func toggleExposureLock() {
+        // Prevent manual AE lock if Shutter Priority is active
+        guard !isShutterPriorityEnabled else {
+             logger.info("Manual exposure lock is disabled while Shutter Priority is active.")
+             return
+        }
         isExposureLocked.toggle()
         logger.info("Exposure lock toggled to: \(self.isExposureLocked)")
+        // The didSet on isExposureLocked calls updateExposureLock()
     }
 
     private func updateExposureLock() {
+        // This should now only be called when the user manually toggles the lock (and SP is off)
         logger.info("Updating exposure lock state in service to: \(self.isExposureLocked)")
         exposureService?.setExposureLock(locked: self.isExposureLocked)
     }
@@ -927,10 +924,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             logger.info("ViewModel: Enabling Shutter Priority with duration \\(targetDurationSeconds)s.")
             exposureService.enableShutterPriority(duration: targetDuration)
             isShutterPriorityEnabled = true // Update state AFTER calling service
+            // ADDED: Ensure standard AE lock UI turns off when SP enables
+            if self.isExposureLocked {
+                logger.info("SP enabled, turning off manual exposure lock state.")
+                self.isExposureLocked = false // This will trigger updateExposureLock, but it's okay here as SP isn't active *yet* in ExposureService
+            }
         } else {
             logger.info("ViewModel: Disabling Shutter Priority.")
             exposureService.disableShutterPriority()
             isShutterPriorityEnabled = false // Update state AFTER calling service
+            // No need to change isExposureLocked state here - leave it as it was before SP was disabled
         }
         // Remove the old logic that directly manipulated isAutoExposureEnabled and updateShutterAngle
     }

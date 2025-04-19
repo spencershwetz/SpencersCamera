@@ -31,7 +31,8 @@ class ExposureService: NSObject {
     // --- Dispatch Queue ---
     // Add a dedicated serial queue for exposure adjustments to avoid blocking KVO/session queues
     private let exposureAdjustmentQueue = DispatchQueue(label: "com.camera.exposureAdjustmentQueue", qos: .userInitiated)
-    // ------------------------------
+    // --- Recording Lock State ---
+    private var isTemporarilyLockedForRecording: Bool = false
 
     // KVO Observation tokens
     private var isoObservation: NSKeyValueObservation?
@@ -581,11 +582,9 @@ class ExposureService: NSObject {
             logger.error("SP Enable: No device available.")
             return
         }
-        // Prevent re-enabling if already active
-        guard !isShutterPriorityActive else {
-            logger.warning("SP Enable: Already active.")
-            return
-        }
+        // Prevent re-enabling if already active with the same duration?
+        // For now, let's allow re-enabling to update duration easily.
+        // if isShutterPriorityActive && duration == targetShutterDuration { ... }
 
         // Clamp the requested duration just in case
         let minDuration = device.activeFormat.minExposureDuration
@@ -594,7 +593,8 @@ class ExposureService: NSObject {
 
         self.targetShutterDuration = clampedDuration
         self.isShutterPriorityActive = true
-        self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", CMTimeGetSeconds(clampedDuration)))s")
+        self.isTemporarilyLockedForRecording = false // Ensure recording lock is off when enabling/re-enabling
+        self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", clampedDuration.seconds))s")
 
         // Perform initial mode set on the adjustment queue
         exposureAdjustmentQueue.async { [weak self] in
@@ -643,6 +643,7 @@ class ExposureService: NSObject {
 
         isShutterPriorityActive = false // Set flag immediately to stop adjustments
         targetShutterDuration = nil
+        isTemporarilyLockedForRecording = false // Ensure recording lock is off when disabling
         logger.info("Disabling Shutter Priority.")
 
         // Revert to auto-exposure on the adjustment queue
@@ -680,6 +681,13 @@ class ExposureService: NSObject {
             // logger.debug("SP Adjust: KVO ignored (SP inactive or missing data)")
             return
         }
+        
+        // --- Add Check for Recording Lock ---
+        guard !isTemporarilyLockedForRecording else {
+            logger.debug("SP Adjust: Ignored (Temporarily locked for recording)")
+            return
+        }
+        // --- End Check ---
 
         // Throttle adjustments
         let now = Date()
@@ -735,4 +743,55 @@ class ExposureService: NSObject {
         }
     }
     // --------------------------
+
+    // MARK: - Recording Lock for Shutter Priority
+
+    func lockShutterPriorityExposureForRecording() {
+        guard isShutterPriorityActive, let device = device, let currentTargetDuration = targetShutterDuration else {
+            logger.warning("Attempted to lock SP exposure for recording, but SP is not active or device/duration is missing.")
+            return
+        }
+
+        exposureAdjustmentQueue.async { [weak self] in
+            guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
+            
+            let currentISO = currentDevice.iso
+            // No need to clamp ISO here, just use the current one for the lock.
+            
+            do {
+                try currentDevice.lockForConfiguration()
+                self.logger.info("[SP Lock] Applying lock: Duration \\(currentTargetDuration.seconds)s, ISO \\(currentISO)")
+                currentDevice.setExposureModeCustom(duration: currentTargetDuration, iso: currentISO) { _ in 
+                    // Maybe report locked values?
+                }
+                self.isTemporarilyLockedForRecording = true // Set lock flag AFTER successful configuration
+                currentDevice.unlockForConfiguration()
+            } catch {
+                self.logger.error("[SP Lock] Error locking exposure for recording: \\(error.localizedDescription)")
+                // Attempt to unlock configuration if lock failed during change
+                currentDevice.unlockForConfiguration()
+                // Should we revert isTemporarilyLockedForRecording?
+                // If lock failed, adjustments are still paused because isShutterPriorityActive might be true,
+                // but the intended lock isn't set. Let's leave the flag false if it failed.
+            }
+        }
+    }
+
+    func unlockShutterPriorityExposureAfterRecording() {
+        guard isShutterPriorityActive else {
+             logger.debug("[SP Unlock] Ignored: SP not active.")
+             return 
+        }
+        guard isTemporarilyLockedForRecording else {
+             logger.debug("[SP Unlock] Ignored: SP was not locked for recording.")
+             return
+        }
+        
+        logger.info("[SP Unlock] Releasing temporary lock and resuming auto-ISO adjustments.")
+        isTemporarilyLockedForRecording = false
+        // Trigger an immediate evaluation/adjustment? Or let the KVO naturally take over?
+        // Let KVO take over for now.
+    }
+
+    // MARK: - Manual Exposure Control (Refined)
 } 
