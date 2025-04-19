@@ -102,9 +102,9 @@ struct SettingsView: View {
                         }
                     }
                     
-                    if let recentLUTs = lutManager.recentLUTs, !recentLUTs.isEmpty {
-                        ForEach(Array(recentLUTs.keys), id: \.self) { name in
-                            if let url = recentLUTs[name] {
+                    if !lutManager.availableLUTs.isEmpty {
+                        ForEach(Array(lutManager.availableLUTs.keys.sorted()), id: \.self) { name in
+                            if let url = lutManager.availableLUTs[name] {
                                 Button(action: {
                                     lutManager.loadLUT(from: url)
                                 }) {

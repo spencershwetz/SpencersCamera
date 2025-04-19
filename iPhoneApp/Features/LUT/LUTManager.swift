@@ -13,13 +13,10 @@ class LUTManager: ObservableObject {
     @Published var currentLUTTexture: MTLTexture?
     private var dimension: Int = 0
     @Published var selectedLUTURL: URL?
-    @Published var recentLUTs: [String: URL]? = [:]
+    @Published var availableLUTs: [String: URL] = [:]
     
-    // Maximum number of recent LUTs to store
-    private let maxRecentLUTs = 5
-    
-    // UserDefaults key for storing recent LUTs
-    private let recentLUTsKey = "recentLUTs"
+    // UserDefaults key for the last active LUT name
+    private let lastActiveLUTNameKey = "lastActiveLUTName"
     
     // New properties to store cube data
     private var cubeDimension: Int = 0
@@ -27,16 +24,12 @@ class LUTManager: ObservableObject {
     
     // Computed property for the current LUT name
     var currentLUTName: String {
-        selectedLUTURL?.lastPathComponent ?? "Custom LUT"
+        selectedLUTURL?.deletingPathExtension().lastPathComponent ?? "None"
     }
     
     // Supported file types
     static let supportedTypes: [UTType] = [
         UTType(filenameExtension: "cube") ?? UTType.data,
-        UTType(filenameExtension: "3dl") ?? UTType.data,
-        UTType(filenameExtension: "lut") ?? UTType.data,
-        UTType(filenameExtension: "look") ?? UTType.data,
-        UTType.data // Fallback
     ]
     
     init() {
@@ -44,8 +37,62 @@ class LUTManager: ObservableObject {
             fatalError("Metal is not supported on this device")
         }
         self.device = metalDevice
-        loadRecentLUTs()
         setupIdentityLUTTexture()
+        scanAndLoadInitialLUTs()
+    }
+    
+    // MARK: - Initialization and Persistence
+    
+    private func scanAndLoadInitialLUTs() {
+        var loadedAvailableLUTs: [String: URL] = [:]
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let lutsDirectory = documentsDirectory.appendingPathComponent("LUTs")
+        
+        // Ensure LUTs directory exists
+        if !FileManager.default.fileExists(atPath: lutsDirectory.path) {
+            do {
+                try FileManager.default.createDirectory(at: lutsDirectory, withIntermediateDirectories: true)
+                logger.info("Created LUTs directory at: \(lutsDirectory.path)")
+            } catch {
+                logger.error("Failed to create LUTs directory: \(error.localizedDescription)")
+                return
+            }
+        }
+        
+        // Scan the LUTs directory
+        do {
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: lutsDirectory, includingPropertiesForKeys: nil)
+            for url in fileURLs where url.pathExtension.lowercased() == "cube" {
+                let name = url.deletingPathExtension().lastPathComponent
+                loadedAvailableLUTs[name] = url
+                logger.debug("Found LUT: \(name) at \(url.path)")
+            }
+        } catch {
+            logger.error("Failed to scan LUTs directory: \(error.localizedDescription)")
+        }
+        
+        // Update the published property on the main thread
+        DispatchQueue.main.async {
+            self.availableLUTs = loadedAvailableLUTs
+            self.logger.info("Scanned LUT directory. Found \(loadedAvailableLUTs.count) LUTs.")
+            
+            // Load the last active LUT from UserDefaults
+            if let lastActiveName = UserDefaults.standard.string(forKey: self.lastActiveLUTNameKey),
+               let urlToLoad = loadedAvailableLUTs[lastActiveName] {
+                self.logger.info("Found last active LUT name: \(lastActiveName). Attempting to load.")
+                self.loadLUT(from: urlToLoad)
+            } else {
+                self.logger.info("No last active LUT found in UserDefaults or corresponding file not found.")
+                self.setupIdentityLUTTexture()
+                self.currentLUTFilter = nil
+                self.selectedLUTURL = nil
+            }
+        }
+    }
+    
+    private func saveLastActiveLUTName(name: String?) {
+        UserDefaults.standard.set(name, forKey: lastActiveLUTNameKey)
+        logger.debug("Saved last active LUT name: \(name ?? "None")")
     }
     
     // MARK: - Metal LUT Texture Setup
@@ -72,6 +119,9 @@ class LUTManager: ObservableObject {
     private func setupIdentityLUTTexture() {
         let identityLUTInfo = createIdentityLUT(dimension: 32)
         setupLUTTexture(lutInfo: identityLUTInfo)
+        self.currentLUTFilter = nil
+        self.selectedLUTURL = nil
+        self.dimension = 0
     }
     
     private func setupLUTTexture(lutInfo: (dimension: Int, data: [Float])) {
@@ -123,6 +173,7 @@ class LUTManager: ObservableObject {
         
         DispatchQueue.main.async {
             self.currentLUTTexture = texture
+            self.dimension = dimension
         }
     }
     
@@ -134,6 +185,11 @@ class LUTManager: ObservableObject {
     ///   - completion: Completion handler with success boolean
     func importLUT(from url: URL, completion: @escaping (Bool) -> Void) {
         // First check if the file exists
+        guard url.isFileURL else {
+            logger.error("LUTManager Error: URL is not a file URL: \(url)")
+            completion(false)
+            return
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             logger.error("LUTManager Error: File does not exist at path: \(url.path)")
             completion(false)
@@ -143,133 +199,92 @@ class LUTManager: ObservableObject {
         // Get file information before processing
         do {
             _ = try FileManager.default.attributesOfItem(atPath: url.path)
+            logger.debug("File attributes read successfully for \(url.lastPathComponent)")
         } catch {
-            logger.warning("LUTManager: Could not read file attributes: \(error.localizedDescription)")
+            logger.warning("LUTManager: Could not read file attributes for \(url.lastPathComponent): \(error.localizedDescription)")
         }
         
-        // Create a secure bookmarked copy if needed (for files from iCloud or external sources)
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let destinationURL = documentsDirectory.appendingPathComponent("LUTs/\(url.lastPathComponent)")
+        let lutsDirectory = documentsDirectory.appendingPathComponent("LUTs")
+        let destinationURL = lutsDirectory.appendingPathComponent(url.lastPathComponent)
         
         do {
-            // Create LUTs directory if it doesn't exist
-            let lutsDirectory = documentsDirectory.appendingPathComponent("LUTs")
+            // Ensure LUTs directory exists (redundant if init worked, but safe)
             if !FileManager.default.fileExists(atPath: lutsDirectory.path) {
                 try FileManager.default.createDirectory(at: lutsDirectory, withIntermediateDirectories: true)
             }
             
-            // Only copy if not already in our LUTs folder
-            if url.path != destinationURL.path {
-                // Remove existing file at destination if needed
-                if FileManager.default.fileExists(atPath: destinationURL.path) {
-                    try FileManager.default.removeItem(at: destinationURL)
+            // Copy the file to our safe location if it's not already there
+            if !FileManager.default.fileExists(atPath: destinationURL.path) {
+                let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+                defer {
+                    if shouldStopAccessing {
+                        url.stopAccessingSecurityScopedResource()
+                        logger.info("Stopped accessing security-scoped resource for import copy: \(url.lastPathComponent)")
+                    }
                 }
-                
-                // Copy the file to our safe location
+                logger.info("Attempting to copy \(url.lastPathComponent) to \(destinationURL.path)")
                 try FileManager.default.copyItem(at: url, to: destinationURL)
+                logger.info("Successfully copied \(url.lastPathComponent) to LUTs directory.")
+            } else if url.path != destinationURL.path {
+                logger.info("\(destinationURL.lastPathComponent) already exists, replacing with source from \(url.path)")
+                let shouldStopAccessing = url.startAccessingSecurityScopedResource()
+                defer {
+                    if shouldStopAccessing {
+                        url.stopAccessingSecurityScopedResource()
+                        logger.info("Stopped accessing security-scoped resource for import overwrite: \(url.lastPathComponent)")
+                    }
+                }
+                _ = try FileManager.default.replaceItemAt(destinationURL, withItemAt: url)
+                logger.info("Successfully replaced \(destinationURL.lastPathComponent) in LUTs directory.")
             } else {
-                logger.info("LUTManager: File is already in the correct location")
+                logger.info("LUTManager: File \(url.lastPathComponent) is already in the correct location.")
             }
             
             // Now load the LUT from the permanent location
             loadLUT(from: destinationURL)
             
-            // Update successful
-            DispatchQueue.main.async {
-                self.selectedLUTURL = destinationURL
-                completion(true)
+            // Add to available LUTs dictionary if not already present
+            let lutName = destinationURL.deletingPathExtension().lastPathComponent
+            if availableLUTs[lutName] == nil {
+                DispatchQueue.main.async {
+                    self.availableLUTs[lutName] = destinationURL
+                    self.logger.info("Added imported LUT '\(lutName)' to available list.")
+                }
             }
+            
+            completion(true)
         } catch {
-            logger.error("LUTManager Error: Failed to copy or load LUT: \(error.localizedDescription)")
-            
-            // Try to load directly from the original location as a fallback
-            do {
-                let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
-                self.setupLUTTexture(lutInfo: lutInfo)
-                self.setupLUTFilter(lutInfo: lutInfo) // Keep for CI pipeline if needed
-                DispatchQueue.main.async {
-                    self.selectedLUTURL = url
-                    self.addToRecentLUTs(url: url)
-                    completion(true)
-                }
-            } catch let loadError {
-                logger.error("LUTManager Error: Failed to load LUT directly from \(url.path): \(loadError.localizedDescription)")
-                DispatchQueue.main.async {
-                    completion(false)
-                }
-            }
-        }
-    }
-    
-    func loadLUT(named fileName: String) {
-        do {
-            guard let fileURL = Bundle.main.url(forResource: fileName, withExtension: "cube") else {
-                logger.error("LUTManager Error: File '\(fileName).cube' not found in bundle")
-                throw NSError(domain: "LUTManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "LUT file not found in bundle"])
-            }
-            
-            let lutInfo = try CubeLUTLoader.loadCubeFile(name: fileName)
-            setupLUTTexture(lutInfo: lutInfo)
-            setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
-            addToRecentLUTs(url: fileURL)
-        } catch let error {
-            logger.error("LUTManager Error: Failed to load LUT '\(fileName)': \(error.localizedDescription)")
+            logger.error("LUTManager Error: Failed to copy or load LUT during import: \(error.localizedDescription)")
+            completion(false)
         }
     }
     
     func loadLUT(from url: URL) {
-        // Start accessing security-scoped resource if needed
-        let shouldStopAccessing = url.startAccessingSecurityScopedResource()
-        defer {
-            if shouldStopAccessing {
-                url.stopAccessingSecurityScopedResource()
-                logger.info("LUTManager: Stopped accessing security-scoped resource for direct load")
-            }
-        }
-        
         // Verify file exists
         guard FileManager.default.fileExists(atPath: url.path) else {
-            logger.error("File does not exist at path: \(url.path)")
+            logger.error("File does not exist at path: \(url.path). Cannot load LUT.")
             return
         }
         
-        logger.info("File exists: true")
+        logger.info("Attempting to load LUT from: \(url.path)")
         
         do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-            if let fileSize = attributes[.size] as? NSNumber {
-                logger.info("File size: \(fileSize.intValue) bytes")
-            }
-            if let fileType = attributes[.type] as? String {
-                logger.info("File type: \(fileType)")
-            }
-        } catch {
-            logger.warning("Could not get file attributes: \(error.localizedDescription)")
-        }
-        
-        do {
-            // Load data using CubeLUTLoader
             let lutInfo = try CubeLUTLoader.loadCubeFile(from: url)
-            logger.info("LUT data loaded: dimension=\(lutInfo.dimension), data.count=\(lutInfo.data.count)")
-            
-            // Setup Metal Texture
             setupLUTTexture(lutInfo: lutInfo)
-            
-            // Setup Core Image Filter (optional, keep if needed)
             setupLUTFilter(lutInfo: lutInfo)
             
+            let lutName = url.deletingPathExtension().lastPathComponent
             DispatchQueue.main.async {
                 self.selectedLUTURL = url
-                self.addToRecentLUTs(url: url)
-                self.logger.info("LUTManager: Successfully loaded LUT from URL and configured.")
+                self.logger.info("Successfully loaded LUT: \(lutName)")
+                self.saveLastActiveLUTName(name: lutName)
+                if self.availableLUTs[lutName] == nil {
+                    self.availableLUTs[lutName] = url
+                }
             }
-            
-        } catch {
-            logger.error("Failed to load LUT from URL \(url.path): \(error.localizedDescription)")
-            // Optionally: Fallback to identity LUT or show error
-            DispatchQueue.main.async {
-                 self.clearLUT() // Reset to identity on failure
-            }
+        } catch let loadError {
+            logger.error("LUTManager Error: Failed to load LUT directly from \(url.path): \(loadError.localizedDescription)")
         }
     }
     
@@ -284,7 +299,6 @@ class LUTManager: ObservableObject {
             if let lutInfo = try? parseBinaryLUTData(data) {
                 setupLUTTexture(lutInfo: lutInfo)
                 setupLUTFilter(lutInfo: lutInfo)  // Keep CIFilter for backward compatibility
-                addToRecentLUTs(url: url)
                 DispatchQueue.main.async {
                     self.selectedLUTURL = url
                 }
@@ -335,12 +349,12 @@ class LUTManager: ObservableObject {
     
     // Applies the LUT to the given CIImage using the current filter instance
     func applyLUT(to image: CIImage) -> CIImage? {
-        logger.trace("--> applyLUT called") // Use trace for frequent calls
+        logger.trace("--> applyLUT called")
 
         // Check if a valid LUT filter is currently configured
         guard let filter = self.currentLUTFilter else {
-            logger.trace("    [applyLUT] No currentLUTFilter set. Returning original image.") // Use trace
-            return image // Return original image if no LUT is active
+            logger.trace("    [applyLUT] No currentLUTFilter set. Returning original image.")
+            return image
         }
 
         // Apply the existing filter to the new image
@@ -349,9 +363,9 @@ class LUTManager: ObservableObject {
         // Return the output image
         let outputImage = filter.outputImage
         if outputImage != nil {
-            logger.trace("    [applyLUT] Successfully applied existing LUT filter.") // Use trace
+            logger.trace("    [applyLUT] Successfully applied existing LUT filter.")
         } else {
-            logger.warning("    [applyLUT] Failed: Existing CIFilter outputImage was nil.") // Use warning
+            logger.warning("    [applyLUT] Failed: Existing CIFilter outputImage was nil.")
         }
         return outputImage
     }
@@ -389,65 +403,17 @@ class LUTManager: ObservableObject {
         }
     }
     
-    // MARK: - Recent LUT Management
-    
-    private func loadRecentLUTs() {
-        if let recentDict = UserDefaults.standard.dictionary(forKey: recentLUTsKey) as? [String: String] {
-            var loadedLUTs: [String: URL] = [:]
-            
-            for (name, urlString) in recentDict {
-                if let url = URL(string: urlString) {
-                    loadedLUTs[name] = url
-                }
-            }
-            
-            self.recentLUTs = loadedLUTs
-        }
-    }
-    
-    private func addToRecentLUTs(url: URL) {
-        if recentLUTs == nil {
-            recentLUTs = [:]
-        }
-        
-        // Add or update the URL
-        recentLUTs?[url.lastPathComponent] = url
-        
-        // Ensure we don't exceed the maximum number of recent LUTs
-        if let count = recentLUTs?.count, count > maxRecentLUTs {
-            // Remove oldest entries
-            let sortedKeys = recentLUTs?.keys.sorted { lhs, rhs in
-                if let lhsURL = recentLUTs?[lhs], let rhsURL = recentLUTs?[rhs] {
-                    return (try? lhsURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date() >
-                           (try? rhsURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-                }
-                return false
-            }
-            
-            if let keysToRemove = sortedKeys?.suffix(from: maxRecentLUTs) {
-                for key in keysToRemove {
-                    recentLUTs?.removeValue(forKey: key)
-                }
-            }
-        }
-        
-        // Save to UserDefaults
-        let urlDict = recentLUTs?.mapValues { $0.absoluteString }
-        UserDefaults.standard.set(urlDict, forKey: recentLUTsKey)
-    }
-    
     // MARK: - LUT Management
     
-    /// Clears the current LUT filter
+    /// Clears the currently active LUT and resets to identity.
     func clearLUT() {
-        logger.info("LUTManager: Clearing current LUT and resetting to identity")
-        setupIdentityLUTTexture() // Reset texture to identity
-        // Also clear the CI filter if it's being managed
         DispatchQueue.main.async {
-             self.currentLUTFilter = nil // Or set to an identity CI filter if needed
-             self.selectedLUTURL = nil
-             self.logger.info("LUT cleared, reset to identity texture.")
-         }
+            self.setupIdentityLUTTexture()
+            self.currentLUTFilter = nil
+            self.selectedLUTURL = nil
+            self.logger.info("Cleared active LUT, reset to identity.")
+            self.saveLastActiveLUTName(name: nil)
+        }
     }
     
     /// Alias for clearLUT() for more readable API
@@ -495,4 +461,14 @@ class LUTManager: ObservableObject {
         
         return (dimension: dimension, data: floatArray)
     }
+}
+
+// MARK: - Error Handling
+enum LUTError: Error {
+    case fileNotFound
+    case directoryCreationFailed
+    case copyFailed(Error)
+    case loadFailed(Error)
+    case invalidURL
+    case unknown
 }
