@@ -3,7 +3,7 @@ import os.log
 import CoreMedia
 
 protocol ExposureServiceDelegate: AnyObject {
-    func didUpdateWhiteBalance(_ temperature: Float)
+    func didUpdateWhiteBalance(_ temperature: Float, tint: Float)
     func didUpdateISO(_ iso: Float)
     func didUpdateShutterSpeed(_ speed: CMTime)
     func didEncounterError(_ error: CameraError)
@@ -77,7 +77,7 @@ class ExposureService: NSObject {
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
             // Log the KVO update regardless of mode for debugging SP
-            self.logger.debug("[KVO ISO] Observed ISO change to: \(newISO) (Current Mode: \(device.exposureMode.rawValue))" )
+            // self.logger.debug("[KVO ISO] Observed ISO change to: \(newISO) (Current Mode: \(device.exposureMode.rawValue))" ) // REMOVED
             // Report if in auto, locked, OR custom mode (since ISO can auto-adjust in custom mode too)
             if device.exposureMode == .continuousAutoExposure || 
                device.exposureMode == .locked || 
@@ -103,16 +103,30 @@ class ExposureService: NSObject {
         
         // Observe white balance gains changes
         whiteBalanceGainsObservation = device.observe(\.deviceWhiteBalanceGains, options: [.new]) { [weak self] device, change in
-            guard let self = self, let newGains = change.newValue else { return }
+            print("[TEMP DEBUG] WB KVO Callback Entered!") 
+            guard let self = self, let newGains = change.newValue else { 
+                // If self is nil here, the ExposureService instance was deallocated
+                print("[TEMP DEBUG] WB KVO: self is nil, exiting callback.")
+                return 
+            }
             // Always report WB changes if the delegate is available, regardless of mode?
             // Let the ViewModel decide if it cares based on its own state.
             // if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
-                 // Convert gains to temperature
+                 // Convert gains to temperature AND TINT
                 let tempAndTint = device.temperatureAndTintValues(for: newGains)
                 let temperature = tempAndTint.temperature
-                logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature)")
-                DispatchQueue.main.async {
-                    self.delegate?.didUpdateWhiteBalance(temperature)
+                let tint = tempAndTint.tint // Get the tint value
+                logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature), tint: \(tint)")
+
+                if self.delegate == nil {
+                    self.logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
+                } else {
+                    self.logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\(temperature), tint: \(tint)) (Synchronous Call)")
+                    // Call delegate directly - CAUTION: This is not on the main thread!
+                    // If the delegate method directly updates UI, this could cause issues.
+                    // For now, it updates @Published properties, which *should* be main-thread.
+                    // We'll revert this if needed, but let's test.
+                    self.delegate?.didUpdateWhiteBalance(temperature, tint: tint) // Pass both values
                 }
             // }
         }
@@ -162,7 +176,7 @@ class ExposureService: NSObject {
              // Report White Balance
              if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
                  let tempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
-                 self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature)
+                 self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass tint here too
              }
         }
     }
@@ -188,8 +202,10 @@ class ExposureService: NSObject {
                 device.whiteBalanceMode = .locked
                 device.setWhiteBalanceModeLocked(with: gains) { [weak self] _ in
                     // Report the value back via delegate *after* it's set
+                    // Also need to read the tint value after setting
+                    let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
                     DispatchQueue.main.async {
-                        self?.delegate?.didUpdateWhiteBalance(temperature)
+                        self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint) // Pass both
                     }
                 }
             } else {
@@ -509,42 +525,42 @@ class ExposureService: NSObject {
         }
     }
     
-    func updateTint(_ tintValue: Double, currentWhiteBalance: Float) {
+    func updateTint(_ tint: Float, currentWhiteBalance: Float) {
         guard let device = device else { 
             logger.error("No camera device available")
             return 
         }
         
-        let tintRange = (-150.0...150.0)
-        let clampedTint = min(max(tintValue, tintRange.lowerBound), tintRange.upperBound)
-        
         do {
             try device.lockForConfiguration()
+            
+            // Use the provided current white balance temperature
+            let temperature = currentWhiteBalance
+            let tnt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: temperature, tint: tint) // Use the Float tint
+            var gains = device.deviceWhiteBalanceGains(for: tnt)
+            let maxGain = device.maxWhiteBalanceGain
+            
+            gains.redGain   = min(max(1.0, gains.redGain), maxGain)
+            gains.greenGain = min(max(1.0, gains.greenGain), maxGain)
+            gains.blueGain  = min(max(1.0, gains.blueGain), maxGain)
+            
+            // Set mode to locked when manually setting WB
             if device.isWhiteBalanceModeSupported(.locked) {
                 device.whiteBalanceMode = .locked
-                
-                let currentGains = device.deviceWhiteBalanceGains
-                var newGains = currentGains
-                let tintScale = clampedTint / 150.0
-                
-                if tintScale > 0 {
-                    newGains.greenGain = currentGains.greenGain * (1.0 + Float(tintScale))
-                } else {
-                    let magentaScale = 1.0 + Float(abs(tintScale))
-                    newGains.redGain = currentGains.redGain * magentaScale
-                    newGains.blueGain = currentGains.blueGain * magentaScale
+                device.setWhiteBalanceModeLocked(with: gains) { [weak self] _ in
+                    // Report the value back via delegate *after* it's set
+                    // Need to read the actual temp/tint after setting gains
+                    let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
+                    DispatchQueue.main.async {
+                        self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint)
+                    }
                 }
-                
-                let maxGain = device.maxWhiteBalanceGain
-                newGains.redGain = min(max(1.0, newGains.redGain), maxGain)
-                newGains.greenGain = min(max(1.0, newGains.greenGain), maxGain)
-                newGains.blueGain = min(max(1.0, newGains.blueGain), maxGain)
-                
-                device.setWhiteBalanceModeLocked(with: newGains) { _ in }
+            } else {
+                 logger.warning("Locked white balance mode not supported.")
             }
             device.unlockForConfiguration()
         } catch {
-            logger.error("Error setting tint: \(error.localizedDescription)")
+            logger.error("Tint adjustment error: \(error.localizedDescription)")
             delegate?.didEncounterError(.whiteBalanceError)
         }
     }

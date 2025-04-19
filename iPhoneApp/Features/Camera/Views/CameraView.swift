@@ -16,7 +16,7 @@ struct CameraView: View {
     @State private var showLUTPreview = true
     @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
-    @State private var isDebugEnabled = false
+    @State private var isDebugEnabled = true
     
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
@@ -215,6 +215,7 @@ struct CameraView: View {
             Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
             Text("ISO: \(Int(viewModel.iso))")
             Text("WB: \(Int(viewModel.whiteBalance))K")
+            Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
             Text("Shutter Angle: \(String(format: "%.0f°", viewModel.shutterSpeed.seconds * viewModel.selectedFrameRate * 360))")
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))

@@ -269,8 +269,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         static let ntsc30 = CMTime(value: 1, timescale: 30)
     }
     
-    @Published var currentTint: Double = 0.0 // Range: -150 to +150
-    private let tintRange = (-150.0...150.0)
+    @Published var currentTint: Float = 0 // Change type to Float
+    let tintRange: ClosedRange<Float> = -150.0...150.0
     
     private var videoDeviceInput: AVCaptureDeviceInput?
     
@@ -483,7 +483,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func updateTint(_ newValue: Double) {
-        currentTint = newValue.clamped(to: tintRange)
+        // Cast the incoming Double to Float before clamping and setting
+        let floatValue = Float(newValue)
+        currentTint = floatValue.clamped(to: tintRange)
         exposureService.updateTint(currentTint, currentWhiteBalance: whiteBalance)
     }
     
@@ -1052,16 +1054,16 @@ extension CameraViewModel: CameraSetupServiceDelegate {
 // MARK: - ExposureServiceDelegate
 
 extension CameraViewModel: ExposureServiceDelegate {
-    func didUpdateWhiteBalance(_ temperature: Float) {
-        DispatchQueue.main.async {
-            self.logger.debug("Delegate: didUpdateWhiteBalance called with temperature: \(temperature)")
-            self.whiteBalance = temperature
-        }
+    func didUpdateWhiteBalance(_ temperature: Float, tint: Float) {
+        // Log entry
+        self.logger.debug("[TEMP DEBUG] ViewModel Delegate: didUpdateWhiteBalance Entered. Temp: \(temperature), Tint: \(tint)")
+        self.whiteBalance = temperature
+        self.currentTint = tint
     }
     
     func didUpdateISO(_ iso: Float) {
         DispatchQueue.main.async {
-            self.logger.debug("[ViewModel Delegate] didUpdateISO called with: \(iso)")
+            // self.logger.debug("[ViewModel Delegate] didUpdateISO called with: \(iso)") // REMOVED
             self.iso = iso
         }
     }
