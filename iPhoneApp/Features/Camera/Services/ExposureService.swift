@@ -253,6 +253,12 @@ class ExposureService: NSObject {
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
+        // If Shutter Priority is active, do not allow manual shutter speed changes.
+        guard !isShutterPriorityActive else {
+            logger.info("updateShutterSpeed called while Shutter Priority is active. Ignoring.")
+            return
+        }
+
         guard let device = device else {
             logger.error("No camera device available for shutter speed update")
             return
@@ -295,6 +301,12 @@ class ExposureService: NSObject {
     }
     
     func updateShutterAngle(_ angle: Double, frameRate: Double) {
+        // If Shutter Priority is active, do not allow manual shutter angle changes.
+        guard !isShutterPriorityActive else {
+            logger.info("updateShutterAngle called while Shutter Priority is active. Ignoring.")
+            return
+        }
+
         guard frameRate > 0 else {
              logger.error("Invalid frame rate (\(frameRate)) for shutter angle calculation.")
              delegate?.didEncounterError(.configurationFailed(message: "Invalid frame rate for shutter angle"))
@@ -562,6 +574,101 @@ class ExposureService: NSObject {
         // logger.debug("Queried current WB temp: \(tempAndTint.temperature)K")
         return tempAndTint.temperature
     }
+
+    // --- Shutter Priority Methods ---
+    func enableShutterPriority(duration: CMTime) {
+        guard let device = device else {
+            logger.error("SP Enable: No device available.")
+            return
+        }
+        // Prevent re-enabling if already active
+        guard !isShutterPriorityActive else {
+            logger.warning("SP Enable: Already active.")
+            return
+        }
+
+        // Clamp the requested duration just in case
+        let minDuration = device.activeFormat.minExposureDuration
+        let maxDuration = device.activeFormat.maxExposureDuration
+        let clampedDuration = CMTimeClampToRange(duration, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
+
+        self.targetShutterDuration = clampedDuration
+        self.isShutterPriorityActive = true
+        self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", CMTimeGetSeconds(clampedDuration)))s")
+
+        // Perform initial mode set on the adjustment queue
+        exposureAdjustmentQueue.async { [weak self] in
+             guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
+
+            let currentISO = currentDevice.iso
+            let minISO = currentDevice.activeFormat.minISO
+            let maxISO = currentDevice.activeFormat.maxISO
+            let clampedISO = min(max(currentISO, minISO), maxISO)
+
+            do {
+                try currentDevice.lockForConfiguration()
+                // Set the mode to custom with the fixed duration and current ISO
+                currentDevice.setExposureModeCustom(duration: clampedDuration, iso: clampedISO) { [weak self] _ in
+                    // Report initial values immediately after setting
+                     DispatchQueue.main.async {
+                         self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                         self?.delegate?.didUpdateISO(clampedISO)
+                         self?.logger.info("SP Enabled: Initial ISO set to \(String(format: "%.1f", clampedISO))")
+                     }
+                }
+                currentDevice.unlockForConfiguration()
+            } catch {
+                self.logger.error("SP Enable: Error setting initial custom exposure: \(error.localizedDescription)")
+                 // Attempt to unlock configuration if lock failed during change
+                 currentDevice.unlockForConfiguration()
+                 // Revert state if failed
+                 DispatchQueue.main.async {
+                     self.isShutterPriorityActive = false
+                     self.targetShutterDuration = nil
+                     self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
+                 }
+            }
+        }
+    }
+    
+    func disableShutterPriority() {
+        guard isShutterPriorityActive else {
+            // logger.debug("SP Disable: Already inactive.")
+            return
+        }
+        guard let device = device else {
+            logger.error("SP Disable: No device available.")
+            return
+        }
+
+        isShutterPriorityActive = false // Set flag immediately to stop adjustments
+        targetShutterDuration = nil
+        logger.info("Disabling Shutter Priority.")
+
+        // Revert to auto-exposure on the adjustment queue
+        exposureAdjustmentQueue.async { [weak self] in
+             guard let self = self, let currentDevice = self.device else { return }
+
+            do {
+                try currentDevice.lockForConfiguration()
+                // Always revert to continuousAutoExposure when SP is turned off
+                if currentDevice.isExposureModeSupported(.continuousAutoExposure) {
+                    currentDevice.exposureMode = .continuousAutoExposure
+                     self.logger.info("SP Disabled: Reverted to Continuous Auto Exposure.")
+                    // KVO should automatically report the new auto values
+                } else {
+                    self.logger.warning("SP Disable: Continuous Auto Exposure not supported, leaving mode as is.")
+                }
+                currentDevice.unlockForConfiguration()
+            } catch {
+                self.logger.error("SP Disable: Error reverting to auto exposure: \(error.localizedDescription)")
+                 // Attempt to unlock configuration if lock failed during change
+                 currentDevice.unlockForConfiguration()
+                 // Should we notify delegate of error?
+            }
+        }
+    }
+    // --------------------------------
 
     // --- Add new method here ---
     private func handleExposureTargetOffsetUpdate(change: NSKeyValueObservedChange<Float>) {

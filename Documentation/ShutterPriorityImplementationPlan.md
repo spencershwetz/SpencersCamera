@@ -182,7 +182,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     }
     ```
 
-6.  **Implement `disableShutterPriority()`:**
+~~6.  **Implement `disableShutterPriority()`:~~
     *   Create this new public method:
 
     ```swift
@@ -226,7 +226,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     }
     ```
 
-7.  **Refine `updateShutterSpeed`/`updateShutterAngle`:**
+~~7.  **Refine `updateShutterSpeed`/`updateShutterAngle`:**~~
     *   Modify these methods to *only* set manual exposure if Shutter Priority is *not* currently active. This prevents them from interfering with the SP logic.
 
     ```swift
@@ -250,13 +250,10 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
                     }
                 }
             } else {
-                 logger.warning("Manual Shutter Set (SP OFF): Custom mode not supported.")
+                 logger.warning("Custom exposure mode not supported.")
             }
         } else {
-             // If SP is ON, this method should probably do nothing,
-             // or perhaps just update the targetDuration for the SP logic?
-             // For now, let's do nothing to avoid conflicts.
-             logger.info("updateShutterSpeed called while SP is active. Ignoring.")
+             logger.info("Manual shutter update ignored because Shutter Priority is active.")
         }
         // --- Modification End ---
         device.unlockForConfiguration()
