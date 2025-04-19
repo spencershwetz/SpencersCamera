@@ -180,7 +180,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         device?.activeFormat.maxISO ?? 1600
     }
     
-    @Published var selectedFrameRate: Double = 30.0
+    @Published var selectedFrameRate: Double = 30.0 {
+        // Add didSet observer to re-apply shutter priority if active
+        didSet {
+            if isShutterPriorityEnabled {
+                logger.info("Frame rate changed to \(self.selectedFrameRate) while Shutter Priority is active. Re-applying 180° shutter.")
+                updateShutterAngle(180.0)
+            }
+        }
+    }
     let availableFrameRates: [Double] = [23.976, 24.0, 25.0, 29.97, 30.0]
     
     private var frameRateUpdateInterval: Int = 30
@@ -320,7 +328,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var recordingOrientation: CGFloat?
     
     // Store exposure lock state before recording starts if auto-lock is enabled
-    private var exposureLockStateBeforeRecording: Bool = false
+    private var previousExposureMode: AVCaptureDevice.ExposureMode? // Store actual mode
+    private var previousISO: Float? // Store ISO if mode was .custom
+    private var previousExposureDuration: CMTime? // Store duration if mode was .custom
     
     // Service Instances
     private var cameraSetupService: CameraSetupService!
@@ -510,44 +520,69 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @MainActor
     func startRecording() async {
-        logger.info("Attempting to start recording...")
-        // Use the new public `currentDevice` property
-        guard !self.isRecording,
-              self.status == .running,
-              let currentDevice = self.cameraDeviceService?.currentDevice else { // Use the public currentDevice
-            // Log detailed reason for failure
-            // Use the public `currentDevice` in the log message as well
-            logger.warning("Start recording called but conditions not met. isRecording: \(self.isRecording), status: \(String(describing: self.status)), device: \(self.cameraDeviceService?.currentDevice?.localizedName ?? "nil")")
+        guard !isRecording else {
+            logger.warning("Start recording called but already recording.")
             return
         }
-        
-        // Get current settings
+
+        guard let currentDevice = self.device else {
+            logger.error("Cannot start recording: No camera device available.")
+            self.error = .cameraUnavailable
+            return
+        }
+
+        logger.info("Requesting recording start.")
         let settings = SettingsModel()
-        
-        // Lock white balance if enabled in settings
-        // Lock exposure if enabled in settings
+
+        // Handle auto-locking exposure if enabled
         if settings.isExposureLockEnabledDuringRecording {
             logger.info("Auto-locking exposure for recording start.")
-            exposureLockStateBeforeRecording = self.isExposureLocked // Store current state
-            if !self.isExposureLocked { // Only lock if not already locked
-                self.isExposureLocked = true // This triggers updateExposureLock() via didSet
+            // Capture current state *before* locking
+            previousExposureMode = currentDevice.exposureMode
+            if previousExposureMode == .custom {
+                previousISO = currentDevice.iso
+                previousExposureDuration = currentDevice.exposureDuration
+                logger.info("Storing previous custom exposure: ISO \(String(describing: self.previousISO)), Duration \(self.previousExposureDuration?.seconds ?? 0)s")
+            } else {
+                previousISO = nil
+                previousExposureDuration = nil
+                logger.info("Storing previous exposure mode: \(String(describing: self.previousExposureMode)) ('.custom' values not stored)")
             }
+            
+            // Apply the lock differently based on Shutter Priority state
+            if isShutterPriorityEnabled {
+                // Lock Shutter Priority: Keep 180° duration, lock current ISO
+                if let duration = previousExposureDuration, let iso = previousISO {
+                    logger.info("Applying Shutter Priority recording lock: Keeping Duration \(duration.seconds)s, Locking ISO \(iso)")
+                    exposureService.setCustomExposure(duration: duration, iso: iso)
+                } else {
+                    // Fallback if values weren't captured (shouldn't happen if SP is active)
+                    logger.warning("Shutter Priority active but couldn't get previous ISO/Duration. Falling back to full AE lock.")
+                    exposureService.setExposureLock(locked: true)
+                }
+            } else {
+                // Standard AE Lock: Lock both current ISO and Duration
+                logger.info("Applying standard AE lock for recording.")
+                exposureService.setExposureLock(locked: true)
+                // Only update UI state for standard AE lock
+                self.isExposureLocked = true 
+            }
+            // REMOVED: self.isExposureLocked = true // Don't set this universally anymore
+            // The fact that previousExposureMode is non-nil indicates a lock happened
         }
-        
+
         // Lock white balance if enabled in settings
         if settings.isWhiteBalanceLockEnabled {
             logger.info("Auto-locking white balance for recording start.")
             exposureService.updateWhiteBalance(self.whiteBalance)
         }
-        
+
         // Set the selected LUT TEXTURE onto the METAL processor BEFORE configuring the recording service
         logger.debug("Setting Metal LUT texture for bake-in: \(self.lutManager.currentLUTTexture != nil ? "Available" : "None")")
         recordingService.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
-        // lutProcessor.setLUTFilter(lutManager.currentLUTFilter) // <-- REMOVED old filter setting
 
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
-        // lutProcessor.setLogEnabled(self.isAppleLogEnabled) // REMOVED old CI processor log setting
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
 
@@ -589,42 +624,78 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @MainActor
     func stopRecording() async {
-        guard isRecording else { 
+        guard isRecording else {
             logger.warning("Stop recording called but not currently recording.")
-            return 
+            return
         }
-        
+
         logger.info("Requesting recording stop.")
         // Stop recording
         await recordingService.stopRecording()
-        
+
         self.isRecording = false
         self.recordingStartTime = nil // Clear start time
         logger.info("Recording state set to false.")
-        
-        // Restore exposure state after recording, considering Shutter Priority
+
+        // Restore exposure state if it was automatically locked for recording
         let settings = SettingsModel()
-        if settings.isExposureLockEnabledDuringRecording {
-            if self.isShutterPriorityEnabled {
-                // If shutter priority was active, re-apply it instead of just unlocking
-                logger.info("Recording stopped: Re-applying Shutter Priority (180°).")
-                self.updateShutterAngle(180.0) // Re-sets mode to .custom
-                // Ensure the UI reflects that exposure isn't strictly 'locked' anymore
-                if self.isExposureLocked { 
-                    self.isExposureLocked = false // Triggers updateExposureLock -> setExposureLock(locked: false)
+        if settings.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
+            logger.info("Recording stopped: Restoring previous exposure state (Mode: \(String(describing: modeToRestore)))")
+
+            switch modeToRestore {
+            case .continuousAutoExposure:
+                exposureService.setAutoExposureEnabled(true)
+                self.isExposureLocked = false // Update UI state
+                logger.info("Restored to .continuousAutoExposure.")
+
+            case .custom:
+                // Set mode back to .custom first
+                exposureService.setAutoExposureEnabled(false)
+                self.isExposureLocked = false // Update UI state
+                logger.info("Set mode to .custom.")
+                
+                // Check if Shutter Priority was active before recording
+                if isShutterPriorityEnabled {
+                    // Restore only shutter (to 180 degrees), let ISO float
+                    if let duration = previousExposureDuration {
+                        logger.info("Attempting to restore Shutter Priority (Shutter: \(duration.seconds)s, ISO: Auto)")
+                        exposureService.updateShutterSpeed(duration) // This uses currentISO internally
+                    } else {
+                        logger.warning("Shutter Priority active, but previous duration not stored. Cannot restore 180° shutter.")
+                    }
+                } else {
+                    // Restore standard custom exposure (both ISO and Shutter)
+                    if let iso = previousISO, let duration = previousExposureDuration {
+                        logger.info("Attempting to restore custom ISO: \(iso) and Duration: \(duration.seconds)s")
+                        exposureService.updateISO(iso)
+                        exposureService.updateShutterSpeed(duration) // This uses currentISO, but updateISO was just called
+                        // Consider if a dedicated ExposureService.setCustom(iso:duration:) is better
+                    } else {
+                         logger.warning("Previous mode was .custom, but ISO/Duration were not stored. Cannot restore specific values.")
+                    }
                 }
-                // Explicitly report values AFTER mode is set back to custom and lock state updated
-                // to ensure UI reflects the newly adjusting ISO/Shutter.
-                exposureService.reportCurrentDeviceValues()
-            } else {
-                // Otherwise, restore the lock state from before recording started
-                logger.info("Recording stopped: Restoring previous exposure lock state: \(self.exposureLockStateBeforeRecording).")
-                if self.isExposureLocked != self.exposureLockStateBeforeRecording { // Only restore if different
-                    self.isExposureLocked = self.exposureLockStateBeforeRecording // Restore previous state (triggers service call)
-                }
+
+            case .locked:
+                exposureService.setExposureLock(locked: true)
+                self.isExposureLocked = true // Update UI state
+                logger.info("Restored to .locked (was locked before recording started)." )
+
+            default:
+                // Should not happen if mode was captured correctly
+                logger.warning("Could not restore unknown previous exposure mode: \(String(describing: modeToRestore)). Reverting to auto.")
+                exposureService.setAutoExposureEnabled(true)
+                 self.isExposureLocked = false // Update UI state
             }
+
+            // Clear the stored state
+            previousExposureMode = nil
+            previousISO = nil
+            previousExposureDuration = nil
+            
+        } else if settings.isExposureLockEnabledDuringRecording {
+             logger.warning("Lock during recording enabled, but no previous exposure mode was stored. Cannot restore.")
         }
-        
+
         // Notify RotationLockedContainer about recording state change
         NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
 
@@ -854,19 +925,29 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func toggleShutterPriority() {
         // Toggle the mode
         isShutterPriorityEnabled.toggle()
+        
         if isShutterPriorityEnabled {
-            // Disable auto exposure and set shutter to 180° mode
-            logger.info("Shutter Priority enabled: locking shutter to 180°")
-            updateShutterAngle(180.0)
-            // Ensure AE and Lock states reflect the .custom mode change
+            // Entering Shutter Priority Mode
+            logger.info("Shutter Priority enabled: Setting shutter to 180° (ISO Auto)")
+            // Set ViewModel state first
             isAutoExposureEnabled = false 
             isExposureLocked = false
+            // Apply 180 degree shutter (this sets device mode to .custom with auto ISO)
+            updateShutterAngle(180.0)
+            // Log current ISO immediately after requesting the change
+            if let currentDevice = self.device {
+                logger.info("[SP Toggle ON] ISO immediately after updateShutterAngle call: \(currentDevice.iso)")
+            }
+            // Service delegate calls will update iso/shutterSpeed properties
         } else {
-            // Revert to continuous auto-exposure
-            logger.info("Shutter Priority disabled: reverting to auto-exposure")
-            // Ensure AE and Lock states reflect the .continuousAutoExposure mode change
+            // Exiting Shutter Priority Mode
+            logger.info("Shutter Priority disabled: Reverting to continuous auto-exposure")
+            // Set ViewModel state first
             isAutoExposureEnabled = true 
             isExposureLocked = false 
+            // Set device mode back to auto
+            exposureService.setAutoExposureEnabled(true)
+            // Service delegate calls/KVO will update iso/shutterSpeed properties
         }
     }
 
@@ -993,6 +1074,7 @@ extension CameraViewModel: ExposureServiceDelegate {
     
     func didUpdateISO(_ iso: Float) {
         DispatchQueue.main.async {
+            self.logger.debug("[ViewModel Delegate] didUpdateISO called with: \(iso)")
             self.iso = iso
         }
     }

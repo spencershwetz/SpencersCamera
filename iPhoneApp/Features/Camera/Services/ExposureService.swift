@@ -59,6 +59,8 @@ class ExposureService: NSObject {
         // Observe ISO changes
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
+            // Log the KVO update regardless of mode for debugging SP
+            self.logger.debug("[KVO ISO] Observed ISO change to: \(newISO) (Current Mode: \(device.exposureMode.rawValue))" )
             // Report if in auto, locked, OR custom mode (since ISO can auto-adjust in custom mode too)
             if device.exposureMode == .continuousAutoExposure || 
                device.exposureMode == .locked || 
@@ -227,64 +229,121 @@ class ExposureService: NSObject {
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
-        guard let device = device else { 
-            logger.error("No camera device available")
-            return 
+        guard let device = device else {
+            logger.error("No camera device available for shutter speed update")
+            return
         }
-        
+
         do {
             try device.lockForConfiguration()
-            
-            // Get the current device's supported ISO range
-            let minISO = device.activeFormat.minISO
-            let maxISO = device.activeFormat.maxISO
-            
-            // Get current ISO value
-            let currentISO = device.iso
-            
-            // Ensure the ISO value is within the supported range
-            let clampedISO = min(max(minISO, currentISO), maxISO)
-            
-            // If ISO is 0 or outside valid range, use min ISO as fallback
-            let safeISO = clampedISO <= 0 ? minISO : clampedISO
-            
+
+            // Clamp the requested speed to the device's limits
+            let minDuration = device.activeFormat.minExposureDuration
+            let maxDuration = device.activeFormat.maxExposureDuration
+            let clampedSpeed = CMTimeClampToRange(speed, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
+
+            if CMTimeCompare(clampedSpeed, speed) != 0 {
+                 logger.debug("Clamped shutter speed from \(CMTimeGetSeconds(speed))s to \(CMTimeGetSeconds(clampedSpeed))s")
+            }
+
+            // Set exposure mode to custom and use the clamped speed
             if device.isExposureModeSupported(.custom) {
                 device.exposureMode = .custom
-                device.setExposureModeCustom(duration: speed, iso: safeISO) { [weak self] timestamp in
+                // Use AVCaptureDevice.currentISO to let ISO adjust automatically
+                device.setExposureModeCustom(duration: clampedSpeed, iso: AVCaptureDevice.currentISO) { [weak self] timestamp in
                     // Report the value back via delegate *after* it's set
                     DispatchQueue.main.async {
                         guard let self = self else { return }
-                        self.delegate?.didUpdateShutterSpeed(speed)
-                        // If we had to correct ISO, update that too
-                        if safeISO != currentISO {
-                            self.delegate?.didUpdateISO(safeISO)
-                        }
-                        self.logger.debug("Successfully set shutter speed to \(CMTimeGetSeconds(speed))s")
+                        // Report the *actually set* clamped speed
+                        self.delegate?.didUpdateShutterSpeed(clampedSpeed)
+                        self.logger.debug("Successfully set shutter speed to \(CMTimeGetSeconds(clampedSpeed))s (ISO will adjust automatically)")
+                        
+                        // Since we set ISO to auto, report the current ISO value via KVO trigger
+                        // (No need to explicitly call delegate?.didUpdateISO here)
                     }
                 }
             } else {
                  logger.warning("Custom exposure mode not supported.")
             }
-            
+
             device.unlockForConfiguration()
-            
-            // Delegate calls moved inside completion handler
-            // delegate?.didUpdateShutterSpeed(speed)
-            // If we had to correct ISO, update that too
-            // if safeISO != currentISO {
-            //     delegate?.didUpdateISO(safeISO)
-            // }
+
         } catch {
-            logger.error("Shutter speed error: \(error.localizedDescription)")
+            logger.error("Shutter speed update error: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)
         }
     }
     
     func updateShutterAngle(_ angle: Double, frameRate: Double) {
+        guard let device = device else {
+             logger.error("No camera device available for shutter angle update")
+             return
+        }
+        guard frameRate > 0 else {
+             logger.error("Invalid frame rate (\(frameRate)) for shutter angle calculation.")
+             delegate?.didEncounterError(.configurationFailed(message: "Invalid frame rate for shutter angle"))
+             return
+        }
+        
+        // Clamp angle (e.g., 1.1 to 360 degrees) - adjust as needed
         let clampedAngle = min(max(angle, 1.1), 360.0)
-        let duration = (clampedAngle / 360.0) * (1.0 / frameRate)
-        let time = CMTimeMakeWithSeconds(duration, preferredTimescale: 1000000)
+        if clampedAngle != angle {
+            logger.debug("Clamped shutter angle from \(angle)° to \(clampedAngle)°")
+        }
+        
+        let durationSeconds = (clampedAngle / 360.0) * (1.0 / frameRate)
+        let time = CMTimeMakeWithSeconds(durationSeconds, preferredTimescale: 1_000_000) // Higher precision timescale
+
+        logger.debug("Calculated shutter duration \(durationSeconds)s for angle \(clampedAngle)° at \(frameRate)fps")
+
+        // Reuse the updated updateShutterSpeed logic
         updateShutterSpeed(time)
+    }
+    
+    /// Sets the exposure mode to custom with a specific duration and ISO.
+    /// This is used for locking exposure in Shutter Priority + Record Lock mode.
+    func setCustomExposure(duration: CMTime, iso: Float) {
+        guard let device = device else {
+            logger.error("No camera device available for custom exposure setting")
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Clamp duration and ISO to device limits
+            let minDuration = device.activeFormat.minExposureDuration
+            let maxDuration = device.activeFormat.maxExposureDuration
+            let clampedDuration = CMTimeClampToRange(duration, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
+
+            let minISO = device.activeFormat.minISO
+            let maxISO = device.activeFormat.maxISO
+            let clampedISO = min(max(minISO, iso), maxISO)
+            
+            if device.isExposureModeSupported(.custom) {
+                device.exposureMode = .custom
+                device.setExposureModeCustom(duration: clampedDuration, iso: clampedISO) { [weak self] timestamp in
+                    // Log success but DO NOT call delegates here. Rely on KVO for state updates.
+                    // This prevents race conditions where this completion handler overwrites
+                    // newer KVO updates after recording stops / modes change.
+                    // DispatchQueue.main.async {
+                    //     guard let self = self else { return }
+                    //     // Report the actually set values
+                    //     self.delegate?.didUpdateShutterSpeed(clampedDuration)
+                    //     self.delegate?.didUpdateISO(clampedISO)
+                    // }
+                     self?.logger.info("[setCustomExposure Completion] Successfully set custom exposure: Duration \\(CMTimeGetSeconds(clampedDuration))s, ISO \\(clampedISO)")
+                }
+            } else {
+                 logger.warning("Custom exposure mode not supported.")
+            }
+
+            device.unlockForConfiguration()
+
+        } catch {
+            logger.error("Custom exposure setting error: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed)
+        }
     }
     
     func setAutoExposureEnabled(_ enabled: Bool) {
