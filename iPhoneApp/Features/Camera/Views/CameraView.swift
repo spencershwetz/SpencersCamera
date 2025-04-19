@@ -10,6 +10,7 @@ struct CameraView: View {
 
     // Use the shared instance with @ObservedObject
     @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
+    @StateObject private var appLifecycleObserver = AppLifecycleObserver() // Add the new observer manager
 
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
@@ -23,20 +24,6 @@ struct CameraView: View {
         self._viewModel = StateObject(wrappedValue: viewModel)
         // We CANNOT access @StateObject properties here as they won't be initialized yet
         // Only setup notifications that don't depend on StateObjects
-        setupOrientationNotifications()
-    }
-    
-    private func setupOrientationNotifications() {
-        // Register for app state changes to re-enforce orientation when app becomes active
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("DEBUG: App became active - re-enforcing camera orientation")
-            // We CANNOT reference viewModel directly here - it causes the error
-            // Instead, we'll handle this in onAppear or through a dedicated @State property
-        }
     }
     
     var body: some View {
@@ -104,6 +91,11 @@ struct CameraView: View {
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                 // When app is moved to background
                 stopSession()
+            }
+            // Restart session when app becomes active again
+            .onReceive(appLifecycleObserver.didBecomeActivePublisher) { _ in
+                print("DEBUG: Received didBecomeActivePublisher event, calling startSession()")
+                startSession()
             }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator
@@ -383,9 +375,6 @@ struct CameraView: View {
     }
     
     private func stopSession() {
-        // Remove notification observer when the view disappears
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        
         // Stop the camera session when the view disappears
         if viewModel.session.isRunning {
             DispatchQueue.global(qos: .userInitiated).async {

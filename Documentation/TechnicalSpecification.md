@@ -12,11 +12,15 @@ This document outlines the technical specifications and requirements for the Spe
     *   watchOS: Apple Watch models compatible with watchOS 11+.
 *   **Architecture**: MVVM (primarily), Service Layer for encapsulating framework interactions.
 *   **UI Framework**: SwiftUI (primarily), UIKit (`UIViewControllerRepresentable`, `UIViewRepresentable`, `AppDelegate`) for bridging AVFoundation, MetalKit, and specific view controllers/app lifecycle.
+*   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
+    *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.
+    *   `didBecomeActive` is managed by `AppLifecycleObserver` (used as `@StateObject` in `CameraView`), which publishes an event triggering `startSession` in `CameraView` to ensure the session restarts correctly after backgrounding.
 
 ## Core Features & Implementation Details
 
 *   **Camera Control**: 
     *   Uses `AVCaptureSession` managed primarily within `CameraViewModel` and configured by `CameraSetupService`.
+    *   Session start/stop is handled by `startSession`/`stopSession` in `CameraViewModel`, triggered by `CameraView`'s `onAppear`/`onDisappear` and the `AppLifecycleObserver`'s `didBecomeActivePublisher`.
     *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
     *   Lens switching logic in `CameraDeviceService` handles physical switching (reconfiguring session) and digital zoom (setting `videoZoomFactor` on wide lens for 2x).
     *   Format selection (Resolution, FPS, Color Space) managed by `VideoFormatService`, finding optimal `AVCaptureDevice.Format` based on requested criteria.
@@ -66,6 +70,7 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Real-time Preview**: 
     *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
     *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
+    *   Visual adjustments (`.scaleEffect(0.9)`, padding) are applied to the `CameraPreviewView` within `CameraView.swift` for positioning.
     *   Triple buffering managed via `DispatchSemaphore` in `MetalPreviewView`.
 *   **Recording Light**: 
     *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.

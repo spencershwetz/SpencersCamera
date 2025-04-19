@@ -14,9 +14,12 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice`.
+*   Adjusted camera preview position and scale using `.scaleEffect(0.9)` and padding in `CameraView`.
 
 ### Fixed
 
+*   Resolved issue where camera preview would not restart after the app returned from the background by using `AppLifecycleObserver` to trigger `startSession`.
+*   Correctly handled `UIApplication.didBecomeActiveNotification` observer lifecycle using `ObservableObject` (`AppLifecycleObserver`) to prevent logging loops and ensure proper removal.
 *   Resolved issue where ISO would incorrectly continue to adjust during recording when Shutter Priority and "Lock Exposure During Recording" were both enabled. Decoupled UI lock state (`isExposureLocked`) from internal SP recording lock logic in `CameraViewModel`.
 *   Prevented manual exposure lock (`toggleExposureLock`) from being activated while Shutter Priority is enabled (`CameraViewModel`).
 *   Ensured manual exposure lock UI state (`isExposureLocked`) is correctly turned off when Shutter Priority is enabled (`CameraViewModel`).

@@ -54,6 +54,9 @@ The project is organized into the following main components:
 │   │   │   │   └── VolumeButtonHandler.swift
 │   │   │   ├── Utilities/
 │   │   │   │   └── DocumentPicker.swift
+│   │   │   └── Core/
+│   │   │       └── Utilities/
+│   │   │           └── AppLifecycleObserver.swift # Observer for app state
 │   │   │   ├── Views/
 │   │   │   │   ├── CameraPreviewView.swift
 │   │   │   │   ├── CameraView.swift
@@ -95,8 +98,10 @@ The project is organized into the following main components:
 
 ## Key Component Interactions & Data Flow
 
-*   **Camera Feature**: 
-    *   `CameraView` observes `CameraViewModel`.
+*   **Camera Feature**:
+    *   `CameraView` observes `CameraViewModel`. It uses `@StateObject` to manage an `AppLifecycleObserver` instance.
+    *   `AppLifecycleObserver` manages the `UIApplication.didBecomeActiveNotification` observer lifecycle and publishes an event when the app becomes active.
+    *   `CameraView` receives the event from `AppLifecycleObserver` and calls `startSession()` on the `CameraViewModel` to ensure the camera restarts when the app returns from the background.
     *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`. It also initializes the `isAutoExposureEnabled` state based on the device's actual state after setup.
     *   `CameraSetupService` configures the `AVCaptureSession`, sets initial device settings (including attempting to set `.continuousAutoExposure` mode early), requests permissions, adds inputs, sets preset, and reports status/device via delegate.
     *   `CameraDeviceService` handles lens switching and zoom, interacting directly with `AVCaptureDevice` and notifying `CameraViewModel` via delegate.
