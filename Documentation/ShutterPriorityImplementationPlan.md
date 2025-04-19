@@ -50,7 +50,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     exposureTargetOffsetObservation = nil
     ```
 
-4.  **Implement `handleExposureTargetOffsetUpdate(change:)`:**
+~~4.  **Implement `handleExposureTargetOffsetUpdate(change:)`:**~~
     *   Create this new private method:
 
     ```swift
@@ -121,7 +121,7 @@ This document outlines the steps to implement a custom Shutter Priority (SP) mod
     }
     ```
 
-5.  **Implement `enableShutterPriority(duration: CMTime)`:**
+~~5.  **Implement `enableShutterPriority(duration: CMTime)`:**
     *   Create this new public method:
 
     ```swift

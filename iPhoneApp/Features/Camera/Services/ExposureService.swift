@@ -116,6 +116,12 @@ class ExposureService: NSObject {
             // }
         }
         
+        // Observe exposure target offset for Shutter Priority
+        exposureTargetOffsetObservation = device.observe(\.exposureTargetOffset, options: [.new]) { [weak self] device, change in
+            // No need to check mode here, handleExposureTargetOffsetUpdate checks isShutterPriorityActive
+            self?.handleExposureTargetOffsetUpdate(change: change)
+        }
+        
         // Report initial values immediately after setting observers
         reportCurrentDeviceValues()
     }
@@ -125,11 +131,11 @@ class ExposureService: NSObject {
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
         whiteBalanceGainsObservation?.invalidate()
-        exposureTargetOffsetObservation?.invalidate()
+        exposureTargetOffsetObservation?.invalidate() // Add invalidation for the new observer
         isoObservation = nil
         exposureDurationObservation = nil
         whiteBalanceGainsObservation = nil
-        exposureTargetOffsetObservation = nil
+        exposureTargetOffsetObservation = nil // Add nil assignment for the new observer
     }
 
     /// Helper function to report the current values after setting observers or device change. Internal access needed by ViewModel.
@@ -556,4 +562,70 @@ class ExposureService: NSObject {
         // logger.debug("Queried current WB temp: \(tempAndTint.temperature)K")
         return tempAndTint.temperature
     }
+
+    // --- Add new method here ---
+    private func handleExposureTargetOffsetUpdate(change: NSKeyValueObservedChange<Float>) {
+        // Ensure SP is active and we have the necessary info
+        guard isShutterPriorityActive,
+              let targetDuration = targetShutterDuration,
+              let device = device,
+              let newOffset = change.newValue else {
+            // logger.debug("SP Adjust: KVO ignored (SP inactive or missing data)")
+            return
+        }
+
+        // Throttle adjustments
+        let now = Date()
+        guard now.timeIntervalSince(lastIsoAdjustmentTime) > isoAdjustmentInterval else {
+             // logger.debug("SP Adjust: KVO ignored (Rate limited)")
+            return
+        }
+
+        // Only adjust if EV offset is significant
+        guard abs(newOffset) > evOffsetThreshold else {
+            // logger.debug("SP Adjust: KVO ignored (EV offset \(newOffset) within threshold \(evOffsetThreshold))")
+            return
+        }
+
+        // Perform calculations and device interaction on the dedicated queue
+        exposureAdjustmentQueue.async { [weak self] in
+             guard let self = self, self.isShutterPriorityActive, let currentDevice = self.device else { return } // Re-check state inside async block
+
+            let currentISO = currentDevice.iso
+            let minISO = currentDevice.activeFormat.minISO
+            let maxISO = currentDevice.activeFormat.maxISO
+
+            // Calculate the ideal ISO to compensate for the offset
+            // newISO = currentISO / 2^(offset)
+            var idealISO = currentISO / pow(2.0, newOffset)
+
+            // Clamp ISO to device limits
+            idealISO = min(max(idealISO, minISO), maxISO)
+
+            // Only adjust if the change is significant enough
+            let percentageChange = abs(idealISO - currentISO) / currentISO
+            guard percentageChange > self.isoPercentageThreshold else {
+                // self.logger.debug("SP Adjust: KVO ignored (ISO change \(percentageChange * 100)% within threshold \(self.isoPercentageThreshold * 100)%)")
+                return
+            }
+
+            self.logger.debug("SP Adjust: Offset \(String(format: "%.2f", newOffset))EV, Current ISO \(String(format: "%.1f", currentISO)), Ideal ISO \(String(format: "%.1f", idealISO))")
+
+            do {
+                try currentDevice.lockForConfiguration()
+                // Re-apply custom exposure with the fixed duration and newly calculated ISO
+                currentDevice.setExposureModeCustom(duration: targetDuration, iso: idealISO) { [weak self] _ in
+                    // Note: KVO for 'iso' should fire and update the delegate/UI separately
+                    self?.logger.debug("SP Adjustment Applied: ISO set attempt to \(String(format: "%.1f", idealISO))")
+                }
+                self.lastIsoAdjustmentTime = now // Update timestamp only if adjustment was attempted
+                currentDevice.unlockForConfiguration()
+            } catch {
+                self.logger.error("SP Adjust: Error setting custom exposure: \(error.localizedDescription)")
+                // Attempt to unlock configuration if lock failed during change
+                currentDevice.unlockForConfiguration()
+            }
+        }
+    }
+    // --------------------------
 } 
