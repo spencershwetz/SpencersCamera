@@ -248,18 +248,14 @@ class ExposureService: NSObject {
 
             // Set exposure mode to custom and use the clamped speed
             if device.isExposureModeSupported(.custom) {
+                // Revert to using setExposureModeCustom with currentISO
                 device.exposureMode = .custom
-                // Use AVCaptureDevice.currentISO to let ISO adjust automatically
                 device.setExposureModeCustom(duration: clampedSpeed, iso: AVCaptureDevice.currentISO) { [weak self] timestamp in
-                    // Report the value back via delegate *after* it's set
+                    // Report the actually set clamped speed immediately.
+                    // KVO should handle reporting the automatically adjusted ISO.
                     DispatchQueue.main.async {
-                        guard let self = self else { return }
-                        // Report the *actually set* clamped speed
-                        self.delegate?.didUpdateShutterSpeed(clampedSpeed)
-                        self.logger.debug("Successfully set shutter speed to \(CMTimeGetSeconds(clampedSpeed))s (ISO will adjust automatically)")
-                        
-                        // Since we set ISO to auto, report the current ISO value via KVO trigger
-                        // (No need to explicitly call delegate?.didUpdateISO here)
+                        self?.delegate?.didUpdateShutterSpeed(clampedSpeed)
+                        self?.logger.debug("Set shutter speed to \\(CMTimeGetSeconds(clampedSpeed))s via setExposureModeCustom (ISO should adjust automatically)")
                     }
                 }
             } else {
@@ -275,10 +271,6 @@ class ExposureService: NSObject {
     }
     
     func updateShutterAngle(_ angle: Double, frameRate: Double) {
-        guard let device = device else {
-             logger.error("No camera device available for shutter angle update")
-             return
-        }
         guard frameRate > 0 else {
              logger.error("Invalid frame rate (\(frameRate)) for shutter angle calculation.")
              delegate?.didEncounterError(.configurationFailed(message: "Invalid frame rate for shutter angle"))

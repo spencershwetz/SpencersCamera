@@ -21,6 +21,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Lens switching logic in `CameraDeviceService` handles physical switching (reconfiguring session) and digital zoom (setting `videoZoomFactor` on wide lens for 2x).
     *   Format selection (Resolution, FPS, Color Space) managed by `VideoFormatService`, finding optimal `AVCaptureDevice.Format` based on requested criteria.
     *   Manual Exposure/WB/Tint controls managed by `ExposureService`, locking device configuration and setting properties like `exposureMode`, `setExposureModeCustom(duration:iso:)`, `setWhiteBalanceModeLocked(with:)`. It also uses KVO to observe `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` for real-time delegate updates.
+    *   **Shutter Priority (Current Behavior)**: When enabled, `updateShutterSpeed`/`updateShutterAngle` set the exposure mode to `.custom` and then call `setExposureModeCustom(duration: clampedSpeed, iso: AVCaptureDevice.currentISO)`. This effectively **locks both the shutter speed** to the calculated duration (e.g., 180°) **and the ISO** to its value at the moment SP was enabled. True auto-ISO adjustment during SP is not currently implemented.
 *   **Video Recording**: 
     *   Handled by `RecordingService` using `AVAssetWriter`.
     *   Video Input (`AVAssetWriterInput`): Configured with dimensions from active format, codec type (`.hevc` or `.proRes422HQ`), and compression properties (bitrate, keyframe interval, profile level, color primaries based on `isAppleLogEnabled`).
@@ -65,7 +66,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.
     *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
     *   Startup sequence implemented with `Task.sleep` for timing.
-*   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`.
+*   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Implements Shutter Priority by setting mode to `.custom` and calling `setExposureModeCustom(duration:iso:)` with the desired duration and `AVCaptureDevice.currentISO`, which locks both shutter and ISO. Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`.
 *   **Recording Service (`RecordingService`)**: Handles video/audio recording using `AVAssetWriter`. Configures inputs/outputs based on selected codec/resolution/log state. Applies orientation transform to video track. Optionally bakes in LUTs using `MetalFrameProcessor`. Saves final file to Photos library.
 
 ## Technical Requirements & Dependencies
