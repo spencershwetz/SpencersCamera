@@ -171,13 +171,10 @@ struct CameraView: View {
                         lutManager: viewModel.lutManager,
                         viewModel: viewModel
                     )
-                    .ignoresSafeArea()
-                    .frame(
-                        width: geometry.size.width * 0.9,
-                        height: geometry.size.height * 0.75 * 0.9
-                    )
-                    .padding(.top, geometry.safeAreaInsets.top + 60)
+                    .aspectRatio(9.0/16.0, contentMode: .fit)
+                    .scaleEffect(0.9)
                     .clipped()
+                    .padding(.top, geometry.safeAreaInsets.top + 10)
                     .frame(maxWidth: .infinity)
                     .overlay(alignment: .topLeading) {
                         if isDebugEnabled {
