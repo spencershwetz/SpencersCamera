@@ -41,10 +41,20 @@ When another app takes control of the camera hardware, the `AVCaptureSession` in
 
 The lack of explicit interruption handling combined with the likely premature deallocation of key service objects prevents the session from restarting correctly, resulting in the black preview.
 
-## Next Steps
+## Next Steps (Revised Plan: Direct Fix)
 
-Add detailed logging to confirm the hypothesis:
+Based on the analysis, the most probable causes are the lack of explicit interruption handling and the decentralized session start/stop logic. The following steps will be taken to address the issue directly:
 
-1.  **`CameraView.swift`:** Log entry/exit, success/failure (`do-catch`), and `session.isRunning` state around `startRunning()`/`stopRunning()`. Add observers for session interruption/error notifications.
-2.  **`ExposureService.swift`:** Add `deinit` logging. Add explicit `self != nil` checks with logging in *all* KVO callbacks.
-3.  **`CameraViewModel.swift`:** Add `deinit` logging. 
+1.  **Centralize Session Control in `CameraViewModel`:**
+    *   Create `startSession()` and `stopSession()` methods within `CameraViewModel.swift`.
+    *   Move the logic for calling `session.startRunning()` and `session.stopRunning()` into these ViewModel methods.
+    *   These methods will manage the `isSessionRunning` state and handle potential errors.
+2.  **Add Interruption Handling in `CameraViewModel`:**
+    *   Add notification observers for `AVCaptureSessionWasInterruptedNotification` and `AVCaptureSessionInterruptionEndedNotification`.
+    *   Implement logic to handle these notifications: stop session on interruption (if needed), and attempt to restart the session *only* after receiving the `interruptionEnded` notification (especially for interruptions caused by other apps).
+    *   Add an observer for `AVCaptureSessionRuntimeErrorNotification` to log critical errors.
+3.  **Use Dedicated Serial Queue:**
+    *   Create a private serial `DispatchQueue` in `CameraViewModel` for all `AVCaptureSession` operations (`startRunning`, `stopRunning`, configuration changes).
+4.  **Update `CameraView`:**
+    *   Modify `CameraView.swift` to remove its local `startSession` and `stopSession` methods.
+    *   Update `onAppear`, `onDisappear`, and the `.onReceive` blocks to call `viewModel.startSession()` and `viewModel.stopSession()` as appropriate. 
