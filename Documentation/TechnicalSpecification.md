@@ -78,6 +78,20 @@ This document outlines the technical specifications and requirements for the Spe
     *   Startup sequence implemented with `Task.sleep` for timing.
 *   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Implements Shutter Priority using KVO on `exposureTargetOffset` to automatically adjust ISO while maintaining a fixed shutter speed. Provides methods to temporarily lock SP adjustments during recording (`lock/unlockShutterPriorityExposureForRecording`). Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, `exposureTargetOffset` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`, coordinating with `CameraViewModel` which handles the specific lock calls (standard AE vs. SP custom).
 *   **Recording Service (`RecordingService`)**: Handles video/audio recording using `AVAssetWriter`. Configures inputs/outputs based on selected codec/resolution/log state. Applies orientation transform to video track. Optionally bakes in LUTs using `MetalFrameProcessor`. Saves final file to Photos library.
+*   **Settings**: 
+    *   `SettingsModel` uses `UserDefaults` for persistence and `NotificationCenter` for change broadcasting.
+    *   Persists all critical camera settings including:
+        *   Resolution, Codec, and Frame Rate formats
+        *   Color Space (Apple Log toggle)
+        *   LUT bake-in state 
+        *   Debug overlay visibility
+        *   Flashlight settings
+        *   Exposure lock during recording setting
+    *   Uses `@Published` properties with `didSet` observers to write to `UserDefaults` when values change.
+    *   Provides computed properties for enum-based settings to simplify type conversion between raw strings and enum values.
+    *   Initializes from `UserDefaults` with appropriate defaults if no stored values exist.
+    *   `CameraViewModel` reads initial values from `SettingsModel` during initialization and applies them to the camera configuration.
+    *   UI in `SettingsView` binds directly to `SettingsModel` properties, with `.onChange` handlers to update the active camera configuration.
 
 ## Technical Requirements & Dependencies
 

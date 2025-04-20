@@ -116,3 +116,40 @@ This document outlines the plan to make the camera format settings (Resolution, 
 *   Verify live update: Change settings in UI, check if camera preview/configuration updates immediately.
 *   Verify defaults: Clear UserDefaults (e.g., via simulator reset or code), launch app, check if default settings are applied correctly.
 *   Verify `CameraViewModel` init: Ensure the view model correctly loads persisted settings on launch. 
+
+## 6. Implementation Status
+
+The persistence plan has been successfully implemented with the following key components:
+
+1. `SettingsModel.swift` has been updated to include all the necessary `@Published` properties with `UserDefaults` persistence:
+   * `selectedResolutionRaw`
+   * `selectedCodecRaw`
+   * `selectedFrameRate`
+   * `isAppleLogEnabled` (was already implemented)
+   * `isDebugEnabled`
+
+2. `CameraViewModel.swift` has been modified to:
+   * Use the persisted settings from `SettingsModel` during initialization
+   * Ensure that the Apple Log setting is correctly applied at startup
+   * Fix an issue where the Apple Log setting was being overridden by the device's active color space
+
+3. `SettingsView.swift` has been updated to:
+   * Use `@ObservedObject` to bind to the shared `SettingsModel`
+   * Bind all UI controls to the `SettingsModel` properties
+   * Add appropriate `.onChange` modifiers to trigger live updates in `CameraViewModel`
+
+4. `CameraView.swift` has been updated to:
+   * Use the shared `SettingsModel` for the debug overlay toggle
+   * Pass the `SettingsModel` to `SettingsView` 
+
+## 7. Known Issues & Fixes
+
+* An issue was identified and fixed where the Apple Log setting was not being correctly applied at startup, causing the color space to remain as Rec.709 despite being enabled in settings.
+
+* The debug overlay was updated to show the actual camera device color space instead of just the setting value, improving the accuracy of the information displayed.
+
+## 8. Conclusion
+
+The implementation of camera settings persistence has been completed successfully. Users can now configure their preferred resolution, codec, frame rate, and color space settings, and these settings will be preserved across app launches. Additionally, the "Show Debug Info" setting is now also persistent.
+
+This implementation enhances the user experience by eliminating the need to reconfigure settings each time the app is opened, providing a more professional and streamlined workflow for video capture. 

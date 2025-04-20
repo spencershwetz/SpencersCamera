@@ -29,6 +29,8 @@ All notable changes to this project will be documented in this file.
 *   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService` error handling blocks.
 *   Fixed logging string interpolation syntax errors in `ExposureService`.
 *   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
+*   Fixed issue where Apple Log setting was not properly applied at startup, causing color space to remain as Rec.709 despite being enabled in settings
+*   Updated debug overlay to show actual camera device color space instead of just the setting value
 
 ### Removed
 

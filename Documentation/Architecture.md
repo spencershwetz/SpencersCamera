@@ -120,6 +120,7 @@ The project is organized into the following main components:
 *   **Settings**: 
     *   `SettingsView` interacts with `SettingsModel` and `CameraViewModel`.
     *   `SettingsModel` uses `UserDefaults` for persistence and `NotificationCenter` to signal changes (e.g., flashlight, bake-in LUT).
+    *   Camera format settings (resolution, codec, frame rate, Apple Log color space) and debug info are persisted through `SettingsModel` using `UserDefaults`.
     *   `CameraViewModel` observes notifications or directly uses `SettingsModel` state to configure services (e.g., `RecordingService` for bake-in LUT state).
 *   **Watch Connectivity**: 
     *   `CameraViewModel` acts as `WCSessionDelegate`

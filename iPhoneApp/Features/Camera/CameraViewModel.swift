@@ -91,7 +91,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    @Published var isAppleLogEnabled = true { // Property will be bound to settingsModel
+    @Published var isAppleLogEnabled: Bool { // Property will be bound to settingsModel
         didSet {
             // Update settingsModel value
             settingsModel.isAppleLogEnabled = isAppleLogEnabled
@@ -372,10 +372,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var wbPollingTimerCancellable: AnyCancellable?
     private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
     
+    // Add a computed property to expose the current device for debug purposes
+    var currentCameraDevice: AVCaptureDevice? {
+        return device
+    }
+    
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
         
-        // Initialize with values from settingsModel
+        // Initialize isAppleLogEnabled with the persisted value from settingsModel
         self.isAppleLogEnabled = settingsModel.isAppleLogEnabled
         self.selectedResolution = settingsModel.selectedResolution
         self.selectedCodec = settingsModel.selectedCodec
@@ -428,10 +433,28 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 }
                 print("\n✅ Apple Log Support: \(isAppleLogSupported)")
                 
-                // Set initial Apple Log state based on current color space
-                isAppleLogEnabled = device.activeColorSpace == .appleLog
+                // Don't override the persisted setting with the device's current state
+                // Instead, we'll apply our persistent setting to the device
+                print("Using persisted Apple Log setting: \(isAppleLogEnabled)")
                 
-                print("Initial Apple Log Enabled state based on activeColorSpace: \(isAppleLogEnabled)")
+                // Apply Apple Log configuration at startup if needed
+                if isAppleLogEnabled && isAppleLogSupported {
+                    print("🎨 Applying Apple Log setting during initialization...")
+                    // Set Apple Log in the format service
+                    videoFormatService.setAppleLogEnabled(isAppleLogEnabled)
+                    
+                    // Apply the color space setting
+                    Task {
+                        do {
+                            try await videoFormatService.configureAppleLog()
+                            print("✅ Successfully applied Apple Log during initialization")
+                        } catch {
+                            print("❌ Failed to apply Apple Log: \(error)")
+                            // Don't throw here to avoid init failure, just log
+                        }
+                    }
+                }
+                
                 print("=== End Initialization ===\n")
             }
             

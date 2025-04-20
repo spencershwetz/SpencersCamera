@@ -125,3 +125,17 @@ This document provides a detailed overview of key classes, components, and their
             *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
             *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true` to pause auto-ISO adjustments.
             *   `unlockShutterPriorityExposureAfterRecording()`: Sets `
+*   **Settings**: 
+    *   `SettingsModel` (`iPhoneApp/Features/Settings/SettingsModel.swift`): 
+        *   `ObservableObject` with `@Published` properties for app settings.
+        *   Persists settings using `UserDefaults` in property `didSet` observers.
+        *   Includes camera format settings (resolution, codec, frame rate, color space/Apple Log), LUT bake-in, flashlight, exposure lock during recording, and debug info display.
+        *   Uses `NotificationCenter` to broadcast changes for some settings.
+        *   Provides computed properties for enum-based settings to simplify type conversion.
+    *   `SettingsView` (`iPhoneApp/Features/Camera/Views/SettingsView.swift`): 
+        *   SwiftUI view presenting UI for all settings.
+        *   Uses `@ObservedObject` to bind to the shared `SettingsModel`.
+        *   Uses `Picker`s and `Toggle`s bound to `SettingsModel` properties.
+        *   Includes `.onChange` modifiers to update `CameraViewModel` when settings change.
+    *   `FlashlightSettingsView` (`iPhoneApp/Features/Settings/FlashlightSettingsView.swift`): 
+        *   Dedicated view for configuring flashlight (intensity, patterns).

@@ -196,15 +196,26 @@ struct CameraView: View {
     }
     
     private var debugOverlay: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("Resolution: \(viewModel.selectedResolution.rawValue)")
             Text("FPS: \(String(format: "%.2f", viewModel.selectedFrameRate))")
             Text("Codec: \(viewModel.selectedCodec.rawValue)")
-            Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
-            Text("ISO: \(Int(viewModel.iso))")
-            Text("WB: \(Int(viewModel.whiteBalance))K")
+            Text("ISO: \(String(format: "%.0f", viewModel.iso))")
+            Text("WB: \(String(format: "%.0fK", viewModel.whiteBalance))")
             Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
-            Text("Shutter Angle: \(String(format: "%.0f°", viewModel.shutterSpeed.seconds * viewModel.selectedFrameRate * 360))")
+            Text("Shutter: \(formatShutterSpeed(viewModel.shutterSpeed))")
+            
+            // Check the actual activeColorSpace from the device to display the correct value
+            if let device = viewModel.currentCameraDevice {
+                let actualColorSpace = device.activeColorSpace
+                if actualColorSpace == .appleLog {
+                    Text("Color: Apple Log 📱")
+                } else {
+                    Text("Color: Rec.709 🎬")
+                }
+            } else {
+                Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
+            }
         }
         .font(.system(size: 10, weight: .medium, design: .monospaced))
         .foregroundColor(.white)
@@ -386,6 +397,18 @@ struct CameraView: View {
         
         // Disable device orientation notifications
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
+    
+    // Helper method to format shutter speed for display
+    private func formatShutterSpeed(_ time: CMTime) -> String {
+        let seconds = time.seconds
+        let angle = seconds * viewModel.selectedFrameRate * 360
+        
+        if seconds < 1.0/60.0 {
+            return String(format: "1/%.0f (%.0f°)", 1.0/seconds, angle)
+        } else {
+            return String(format: "%.2fs (%.0f°)", seconds, angle)
+        }
     }
 }
 

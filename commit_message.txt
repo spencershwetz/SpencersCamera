@@ -1,0 +1,1 @@
+Fix: Ensure Apple Log setting is correctly applied at app startup
