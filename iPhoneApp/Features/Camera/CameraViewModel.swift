@@ -28,6 +28,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Flashlight manager
     private let flashlightManager = FlashlightManager()
     private var settingsObserver: NSObjectProtocol?
+    private var settingsModel: SettingsModel
     
     enum Status {
         case unknown
@@ -55,8 +56,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             NotificationCenter.default.post(name: NSNotification.Name("RecordingStateChanged"), object: nil)
             
             // Handle flashlight state based on recording state
-            let settings = SettingsModel()
-            if isRecording && settings.isFlashlightEnabled {
+            if isRecording && settingsModel.isFlashlightEnabled {
                 Task {
                     await flashlightManager.performStartupSequence()
                 }
@@ -91,8 +91,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
+    @Published var isAppleLogEnabled = true { // Property will be bound to settingsModel
         didSet {
+            // Update settingsModel value
+            settingsModel.isAppleLogEnabled = isAppleLogEnabled
+            
             print("\n=== Apple Log Toggle ===")
             print("🔄 Status: \(status)")
             print("📹 Capture Mode: \(captureMode)")
@@ -181,8 +184,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     @Published var selectedFrameRate: Double = 30.0 {
-        // Add didSet observer to re-apply shutter priority if active
         didSet {
+            // Update settingsModel value
+            settingsModel.selectedFrameRate = selectedFrameRate
+            
             if isShutterPriorityEnabled {
                 logger.info("Frame rate changed to \(self.selectedFrameRate) while Shutter Priority is active. Re-applying 180° shutter.")
                 updateShutterAngle(180.0)
@@ -210,10 +215,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             case .sd: return CMVideoDimensions(width: 1280, height: 720)
             }
         }
+        
+        static var defaultRes: Resolution {
+            return .uhd
+        }
     }
     
     @Published var selectedResolution: Resolution = .uhd {
         didSet {
+            // Update settingsModel value
+            settingsModel.selectedResolutionRaw = selectedResolution.rawValue
+            
             Task {
                 do {
                     try await videoFormatService.updateCameraFormat(for: selectedResolution)
@@ -243,10 +255,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             case .proRes: return 0 // ProRes doesn't use bitrate control
             }
         }
+        
+        static var defaultCodec: VideoCodec {
+            return .hevc
+        }
     }
     
-    @Published var selectedCodec: VideoCodec = .hevc { // Set HEVC as default codec
+    @Published var selectedCodec: VideoCodec = .hevc {
         didSet {
+            // Update settingsModel value
+            settingsModel.selectedCodecRaw = selectedCodec.rawValue
+            
             updateVideoConfiguration()
         }
     }
@@ -353,7 +372,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var wbPollingTimerCancellable: AnyCancellable?
     private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
     
-    override init() {
+    init(settingsModel: SettingsModel = SettingsModel()) {
+        self.settingsModel = settingsModel
+        
+        // Initialize with values from settingsModel
+        self.isAppleLogEnabled = settingsModel.isAppleLogEnabled
+        self.selectedResolution = settingsModel.selectedResolution
+        self.selectedCodec = settingsModel.selectedCodec
+        self.selectedFrameRate = settingsModel.selectedFrameRate
+        
         super.init()
         print("\n=== Camera Initialization ===")
         
@@ -367,10 +394,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            let settings = SettingsModel()
-            if self.isRecording && settings.isFlashlightEnabled {
+            if self.isRecording && self.settingsModel.isFlashlightEnabled {
                 self.flashlightManager.isEnabled = true
-                self.flashlightManager.intensity = settings.flashlightIntensity
+                self.flashlightManager.intensity = self.settingsModel.flashlightIntensity
             } else {
                 self.flashlightManager.isEnabled = false
             }
@@ -383,9 +409,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            let settings = SettingsModel()
-            self.recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+            self.recordingService.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
         }
+        
+        // Add observers for new settings changes
+        setupSettingObservers()
         
         do {
             try cameraSetupService.setupSession()
@@ -983,6 +1011,73 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         } else {
              // logger.trace("WB Poll: Temperature \(currentTemperature) hasn't changed significantly from \(self.whiteBalance). Skipping update.")
         }
+    }
+
+    // Setup additional notification observers for new settings
+    private func setupSettingObservers() {
+        // Resolution changes
+        NotificationCenter.default.addObserver(
+            forName: .selectedResolutionChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            if let resolution = Resolution(rawValue: self.settingsModel.selectedResolutionRaw),
+               resolution != self.selectedResolution {
+                self.selectedResolution = resolution
+            }
+        }
+        
+        // Codec changes
+        NotificationCenter.default.addObserver(
+            forName: .selectedCodecChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            if let codec = VideoCodec(rawValue: self.settingsModel.selectedCodecRaw),
+               codec != self.selectedCodec {
+                self.selectedCodec = codec
+            }
+        }
+        
+        // Frame rate changes
+        NotificationCenter.default.addObserver(
+            forName: .selectedFrameRateChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            if self.selectedFrameRate != self.settingsModel.selectedFrameRate {
+                self.selectedFrameRate = self.settingsModel.selectedFrameRate
+                self.updateFrameRate(self.selectedFrameRate)
+            }
+        }
+        
+        // Apple Log changes
+        NotificationCenter.default.addObserver(
+            forName: .appleLogSettingChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            if self.isAppleLogEnabled != self.settingsModel.isAppleLogEnabled {
+                self.isAppleLogEnabled = self.settingsModel.isAppleLogEnabled
+            }
+        }
+    }
+    
+    // Wrapper methods to update settings
+    func updateResolution(_ resolution: Resolution) {
+        selectedResolution = resolution
+    }
+    
+    func updateCodec(_ codec: VideoCodec) {
+        selectedCodec = codec
+    }
+    
+    func updateColorSpace(isAppleLogEnabled: Bool) {
+        self.isAppleLogEnabled = isAppleLogEnabled
     }
 }
 

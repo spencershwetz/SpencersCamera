@@ -1,0 +1,225 @@
+{
+  "" : {
+    "const-values" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master.swiftconstvalues",
+    "dependencies" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master.d",
+    "diagnostics" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master.dia",
+    "emit-module-dependencies" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master-emit-module.dia",
+    "swift-dependencies" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Spencer's Camera-master.swiftdeps"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataClass.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataClass.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataClass.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataClass.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/DerivedSources/CoreDataGenerated/camera/Item+CoreDataProperties.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataProperties.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataProperties.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Item+CoreDataProperties.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/DerivedSources/CoreDataGenerated/camera/camera+CoreDataModel.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/camera+CoreDataModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/camera+CoreDataModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/camera+CoreDataModel.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/App/AppDelegate.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppDelegate.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Extensions/CIContext+Shared.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CIContext+Shared.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CIContext+Shared.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CIContext+Shared.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Extensions/UIDeviceOrientation+Extensions.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/UIDeviceOrientation+Extensions.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Metal/MetalFrameProcessor.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalFrameProcessor.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalFrameProcessor.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalFrameProcessor.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Metal/MetalPreviewView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalPreviewView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalPreviewView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/MetalPreviewView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Orientation/DeviceOrientationViewModel.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceOrientationViewModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceOrientationViewModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceOrientationViewModel.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Orientation/DeviceRotationViewModifier.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceRotationViewModifier.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceRotationViewModifier.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DeviceRotationViewModifier.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Orientation/OrientationFixView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/OrientationFixView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/OrientationFixView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/OrientationFixView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Orientation/RotatingView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RotatingView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RotatingView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RotatingView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Core/Utilities/AppLifecycleObserver.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppLifecycleObserver.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppLifecycleObserver.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AppLifecycleObserver.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/CameraViewModel.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraViewModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraViewModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraViewModel.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Extensions/AVFoundationExtensions.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AVFoundationExtensions.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AVFoundationExtensions.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/AVFoundationExtensions.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/FlashlightManager.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightManager.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightManager.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightManager.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Models/CameraError.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraError.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraError.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraError.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Models/CameraLens.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraLens.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraLens.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraLens.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Models/FunctionButtonAbility.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonAbility.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonAbility.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonAbility.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Models/ShutterAngle.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ShutterAngle.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ShutterAngle.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ShutterAngle.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/CameraDeviceService.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraDeviceService.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraDeviceService.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraDeviceService.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/CameraSetupService.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraSetupService.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraSetupService.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraSetupService.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/ExposureService.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ExposureService.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ExposureService.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ExposureService.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/RecordingService.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RecordingService.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RecordingService.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/RecordingService.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/VideoFormatService.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoFormatService.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoFormatService.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoFormatService.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/VideoOutputDelegate.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoOutputDelegate.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoOutputDelegate.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoOutputDelegate.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Services/VolumeButtonHandler.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VolumeButtonHandler.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VolumeButtonHandler.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VolumeButtonHandler.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Utilities/DocumentPicker.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DocumentPicker.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DocumentPicker.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/DocumentPicker.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/CameraPreviewView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraPreviewView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraPreviewView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraPreviewView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/CameraView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CameraView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/FunctionButtonsView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonsView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonsView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FunctionButtonsView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/LensSelectionView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LensSelectionView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LensSelectionView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LensSelectionView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/SettingsView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Camera/Views/ZoomSliderView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ZoomSliderView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ZoomSliderView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/ZoomSliderView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/LUT/CubeLUTLoader.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CubeLUTLoader.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CubeLUTLoader.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/CubeLUTLoader.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/LUT/LUTManager.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LUTManager.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LUTManager.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/LUTManager.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Settings/FlashlightSettingsView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightSettingsView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightSettingsView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/FlashlightSettingsView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Settings/SettingsModel.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/SettingsModel.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/VideoLibrary/VideoLibraryView.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryView.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryView.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryView.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/VideoLibrary/VideoLibraryViewModel.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryViewModel.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryViewModel.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/VideoLibraryViewModel.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Persistence.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Persistence.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Persistence.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/Persistence.o"
+  },
+  "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/cameraApp.swift" : {
+    "index-unit-output-path" : "/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/cameraApp.o",
+    "llvm-bc" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/cameraApp.bc",
+    "object" : "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-iphoneos/Spencer's Camera.build/Objects-normal/arm64/cameraApp.o"
+  }
+}

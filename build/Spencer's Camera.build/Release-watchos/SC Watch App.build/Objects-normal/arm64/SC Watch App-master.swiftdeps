@@ -1,0 +1,10 @@
+version: "Apple Swift version 6.1 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)"
+options: "3efe60f4c0136e3708955cf67af4d2dcbcd9fa8238dce4aa4fba7e71e245c391"
+build_start_time: [1745114645, 410295000]
+build_end_time: [1745114650, 761740000]
+inputs:
+  "/Users/spencer/Documents/GitHub/SpencersCamera/SC Watch App/ContentView.swift": [1743953330, 462122670]
+  "/Users/spencer/Documents/GitHub/SpencersCamera/SC Watch App/SCApp.swift": [1743914304, 908864035]
+  "/Users/spencer/Documents/GitHub/SpencersCamera/SC Watch App/WatchConnectivityService.swift": [1744740332, 175499048]
+  ? "/Users/spencer/Documents/GitHub/SpencersCamera/build/Spencer's Camera.build/Release-watchos/SC Watch App.build/DerivedSources/GeneratedAssetSymbols.swift"
+  : [1745114645, 134087471]

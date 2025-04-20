@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'Spencer's Camera' in project 'Spencer's Camera'
+➜ Explicit dependency on target 'SC Watch App' in project 'Spencer's Camera'
+Target 'SC Watch App' in project 'Spencer's Camera' (no dependencies)

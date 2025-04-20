@@ -11,6 +11,10 @@ extension Notification.Name {
     static let bakeInLUTSettingChanged = Notification.Name("bakeInLUTSettingChanged")
     static let whiteBalanceLockSettingChanged = Notification.Name("whiteBalanceLockSettingChanged")
     static let exposureLockDuringRecordingSettingChanged = Notification.Name("exposureLockDuringRecordingSettingChanged")
+    static let selectedResolutionChanged = Notification.Name("selectedResolutionChanged")
+    static let selectedCodecChanged = Notification.Name("selectedCodecChanged")
+    static let selectedFrameRateChanged = Notification.Name("selectedFrameRateChanged")
+    static let isDebugEnabledChanged = Notification.Name("isDebugEnabledChanged")
     // Add notifications for function button changes if needed later
 }
 
@@ -63,6 +67,39 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    // MARK: - New Persistent Settings
+    @Published var selectedResolutionRaw: String {
+        didSet {
+            UserDefaults.standard.set(selectedResolutionRaw, forKey: Keys.selectedResolutionRaw)
+            NotificationCenter.default.post(name: .selectedResolutionChanged, object: nil)
+            print("Selected Resolution: \(selectedResolutionRaw)")
+        }
+    }
+    
+    @Published var selectedCodecRaw: String {
+        didSet {
+            UserDefaults.standard.set(selectedCodecRaw, forKey: Keys.selectedCodecRaw)
+            NotificationCenter.default.post(name: .selectedCodecChanged, object: nil)
+            print("Selected Codec: \(selectedCodecRaw)")
+        }
+    }
+    
+    @Published var selectedFrameRate: Double {
+        didSet {
+            UserDefaults.standard.set(selectedFrameRate, forKey: Keys.selectedFrameRate)
+            NotificationCenter.default.post(name: .selectedFrameRateChanged, object: nil)
+            print("Selected Frame Rate: \(selectedFrameRate)")
+        }
+    }
+    
+    @Published var isDebugEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isDebugEnabled, forKey: Keys.isDebugEnabled)
+            NotificationCenter.default.post(name: .isDebugEnabledChanged, object: nil)
+            print("Debug Enabled: \(isDebugEnabled)")
+        }
+    }
+    
     // MARK: - Function Button Assignments
     @Published var functionButton1Ability: FunctionButtonAbility {
         didSet {
@@ -91,6 +128,15 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    // Computed properties for enum access
+    var selectedResolution: CameraViewModel.Resolution {
+        CameraViewModel.Resolution(rawValue: selectedResolutionRaw) ?? .hd
+    }
+    
+    var selectedCodec: CameraViewModel.VideoCodec {
+        CameraViewModel.VideoCodec(rawValue: selectedCodecRaw) ?? .hevc
+    }
+    
     // MARK: - Initialization
     init() {
         // 1. Read all initial values from UserDefaults
@@ -102,6 +148,12 @@ class SettingsModel: ObservableObject {
         let rawFn2Ability = UserDefaults.standard.string(forKey: Keys.functionButton2Ability)
         let initialWhiteBalanceLockEnabled = UserDefaults.standard.bool(forKey: Keys.isWhiteBalanceLockEnabled)
         let initialExposureLockEnabledDuringRecording = UserDefaults.standard.bool(forKey: Keys.isExposureLockEnabledDuringRecording)
+        
+        // New settings
+        let initialResolutionRaw = UserDefaults.standard.string(forKey: Keys.selectedResolutionRaw)
+        let initialCodecRaw = UserDefaults.standard.string(forKey: Keys.selectedCodecRaw)
+        let initialFrameRate = UserDefaults.standard.double(forKey: Keys.selectedFrameRate)
+        let initialDebugEnabled = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) != nil ? UserDefaults.standard.bool(forKey: Keys.isDebugEnabled) : true
 
         // 2. Determine final initial values, applying defaults
         var finalFlashlightIntensity = initialFlashlightIntensity
@@ -122,6 +174,20 @@ class SettingsModel: ObservableObject {
         
         let finalFn1Ability = FunctionButtonAbility(rawValue: rawFn1Ability ?? "") ?? .none
         let finalFn2Ability = FunctionButtonAbility(rawValue: rawFn2Ability ?? "") ?? .none
+        
+        // New settings defaults
+        let defaultResolutionRaw = CameraViewModel.Resolution.uhd.rawValue
+        let defaultCodecRaw = CameraViewModel.VideoCodec.hevc.rawValue
+        let defaultFrameRate = 30.0
+        
+        let finalResolutionRaw = initialResolutionRaw ?? defaultResolutionRaw
+        let finalCodecRaw = initialCodecRaw ?? defaultCodecRaw
+        let finalFrameRate = initialFrameRate == 0.0 ? defaultFrameRate : initialFrameRate
+        
+        var shouldWriteResolutionDefault = initialResolutionRaw == nil
+        var shouldWriteCodecDefault = initialCodecRaw == nil
+        var shouldWriteFrameRateDefault = initialFrameRate == 0.0
+        var shouldWriteDebugDefault = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) == nil
 
         // 3. Initialize all @Published properties
         self.isAppleLogEnabled = initialAppleLogEnabled
@@ -132,6 +198,12 @@ class SettingsModel: ObservableObject {
         self.functionButton2Ability = finalFn2Ability
         self.isWhiteBalanceLockEnabled = initialWhiteBalanceLockEnabled
         self.isExposureLockEnabledDuringRecording = initialExposureLockEnabledDuringRecording
+        
+        // Initialize new settings
+        self.selectedResolutionRaw = finalResolutionRaw
+        self.selectedCodecRaw = finalCodecRaw
+        self.selectedFrameRate = finalFrameRate
+        self.isDebugEnabled = initialDebugEnabled
 
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
@@ -147,6 +219,20 @@ class SettingsModel: ObservableObject {
          if rawFn2Ability == nil {
             UserDefaults.standard.set(finalFn2Ability.rawValue, forKey: Keys.functionButton2Ability)
         }
+        
+        // Write new settings defaults if they were applied
+        if shouldWriteResolutionDefault {
+            UserDefaults.standard.set(finalResolutionRaw, forKey: Keys.selectedResolutionRaw)
+        }
+        if shouldWriteCodecDefault {
+            UserDefaults.standard.set(finalCodecRaw, forKey: Keys.selectedCodecRaw)
+        }
+        if shouldWriteFrameRateDefault {
+            UserDefaults.standard.set(finalFrameRate, forKey: Keys.selectedFrameRate)
+        }
+        if shouldWriteDebugDefault {
+            UserDefaults.standard.set(initialDebugEnabled, forKey: Keys.isDebugEnabled)
+        }
 
         print("SettingsModel initialized:")
         print("- Apple Log: \(isAppleLogEnabled)")
@@ -156,6 +242,10 @@ class SettingsModel: ObservableObject {
         print("- Lock Exposure During Recording: \(isExposureLockEnabledDuringRecording)")
         print("- Fn1: \(functionButton1Ability.rawValue)")
         print("- Fn2: \(functionButton2Ability.rawValue)")
+        print("- Resolution: \(selectedResolutionRaw)")
+        print("- Codec: \(selectedCodecRaw)")
+        print("- Frame Rate: \(selectedFrameRate)")
+        print("- Debug Enabled: \(isDebugEnabled)")
     }
     
     // MARK: - Keys for UserDefaults
@@ -168,5 +258,9 @@ class SettingsModel: ObservableObject {
         static let functionButton2Ability = "functionButton2Ability"
         static let isWhiteBalanceLockEnabled = "isWhiteBalanceLockSettingChanged"
         static let isExposureLockEnabledDuringRecording = "isExposureLockEnabledDuringRecording"
+        static let selectedResolutionRaw = "selectedResolutionRaw"
+        static let selectedCodecRaw = "selectedCodecRaw"
+        static let selectedFrameRate = "selectedFrameRate"
+        static let isDebugEnabled = "isDebugEnabled"
     }
 }

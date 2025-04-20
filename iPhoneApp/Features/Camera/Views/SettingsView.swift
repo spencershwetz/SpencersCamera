@@ -5,44 +5,52 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @ObservedObject var lutManager: LUTManager
     @ObservedObject var viewModel: CameraViewModel
-    @StateObject private var settingsModel = SettingsModel()
-    @Binding var isDebugEnabled: Bool
-    @State private var isShowingLUTDocumentPicker = false
+    @ObservedObject var settingsModel: SettingsModel
     var dismissAction: () -> Void
     
     var body: some View {
         NavigationView {
             List {
                 Section {
-                    // Resolution
-                    Picker("Resolution", selection: $viewModel.selectedResolution) {
+                    // Resolution - Now using the selectedResolutionRaw binding
+                    Picker("Resolution", selection: $settingsModel.selectedResolutionRaw) {
                         ForEach(CameraViewModel.Resolution.allCases, id: \.self) { resolution in
-                            Text(resolution.rawValue).tag(resolution)
+                            Text(resolution.rawValue).tag(resolution.rawValue)
+                        }
+                    }
+                    .onChange(of: settingsModel.selectedResolutionRaw) { _, newValue in
+                        if let resolution = CameraViewModel.Resolution(rawValue: newValue) {
+                            viewModel.updateResolution(resolution)
                         }
                     }
                     
-                    // Color Space
+                    // Color Space - Keeping as is since it was already using a custom binding
                     Picker("Color Space", selection: selectedColorSpace) {
                         ForEach(colorSpaceOptions, id: \.self) { colorSpace in
                             Text(colorSpace).tag(colorSpace)
                         }
                     }
                     
-                    // Codec
-                    Picker("Codec", selection: $viewModel.selectedCodec) {
+                    // Codec - Now using selectedCodecRaw binding
+                    Picker("Codec", selection: $settingsModel.selectedCodecRaw) {
                         ForEach(CameraViewModel.VideoCodec.allCases, id: \.self) { codec in
-                            Text(codec.rawValue).tag(codec)
+                            Text(codec.rawValue).tag(codec.rawValue)
+                        }
+                    }
+                    .onChange(of: settingsModel.selectedCodecRaw) { _, newValue in
+                        if let codec = CameraViewModel.VideoCodec(rawValue: newValue) {
+                            viewModel.updateCodec(codec)
                         }
                     }
                     
-                    // Frame Rate
-                    Picker("Frame Rate", selection: $viewModel.selectedFrameRate) {
+                    // Frame Rate - Now using settingsModel.selectedFrameRate
+                    Picker("Frame Rate", selection: $settingsModel.selectedFrameRate) {
                         ForEach(viewModel.availableFrameRates, id: \.self) { fps in
                             Text(fps == 29.97 ? "29.97" : String(format: "%.2f", fps))
                                 .tag(fps)
                         }
                     }
-                    .onChange(of: viewModel.selectedFrameRate) { _, newFps in
+                    .onChange(of: settingsModel.selectedFrameRate) { _, newFps in
                         viewModel.updateFrameRate(newFps)
                     }
 
@@ -145,10 +153,10 @@ struct SettingsView: View {
                 FlashlightSettingsView(settingsModel: settingsModel)
                 
                 Section {
-                    Toggle(isOn: $isDebugEnabled) {
+                    Toggle(isOn: $settingsModel.isDebugEnabled) {
                         HStack {
                             Text("Show Debug Info")
-                            if isDebugEnabled {
+                            if settingsModel.isDebugEnabled {
                                 Image(systemName: "info.circle.fill")
                                     .foregroundColor(.blue)
                             }
@@ -185,6 +193,9 @@ struct SettingsView: View {
         }
     }
     
+    // State to manage document picker presentation
+    @State private var isShowingLUTDocumentPicker = false
+    
     // Color space options
     private let colorSpaceOptions = [
         "Rec.709",
@@ -196,7 +207,7 @@ struct SettingsView: View {
         Binding(
             get: { viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709" },
             set: { newValue in
-                viewModel.isAppleLogEnabled = (newValue == "Apple Log")
+                viewModel.updateColorSpace(isAppleLogEnabled: newValue == "Apple Log")
             }
         )
     }
@@ -206,7 +217,7 @@ struct SettingsView: View {
     SettingsView(
         lutManager: LUTManager(),
         viewModel: CameraViewModel(),
-        isDebugEnabled: .constant(false),
+        settingsModel: SettingsModel(),
         dismissAction: {}
     )
 } 

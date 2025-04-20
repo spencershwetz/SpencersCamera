@@ -17,7 +17,6 @@ struct CameraView: View {
     @State private var showLUTPreview = true
     @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
-    @State private var isDebugEnabled = true
     
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
@@ -137,7 +136,7 @@ struct CameraView: View {
                 SettingsView(
                     lutManager: viewModel.lutManager,
                     viewModel: viewModel,
-                    isDebugEnabled: $isDebugEnabled,
+                    settingsModel: settings,
                     dismissAction: { isShowingSettings = false }
                 )
             }
@@ -169,7 +168,7 @@ struct CameraView: View {
                     .padding(.top, geometry.safeAreaInsets.top + 10)
                     .frame(maxWidth: .infinity)
                     .overlay(alignment: .topLeading) {
-                        if isDebugEnabled {
+                        if settings.isDebugEnabled {
                             debugOverlay
                                 .padding(.top, geometry.safeAreaInsets.top + 70)
                                 .padding(.leading, 20)
@@ -276,7 +275,7 @@ struct CameraView: View {
                 LongPressGesture(minimumDuration: 3.0)
                     .onEnded { _ in
                         withAnimation {
-                            isDebugEnabled.toggle()
+                            settings.isDebugEnabled.toggle()
                         }
                     }
             )

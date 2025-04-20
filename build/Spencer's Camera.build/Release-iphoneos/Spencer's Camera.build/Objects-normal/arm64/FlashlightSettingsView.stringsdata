@@ -1,0 +1,56 @@
+{
+  "source": "/Users/spencer/Documents/GitHub/SpencersCamera/iPhoneApp/Features/Settings/FlashlightSettingsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Flashlight not available on this device",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 30
+        }
+      },
+      {
+        "comment": "",
+        "key": "Enable Recording Light",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 10
+        }
+      },
+      {
+        "comment": "",
+        "key": "Light Intensity",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 18
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@%%",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 20
+        }
+      },
+      {
+        "comment": "",
+        "key": "Recording Light",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "When enabled, the flashlight will be used as a recording indicator light. Adjust the intensity from 0.1% to 100% to your preference.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 36
+        }
+      }
+    ]
+  },
+  "version": 1
+}
