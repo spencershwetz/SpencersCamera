@@ -377,6 +377,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         return device
     }
     
+    // Add a dedicated queue for session operations
+    private let sessionQueue = DispatchQueue(label: "com.camera.sessionQueue", qos: .userInitiated)
+    
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
         
@@ -485,6 +488,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 self?.handleSessionRunningStateChange(isRunning)
             }
             .store(in: &cancellables) // Assuming you have a cancellables set
+
+        // Observe session interruptions
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(sessionInterrupted(_:)),
+                                               name: .AVCaptureSessionWasInterrupted,
+                                               object: session)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(sessionInterruptionEnded(_:)),
+                                               name: .AVCaptureSessionInterruptionEnded,
+                                               object: session)
+        NotificationCenter.default.addObserver(self,
+                                               selector: #selector(sessionRuntimeError(_:)),
+                                               name: .AVCaptureSessionRuntimeError,
+                                               object: session)
     }
     
     deinit {
@@ -492,7 +509,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             NotificationCenter.default.removeObserver(observer)
         }
         
+        // ADD: Remove session interruption observers
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionWasInterrupted, object: session)
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionInterruptionEnded, object: session)
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionRuntimeError, object: session)
+
         flashlightManager.cleanup()
+        NotificationCenter.default.removeObserver(self)
     }
     
     private func setupServices() {
@@ -585,10 +608,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
 
         logger.info("Requesting recording start.")
-        let settings = SettingsModel()
 
         // Handle auto-locking exposure if enabled
-        if settings.isExposureLockEnabledDuringRecording {
+        if self.settingsModel.isExposureLockEnabledDuringRecording {
             // --- Modification Start ---
             // Store the actual current mode before applying any lock
             previousExposureMode = currentDevice.exposureMode
@@ -613,7 +635,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
 
         // Lock white balance if enabled in settings
-        if settings.isWhiteBalanceLockEnabled {
+        if self.settingsModel.isWhiteBalanceLockEnabled {
             logger.info("Auto-locking white balance for recording start.")
             exposureService.updateWhiteBalance(self.whiteBalance)
         }
@@ -625,7 +647,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Update configuration for recording
         recordingService.setDevice(currentDevice)
         recordingService.setAppleLogEnabled(isAppleLogEnabled)
-        recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        recordingService.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
 
         // ---> ADD LOGGING HERE <---
         logger.info("DEBUG_FRAMERATE: Configuring RecordingService with selectedFrameRate: \\(self.selectedFrameRate)")
@@ -645,7 +667,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         recordingService?.setAppleLogEnabled(isAppleLogEnabled)
         
         // Explicitly set the Bake-in LUT state *before* starting recording
-        recordingService?.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
+        recordingService?.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
         
         // START RECORDING
         await recordingService?.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
@@ -679,8 +701,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         logger.info("Recording state set to false.")
 
         // Restore exposure state if it was automatically locked for recording
-        let settings = SettingsModel()
-        if settings.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
+        if self.settingsModel.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
             logger.info("Recording stopped: Restoring previous exposure state. SP Active: \\(isShutterPriorityEnabled), Stored Mode: \\(String(describing: modeToRestore))")
 
             // --- Modification Start ---
@@ -724,7 +745,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             previousExposureMode = nil
             previousISO = nil
             previousExposureDuration = nil
-        } else if settings.isExposureLockEnabledDuringRecording {
+        } else if self.settingsModel.isExposureLockEnabledDuringRecording {
              logger.warning("Lock during recording enabled, but no previous exposure mode was stored. Cannot restore.")
         }
 
@@ -890,9 +911,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - App Lifecycle State Update
 
     func setAppActive(_ active: Bool) {
-        guard isAppCurrentlyActive != active else { return } // Avoid redundant updates
+        guard isAppCurrentlyActive != active else { return }
         isAppCurrentlyActive = active
         wcLogger.info("iOS App Active State changed: \(active)")
+        // Start or stop session based on active state
+        if active {
+            startSession()
+        } else {
+            stopSession()
+        }
         // Send updated state immediately
         sendStateToWatch()
     }
@@ -1101,6 +1128,79 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func updateColorSpace(isAppleLogEnabled: Bool) {
         self.isAppleLogEnabled = isAppleLogEnabled
+    }
+
+    // MARK: - Session Control
+    /// Start the AVCaptureSession on the dedicated queue and update state
+    func startSession() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            if !self.session.isRunning {
+                self.session.startRunning()
+                DispatchQueue.main.async {
+                    self.isSessionRunning = self.session.isRunning
+                    self.status = self.session.isRunning ? .running : .failed
+                    if !self.session.isRunning {
+                        self.error = CameraError.sessionFailedToStart
+                    }
+                    self.logger.info("Session started: \(self.isSessionRunning)")
+                }
+            }
+        }
+    }
+
+    /// Stop the AVCaptureSession on the dedicated queue
+    func stopSession() {
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            if self.session.isRunning {
+                self.session.stopRunning()
+                DispatchQueue.main.async {
+                    self.isSessionRunning = false
+                    self.logger.info("Session stopped")
+                }
+            }
+        }
+    }
+
+    // MARK: - Interruption Handlers
+    @objc private func sessionInterrupted(_ notification: Notification) {
+        logger.warning("Session interrupted: \\(notification.userInfo ?? [:])")
+        // Check the reason for interruption
+        if let reasonValue = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+           let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) {
+            logger.warning("Interruption Reason: \\(reason.description)")
+            // Optionally handle different reasons differently
+            // e.g., reason == .videoDeviceNotAvailableInBackground
+            // e.g., reason == .audioDeviceInUseByAnotherClient
+        }
+        
+        // Update session state immediately
+        DispatchQueue.main.async {
+            self.isSessionRunning = false
+            // Optionally stop recording if interrupted
+            // if self.isRecording { Task { await self.stopRecording() } }
+        }
+    }
+
+    @objc private func sessionInterruptionEnded(_ notification: Notification) {
+        logger.info("Session interruption ended, attempting to restart session")
+        // Attempt to restart the session on the dedicated queue
+        startSession()
+    }
+
+    @objc private func sessionRuntimeError(_ notification: Notification) {
+        logger.error("Session runtime error: \\(notification.userInfo ?? [:])")
+        if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError {
+            logger.error("Runtime Error Code: \\(error.code.rawValue) - \\(error.localizedDescription)")
+            // Handle specific errors if needed (e.g., media services were reset)
+            if error.code == .mediaServicesWereReset {
+                 logger.error("Media services were reset. Attempting full session restart.")
+                 // Consider a more robust reset if this happens
+            }
+        }
+        // Attempt to restart session after runtime error
+        startSession()
     }
 }
 
