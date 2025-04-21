@@ -101,16 +101,81 @@ class CameraSetupService {
         // Commit configuration after all settings are applied
         session.commitConfiguration()
         
-        if session.canSetSessionPreset(.hd4K3840x2160) {
-            session.sessionPreset = .hd4K3840x2160
-            logger.info("Using 4K preset")
-        } else if session.canSetSessionPreset(.hd1920x1080) {
-            session.sessionPreset = .hd1920x1080
-            logger.info("Using 1080p preset")
-        }
+        // Set session preset - MOVED to reconfigureSession
+        // setSessionPreset()
         
         // Request camera permissions if needed
         checkCameraPermissionsAndStart()
+    }
+    
+    // NEW Internal method to add inputs/outputs and set preset
+    // Assumes session.beginConfiguration() has been called
+    func reconfigureSession() throws {
+        logger.info("Reconfiguring session inputs, outputs, and preset.")
+        
+        // --- Add Inputs/Outputs --- 
+        // Use the currently selected device if available, or default
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            logger.error("Reconfigure: Default video device not found.")
+            throw CameraError.cameraUnavailable
+        }
+        
+        // Add Video Input
+        // Remove existing video input first if necessary
+        if let existingInput = self.videoDeviceInput {
+             if session.inputs.contains(existingInput) {
+                 logger.info("Reconfigure: Removing existing video input.")
+                 session.removeInput(existingInput)
+             }
+        }
+        let input = try AVCaptureDeviceInput(device: videoDevice)
+        if session.canAddInput(input) {
+            session.addInput(input)
+            self.videoDeviceInput = input // Store the new input
+            logger.info("Reconfigure: Added new video input.")
+        } else {
+            logger.error("Reconfigure: Failed to add video input.")
+            throw CameraError.invalidDeviceInput
+        }
+
+        // Add Audio Input (if not already present)
+        // Check if an audio input already exists
+        let hasAudioInput = session.inputs.contains { $0.ports.contains { $0.mediaType == .audio } }
+        if !hasAudioInput {
+            if let audioDevice = AVCaptureDevice.default(for: .audio),
+               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+               session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                logger.info("Reconfigure: Added audio input.")
+            }
+        } else {
+            logger.info("Reconfigure: Audio input already exists.")
+        }
+        
+        // Add Video/Audio Outputs (Handled by RecordingService init now, ensure they are added if needed)
+        // Check if video/audio outputs exist, add if necessary (assuming RecordingService adds them)
+        let hasVideoOutput = session.outputs.contains { $0 is AVCaptureVideoDataOutput }
+        let hasAudioOutput = session.outputs.contains { $0 is AVCaptureAudioDataOutput }
+        logger.info("Reconfigure: Has Video Output: \(hasVideoOutput), Has Audio Output: \(hasAudioOutput) (Outputs managed by RecordingService)")
+        
+        // --- Set Session Preset --- 
+        setSessionPreset()
+        
+        logger.info("Reconfigure: Session reconfigured.")
+        // Note: Does NOT call session.commitConfiguration() - caller should handle this.
+    }
+    
+    // Helper to set the session preset
+    private func setSessionPreset() {
+         if session.canSetSessionPreset(.hd4K3840x2160) {
+             session.sessionPreset = .hd4K3840x2160
+             logger.info("Preset set to 4K")
+         } else if session.canSetSessionPreset(.hd1920x1080) {
+             session.sessionPreset = .hd1920x1080
+             logger.info("Preset set to 1080p")
+         } else {
+             logger.warning("Could not set desired session preset (4K or 1080p). Using default.")
+         }
     }
     
     private func checkCameraPermissionsAndStart() {

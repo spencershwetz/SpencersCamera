@@ -335,9 +335,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Service Instances
     private var cameraSetupService: CameraSetupService!
     private var exposureService: ExposureService!
-    private var recordingService: RecordingService!
     private var cameraDeviceService: CameraDeviceService!
     private var videoFormatService: VideoFormatService!
+    
+    var recordingService: RecordingService!
     
     @Published var lastLensSwitchTimestamp = Date()
     
@@ -353,6 +354,211 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var wbPollingTimerCancellable: AnyCancellable?
     private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
     
+    // NEW: Track interruption state
+    @Published var isSessionInterrupted: Bool = false
+    // NEW: Track if session start is in progress to prevent interference
+    @Published var isStartingSession: Bool = false
+    
+    // MARK: - Session Lifecycle Management (NEW)
+
+    func startSession() {
+        // Log initial state
+        logger.info("StartSession: Entered. isRunning=\(self.session.isRunning), isStarting=\(self.isStartingSession), isInterrupted=\(self.session.isInterrupted)")
+
+        guard !session.isRunning else {
+            logger.info("StartSession: Exit - Already running.")
+            return
+        }
+        guard !isStartingSession else {
+            logger.info("StartSession: Exit - Start already in progress.")
+            return
+        }
+        guard !session.isInterrupted else {
+            logger.warning("StartSession: Exit - Session interrupted.")
+            if !isSessionInterrupted {
+                DispatchQueue.main.async { self.isSessionInterrupted = true; self.status = .unknown }
+            }
+            return
+        }
+
+        logger.info("StartSession: Proceeding to start...")
+
+        DispatchQueue.main.async {
+            self.isStartingSession = true
+            self.logger.info("StartSession: MainThread - Set isStartingSession = true")
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                // Use a static logger or print if self is nil
+                print("StartSession: BackgroundThread - self is nil, cannot proceed.")
+                return
+            }
+            
+            self.logger.info("StartSession: BackgroundThread - Entered.")
+            
+            // --- ADDED: Reconfigure Session --- 
+            var reconfigureError: Error? = nil
+            self.session.beginConfiguration()
+            self.logger.info("StartSession: BackgroundThread - Began configuration for reconfigure.")
+            do {
+                // Ensure cameraSetupService is available
+                if let setupService = self.cameraSetupService {
+                    try setupService.reconfigureSession()
+                    self.logger.info("StartSession: BackgroundThread - Reconfiguration successful.")
+                } else {
+                    self.logger.error("StartSession: BackgroundThread - cameraSetupService is nil, cannot reconfigure.")
+                    throw CameraError.setupFailed // Or a different appropriate error
+                }
+            } catch {
+                self.logger.error("StartSession: BackgroundThread - Reconfiguration FAILED: \(error.localizedDescription)")
+                reconfigureError = error
+            }
+            self.session.commitConfiguration()
+            self.logger.info("StartSession: BackgroundThread - Committed configuration after reconfigure.")
+            
+            // Exit early if reconfiguration failed
+            if let error = reconfigureError {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.logger.error("StartSession: MainThreadCompletion - Exiting due to reconfiguration failure.")
+                    self.isStartingSession = false
+                    self.error = .configurationFailed(message: "Failed to reconfigure session: \(error.localizedDescription)")
+                    self.status = .failed
+                    self.isSessionRunning = false
+                }
+                return // Stop further execution in background thread
+            }
+            // --- END ADDED ---
+            
+
+            // --- Pre-start device configuration check ---
+            if let currentDevice = self.device { // Use the existing device reference
+                do {
+                    self.logger.info("StartSession: BackgroundThread - Pre-start: Locking device for configuration check...")
+                    try currentDevice.lockForConfiguration()
+                    if currentDevice.exposureMode != .continuousAutoExposure && currentDevice.isExposureModeSupported(.continuousAutoExposure) {
+                        currentDevice.exposureMode = .continuousAutoExposure
+                        self.logger.info("StartSession: BackgroundThread - Pre-start: Ensured exposure mode is continuousAutoExposure.")
+                    } else {
+                         self.logger.info("StartSession: BackgroundThread - Pre-start: Exposure mode already continuousAutoExposure or not supported.")
+                    }
+                    currentDevice.unlockForConfiguration()
+                    self.logger.info("StartSession: BackgroundThread - Pre-start: Device configuration check complete.")
+                } catch {
+                    self.logger.error("StartSession: BackgroundThread - Pre-start: Failed to configure device exposure mode: \(error.localizedDescription)")
+                    // Decide if we should proceed or report error? For now, let's try starting anyway.
+                }
+            } else {
+                 self.logger.warning("StartSession: BackgroundThread - Pre-start: Cannot check device configuration, device reference is nil.")
+            }
+            // --- END ADDED ---
+
+            var startError: Error? = nil
+            var sessionWasRunningBeforeStartCall: Bool = self.session.isRunning
+            self.logger.info("StartSession: BackgroundThread - Before startRunning(). isRunning=\(sessionWasRunningBeforeStartCall)")
+            do {
+                 try self.session.startRunning()
+                 self.logger.info("StartSession: BackgroundThread - startRunning() completed (no error thrown).")
+             } catch {
+                 self.logger.error("StartSession: BackgroundThread - startRunning() THREW error: \(error.localizedDescription)")
+                 startError = error
+             }
+            var sessionIsRunningAfterStartCall: Bool = self.session.isRunning
+            self.logger.info("StartSession: BackgroundThread - After startRunning(). isRunning=\(sessionIsRunningAfterStartCall)")
+
+            // Update state on main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { 
+                    print("StartSession: MainThreadCompletion - self is nil")
+                    return 
+                }
+                
+                let sessionIsRunningOnMain = self.session.isRunning
+                self.logger.info("StartSession: MainThreadCompletion - Entered. isRunning=\(sessionIsRunningOnMain)")
+                self.isStartingSession = false // Reset state regardless of outcome
+                self.logger.info("StartSession: MainThreadCompletion - Set isStartingSession = false")
+
+                self.isSessionRunning = sessionIsRunningOnMain // Use the state checked on main thread
+                self.logger.info("StartSession: MainThreadCompletion - Final isSessionRunning state: \(self.isSessionRunning)")
+
+                if !self.isSessionRunning {
+                    self.logger.error("StartSession: MainThreadCompletion - FAILED. Error: \(startError?.localizedDescription ?? "None thrown, but session not running")")
+                    self.error = startError != nil ? .custom(message: "Session start failed: \(startError!.localizedDescription)") : .sessionFailedToStart
+                    self.status = .failed
+                } else {
+                    self.logger.info("StartSession: MainThreadCompletion - SUCCESS.")
+                    self.status = .running
+                    self.error = nil 
+                }
+            }
+        }
+    }
+
+    func stopSession() {
+        // Log initial state
+        logger.info("StopSession: Entered. isRunning=\(self.session.isRunning), isStarting=\(self.isStartingSession)")
+        
+        guard session.isRunning else {
+            logger.info("StopSession: Exit - Not running.")
+            return
+        }
+        
+        // Add a flag to prevent concurrent stops if needed (optional)
+        // guard !isStoppingSession else { return } 
+        // isStoppingSession = true
+
+        logger.info("StopSession: Proceeding to stop...")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else {
+                print("StopSession: BackgroundThread - self is nil, cannot proceed.")
+                return
+            }
+            
+            self.logger.info("StopSession: BackgroundThread - Entered. isRunning=\(self.session.isRunning)")
+            
+            // Check running state BEFORE stopping
+            let wasRunning = self.session.isRunning
+            if wasRunning {
+                self.logger.info("StopSession: BackgroundThread - Removing inputs/outputs before stopping...")
+                // Explicitly remove inputs and outputs
+                self.session.inputs.forEach { self.session.removeInput($0) }
+                self.session.outputs.forEach { self.session.removeOutput($0) }
+                self.logger.info("StopSession: BackgroundThread - Inputs/Outputs removed.")
+                
+                self.logger.info("StopSession: BackgroundThread - Calling stopRunning()...")
+                self.session.stopRunning()
+                self.logger.info("StopSession: BackgroundThread - stopRunning() completed.")
+            } else {
+                self.logger.warning("StopSession: BackgroundThread - Session was already not running before stopRunning() call.")
+            }
+             
+             // Check running state AFTER stopping
+             let isRunningAfter = self.session.isRunning
+             self.logger.info("StopSession: BackgroundThread - After stopRunning(). isRunning=\(isRunningAfter)")
+
+             DispatchQueue.main.async { [weak self] in
+                 guard let self = self else { 
+                    print("StopSession: MainThreadCompletion - self is nil")
+                    return 
+                 }
+                 let isRunningOnMain = self.session.isRunning
+                 self.logger.info("StopSession: MainThreadCompletion - Entered. isRunning=\(isRunningOnMain)")
+                 self.isSessionRunning = false // Explicitly set to false
+                 
+                 if self.isStartingSession {
+                     self.logger.warning("StopSession: MainThreadCompletion - Resetting isStartingSession flag.")
+                     self.isStartingSession = false
+                 }
+                 // self.isStoppingSession = false // Reset stop flag if used
+                 self.logger.info("StopSession: MainThreadCompletion - Completed.")
+                 // Optionally update status, e.g., self.status = .unknown
+             }
+        }
+    }
+
+    // MARK: - Initialization (Original)
+
     override init() {
         super.init()
         print("\n=== Camera Initialization ===")
@@ -434,12 +640,23 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 self?.handleSessionRunningStateChange(isRunning)
             }
             .store(in: &cancellables) // Assuming you have a cancellables set
+
+        // ADD: Observe session interruptions
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionWasInterrupted), name: .AVCaptureSessionWasInterrupted, object: session)
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionInterruptionEnded), name: .AVCaptureSessionInterruptionEnded, object: session)
+        // ADD: Observe session runtime errors
+        NotificationCenter.default.addObserver(self, selector: #selector(sessionRuntimeError), name: .AVCaptureSessionRuntimeError, object: session)
     }
     
     deinit {
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        // REMOVE interruption observers
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionWasInterrupted, object: session)
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionInterruptionEnded, object: session)
+        // ADD: Remove runtime error observer
+        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionRuntimeError, object: session)
         
         flashlightManager.cleanup()
     }
@@ -545,7 +762,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 previousISO = currentDevice.iso
                 previousExposureDuration = currentDevice.exposureDuration
             }
-            logger.info("Storing previous exposure state: Mode \\(String(describing: previousExposureMode))")
+            logger.info("Storing previous exposure state: Mode \(String(describing: self.previousExposureMode))")
             
             if isShutterPriorityEnabled {
                 // Shutter Priority Lock (SP is ON)
@@ -577,7 +794,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         recordingService.setBakeInLUTEnabled(settings.isBakeInLUTEnabled)
 
         // ---> ADD LOGGING HERE <---
-        logger.info("DEBUG_FRAMERATE: Configuring RecordingService with selectedFrameRate: \\(self.selectedFrameRate)")
+        logger.info("DEBUG_FRAMERATE: Configuring RecordingService with selectedFrameRate: \(self.selectedFrameRate)")
         // ---> END LOGGING <---
 
         recordingService.setVideoConfiguration(
@@ -588,7 +805,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Get current orientation angle for recording
         let connectionAngle = session.outputs.compactMap { $0.connection(with: .video) }.first?.videoRotationAngle ?? -1 // Use -1 to indicate not found
-        logger.info("Requesting recording start. Current primary video connection angle: \\(connectionAngle)° (This is passed but ignored by RecordingService)")
+        logger.info("Requesting recording start. Current primary video connection angle: \(connectionAngle)° (This is passed but ignored by RecordingService)")
 
         // Inform the RecordingService about the Apple Log state *before* starting
         recordingService?.setAppleLogEnabled(isAppleLogEnabled)
@@ -629,17 +846,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Restore exposure state if it was automatically locked for recording
         let settings = SettingsModel()
-        if settings.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
-            logger.info("Recording stopped: Restoring previous exposure state. SP Active: \\(isShutterPriorityEnabled), Stored Mode: \\(String(describing: modeToRestore))")
+        if settings.isExposureLockEnabledDuringRecording, let modeToRestore = self.previousExposureMode {
+            logger.info("Recording stopped: Restoring previous exposure state. SP Active: \(self.isShutterPriorityEnabled), Stored Mode: \(String(describing: modeToRestore))")
 
             // --- Modification Start ---
-            if isShutterPriorityEnabled {
+            if self.isShutterPriorityEnabled {
                 // Restore Shutter Priority auto-ISO (if it was locked for recording)
                 logger.info("SP is active, unlocking SP exposure after recording.")
                 exposureService.unlockShutterPriorityExposureAfterRecording() // Use new service method
             } else {
                 // Restore standard lock state (SP was OFF when recording started)
-                logger.info("SP is OFF, restoring standard exposure state based on stored mode: \\(String(describing: modeToRestore))")
+                logger.info("SP is OFF, restoring standard exposure state based on stored mode: \(String(describing: modeToRestore))")
                 switch modeToRestore {
                 case .continuousAutoExposure:
                     exposureService.setAutoExposureEnabled(true) // This implicitly sets mode to auto
@@ -649,8 +866,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     // If the stored mode was custom (e.g., manual ISO/Shutter before recording without SP)
                     exposureService.setAutoExposureEnabled(false) // Set to manual mode first
                     self.isExposureLocked = false // Update UI state
-                    if let iso = previousISO, let duration = previousExposureDuration {
-                        logger.info("Attempting to restore previous custom ISO: \\(iso) and Duration: \\(duration.seconds)s")
+                    if let iso = self.previousISO, let duration = self.previousExposureDuration {
+                        logger.info("Attempting to restore previous custom ISO: \(iso) and Duration: \(duration.seconds)s")
                         exposureService.setCustomExposure(duration: duration, iso: iso) // Reapply specific values
                     } else {
                          logger.warning("Stored mode was .custom, but ISO/Duration not available. Reverting to manual mode without specific values.")
@@ -662,7 +879,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     logger.info("Restored to .locked.")
                 default:
                     // Fallback: revert to auto if modeToRestore is unexpected
-                    logger.warning("Could not restore unknown previous standard exposure mode: \\(String(describing: modeToRestore)). Reverting to auto.")
+                    logger.warning("Could not restore unknown previous standard exposure mode: \(String(describing: modeToRestore)). Reverting to auto.")
                     exposureService.setAutoExposureEnabled(true)
                     self.isExposureLocked = false
                 }
@@ -670,9 +887,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // --- Modification End ---
 
             // Clear the stored state regardless of which path was taken
-            previousExposureMode = nil
-            previousISO = nil
-            previousExposureDuration = nil
+            self.previousExposureMode = nil
+            self.previousISO = nil
+            self.previousExposureDuration = nil
         } else if settings.isExposureLockEnabledDuringRecording {
              logger.warning("Lock during recording enabled, but no previous exposure mode was stored. Cannot restore.")
         }
@@ -922,10 +1139,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let targetDurationSeconds = 1.0 / (selectedFrameRate * 2.0)
         let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000) // High precision
 
-        if !isShutterPriorityEnabled {
-            logger.info("ViewModel: Enabling Shutter Priority with duration \\(targetDurationSeconds)s.")
+        if !self.isShutterPriorityEnabled {
+            logger.info("ViewModel: Enabling Shutter Priority with duration \(targetDurationSeconds)s.")
             exposureService.enableShutterPriority(duration: targetDuration)
-            isShutterPriorityEnabled = true // Update state AFTER calling service
+            self.isShutterPriorityEnabled = true // Update state AFTER calling service
             // ADDED: Ensure standard AE lock UI turns off when SP enables
             if self.isExposureLocked {
                 logger.info("SP enabled, turning off manual exposure lock state.")
@@ -934,7 +1151,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         } else {
             logger.info("ViewModel: Disabling Shutter Priority.")
             exposureService.disableShutterPriority()
-            isShutterPriorityEnabled = false // Update state AFTER calling service
+            self.isShutterPriorityEnabled = false // Update state AFTER calling service
             // No need to change isExposureLocked state here - leave it as it was before SP was disabled
         }
         // Remove the old logic that directly manipulated isAutoExposureEnabled and updateShutterAngle
@@ -982,6 +1199,83 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.whiteBalance = currentTemperature
         } else {
              // logger.trace("WB Poll: Temperature \(currentTemperature) hasn't changed significantly from \(self.whiteBalance). Skipping update.")
+        }
+    }
+
+    // MARK: - Session Interruption Handling (NEW)
+
+    @objc private func sessionWasInterrupted(notification: Notification) {
+        logger.warning("AVCaptureSession was interrupted.")
+        guard let reasonValue = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+              let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) else {
+            logger.warning("Interruption notification missing reason.")
+            return
+        }
+        logger.warning("Interruption reason: \(reason.description)")
+
+        DispatchQueue.main.async {
+            self.isSessionInterrupted = true
+            self.isSessionRunning = false // Session is not running when interrupted
+            self.status = .unknown // Or a new .interrupted status if needed
+            // Stop polling WB etc.
+            self.stopPollingWhiteBalance()
+        }
+        
+        // If interruption is due to audio activation, might need specific handling?
+        // For now, just log.
+        if reason == .audioDeviceInUseByAnotherClient || reason == .videoDeviceInUseByAnotherClient {
+            logger.warning("Interruption due to device conflict.")
+        } else if reason == .videoDeviceNotAvailableInBackground {
+            logger.info("Interruption due to video device unavailable in background.")
+        }
+    }
+
+    @objc private func sessionInterruptionEnded(notification: Notification) {
+        logger.info("AVCaptureSession interruption ended.")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.isSessionInterrupted = false
+            // Attempt to restart the session only if the app is currently active
+            if self.isAppCurrentlyActive {
+                self.logger.info("App is active, attempting to restart session after interruption ended.")
+                self.startSession() // Try starting the session again
+            } else {
+                self.logger.info("App is not active, deferring session restart until app becomes active.")
+            }
+        }
+    }
+    
+    // ADD: Runtime Error Handler
+    @objc private func sessionRuntimeError(notification: Notification) {
+        guard let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError else {
+            logger.error("AVCaptureSessionRuntimeError received, but no AVError found in userInfo: \(notification.userInfo ?? [:])")
+            return
+        }
+
+        logger.error("AVCaptureSessionRuntimeError: Code=\(error.code.rawValue), Description=\(error.localizedDescription)")
+        logger.error("UserInfo: \(error.userInfo)")
+
+        // Attempt to map to CameraError or handle specific codes if needed
+        let cameraError: CameraError
+        switch error.code {
+        case .mediaServicesWereReset:
+            cameraError = .mediaServicesWereReset
+            // Attempting session restart might be appropriate here, but needs careful handling
+            // to avoid loops. For now, just report.
+            logger.warning("Media services were reset. Session restart might be needed after reconfiguration.")
+        case .sessionNotRunning:
+             cameraError = .sessionFailedToStart // Or a more specific error
+             logger.error("Runtime error indicates session is not running.")
+        default:
+            cameraError = .sessionRuntimeError(error)
+        }
+
+        // Update the UI on the main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.error = cameraError
+            self.status = .failed // Set status to failed on runtime error
+            self.isSessionRunning = false // Ensure state reflects the error
         }
     }
 }
@@ -1180,6 +1474,26 @@ extension CameraViewModel: WCSessionDelegate {
                  self.sendStateToWatch()
                  self.sendLaunchCommandToWatch()
              }
+        }
+    }
+}
+
+// Add description for InterruptionReason
+extension AVCaptureSession.InterruptionReason {
+    var description: String {
+        switch self {
+        case .videoDeviceNotAvailableInBackground:
+            return "Video device not available in background"
+        case .audioDeviceInUseByAnotherClient:
+            return "Audio device in use by another client"
+        case .videoDeviceInUseByAnotherClient:
+            return "Video device in use by another client"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps:
+            return "Video device not available with multiple foreground apps"
+        case .videoDeviceNotAvailableDueToSystemPressure:
+            return "Video device not available due to system pressure"
+        @unknown default:
+            return "Unknown reason"
         }
     }
 }

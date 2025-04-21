@@ -41,9 +41,13 @@ struct CameraPreviewView: UIViewRepresentable {
             // Ensure connection orientation is correct
             if let connection = videoOutput.connection(with: .video) {
                 // Log connection info
-                logger.info("PREVIEW_ORIENT: Connection videoRotationAngle: \(connection.videoRotationAngle)° (Should be 0)") // Verify it's 0
+                let angle = connection.videoRotationAngle
+                connection.videoRotationAngle = angle
+                logger.info("PREVIEW_ORIENT: Set videoRotationAngle to \(angle)°")
+                // Log other connection properties for debugging
                 logger.info("PREVIEW_ORIENT: Connection active: \(connection.isActive), enabled: \(connection.isEnabled)")
-                logger.info("PREVIEW_ORIENT: Connection videoOrientation: \(connection.videoOrientation.rawValue)")
+                // Use videoRotationAngle instead of deprecated videoOrientation
+                logger.info("PREVIEW_ORIENT: Connection videoRotationAngle: \(connection.videoRotationAngle)°")
                 logger.info("PREVIEW_ORIENT: Connection videoMirrored: \(connection.isVideoMirrored)")
             }
         } else {

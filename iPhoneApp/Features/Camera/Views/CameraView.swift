@@ -7,6 +7,7 @@ import AVFoundation
 struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
     @EnvironmentObject var settings: SettingsModel
+    @Environment(\.scenePhase) var scenePhase
 
     // Use the shared instance with @ObservedObject
     @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
@@ -21,22 +22,14 @@ struct CameraView: View {
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
-        // We CANNOT access @StateObject properties here as they won't be initialized yet
-        // Only setup notifications that don't depend on StateObjects
-        setupOrientationNotifications()
     }
     
-    private func setupOrientationNotifications() {
-        // Register for app state changes to re-enforce orientation when app becomes active
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("DEBUG: App became active - re-enforcing camera orientation")
-            // We CANNOT reference viewModel directly here - it causes the error
-            // Instead, we'll handle this in onAppear or through a dedicated @State property
+    private func enforceCameraOrientationIfNeeded() {
+        guard !viewModel.isStartingSession else {
+            print("DEBUG: Deferring orientation enforcement: session start is in progress.")
+            return
         }
+        print("DEBUG: Enforcing camera orientation (session not starting).")
     }
     
     var body: some View {
@@ -96,14 +89,16 @@ struct CameraView: View {
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
-                startSession()
+                // Enable LUT preview by default
+                showLUTPreview = true
+                // Enable device orientation notifications
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                enforceCameraOrientationIfNeeded()
             }
             .onDisappear {
-                stopSession()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                // When app is moved to background
-                stopSession()
+                print("DEBUG: CameraView disappeared")
+                // Disable device orientation notifications
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
             }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator
@@ -130,6 +125,12 @@ struct CameraView: View {
                     }
                 }
                 */
+            }
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                if newPhase == .active {
+                    print("DEBUG: Scene became active - checking camera orientation enforcement.")
+                    enforceCameraOrientationIfNeeded()
+                }
             }
             .alert(item: $viewModel.error) { error in
                 Alert(
@@ -359,45 +360,6 @@ struct CameraView: View {
                 print("DEBUG: LUT import failed")
             }
         }
-    }
-    
-    private func startSession() {
-        // Start the camera session when the view appears
-        if !viewModel.session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                viewModel.session.startRunning()
-                DispatchQueue.main.async {
-                    viewModel.isSessionRunning = viewModel.session.isRunning
-                    viewModel.status = viewModel.session.isRunning ? .running : .failed
-                    viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
-                    print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
-                }
-            }
-        }
-        
-        // Enable LUT preview by default
-        showLUTPreview = true
-        
-        // Enable device orientation notifications
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-    }
-    
-    private func stopSession() {
-        // Remove notification observer when the view disappears
-        NotificationCenter.default.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        
-        // Stop the camera session when the view disappears
-        if viewModel.session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                viewModel.session.stopRunning()
-                DispatchQueue.main.async {
-                    viewModel.isSessionRunning = false
-                }
-            }
-        }
-        
-        // Disable device orientation notifications
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 }
 

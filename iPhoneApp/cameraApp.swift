@@ -86,16 +86,20 @@ struct cameraApp: App {
             case .active:
                 print("iOS App Phase: Active")
                 cameraViewModel.setAppActive(true)
+                cameraViewModel.startSession() // Start session when active
             case .inactive:
                 print("iOS App Phase: Inactive")
                 cameraViewModel.setAppActive(false)
+                // Optionally stop session immediately when inactive, or wait for background
+                // cameraViewModel.stopSession()
             case .background:
                 print("iOS App Phase: Background")
                 cameraViewModel.setAppActive(false)
-                // Optionally stop session when going to background if needed
+                cameraViewModel.stopSession() // Stop session when backgrounded
             @unknown default:
                 print("iOS App Phase: Unknown")
                 cameraViewModel.setAppActive(false)
+                cameraViewModel.stopSession() // Stop session in unknown states too
             }
         }
     }
