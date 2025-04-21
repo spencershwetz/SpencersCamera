@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 *   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService` error handling blocks.
 *   Fixed logging string interpolation syntax errors in `ExposureService`.
 *   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
+*   Resolved intermittent session start failures (`AVError.Code -11872`) after multiple background/foreground cycles by implementing explicit removal of inputs/outputs in `stopSession` and full reconfiguration (inputs + outputs) via `CameraSetupService` / `RecordingService` in `startSession`.
 
 ### Removed
 

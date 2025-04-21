@@ -98,7 +98,9 @@ The project is organized into the following main components:
 *   **Camera Feature**: 
     *   `CameraView` observes `CameraViewModel`.
     *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`. It also initializes the `isAutoExposureEnabled` state based on the device's actual state after setup.
+        *   Manages session lifecycle: `stopSession` explicitly removes inputs/outputs before stopping. `startSession` calls `CameraSetupService.reconfigureSession()` to re-add inputs/outputs before attempting to start the session.
     *   `CameraSetupService` configures the `AVCaptureSession`, sets initial device settings (including attempting to set `.continuousAutoExposure` mode early), requests permissions, adds inputs, sets preset, and reports status/device via delegate.
+        *   Provides `reconfigureSession()` method which adds inputs and calls `RecordingService.ensureOutputsAreAdded()` to guarantee outputs are present.
     *   `CameraDeviceService` handles lens switching and zoom, interacting directly with `AVCaptureDevice` and notifying `CameraViewModel` via delegate.
     *   `VideoFormatService` sets resolution, frame rate, and color space (`isAppleLogEnabled` state) on `AVCaptureDevice`, coordinated by `CameraViewModel`.
     *   `ExposureService` sets exposure mode, ISO, shutter, WB, tint based on `CameraViewModel` requests. It also attempts to set `.continuousAutoExposure` upon device initialization (`setDevice`). The final state is synchronized via `CameraSetupService` after the session starts. It uses Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains` and `exposureTargetOffset` on the `AVCaptureDevice`. 
@@ -106,6 +108,8 @@ The project is organized into the following main components:
         *   It provides methods (`lockShutterPriorityExposureForRecording`, `unlockShutterPriorityExposureAfterRecording`) to temporarily pause these auto-ISO adjustments during recording when the relevant setting is enabled in `CameraViewModel`, managed by the `isTemporarilyLockedForRecording` flag.
         *   It continues to provide standard delegate updates for ISO, shutter speed (when not in SP), and white balance.
     *   `RecordingService` uses the configured session/device to write video/audio using `AVAssetWriter`. It receives pixel buffers, potentially processes them using `MetalFrameProcessor` (for LUT bake-in) based on `SettingsModel` state provided via `CameraViewModel`, and saves the final file.
+        *   Adds video/audio outputs during its initialization.
+        *   Provides `ensureOutputsAreAdded()` to allow `CameraSetupService` to re-add outputs if they were removed during session stop.
     *   `CameraView` displays preview via `CameraPreviewView` (which uses `MetalPreviewView` internally).
     *   `MetalPreviewView` receives raw `CMSampleBuffer`s, creates Metal textures, and renders them using shaders from `PreviewShaders.metal`, applying the `currentLUTTexture` from `LUTManager` in the fragment shader.
 *   **LUT Feature**: 

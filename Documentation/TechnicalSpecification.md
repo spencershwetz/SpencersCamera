@@ -16,7 +16,8 @@ This document outlines the technical specifications and requirements for the Spe
 ## Core Features & Implementation Details
 
 *   **Camera Control**: 
-    *   Uses `AVCaptureSession` managed primarily within `CameraViewModel` and configured by `CameraSetupService`.
+    *   Uses `AVCaptureSession` managed primarily within `CameraViewModel`. `CameraViewModel.startSession`/`stopSession` handle the lifecycle robustly: `stopSession` explicitly removes inputs/outputs, `startSession` explicitly reconfigures the session (via `CameraSetupService.reconfigureSession`) before starting, preventing resource exhaustion errors after multiple background/foreground cycles.
+    *   Configuration handled by `CameraSetupService`: Finds/configures device, adds inputs, sets preset, checks permissions, starts session initially. Includes `reconfigureSession` helper for restarts.
     *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
     *   Lens switching logic in `CameraDeviceService` handles physical switching (reconfiguring session) and digital zoom (setting `videoZoomFactor` on wide lens for 2x).
     *   Format selection (Resolution, FPS, Color Space) managed by `VideoFormatService`, finding optimal `AVCaptureDevice.Format` based on requested criteria.
@@ -73,6 +74,11 @@ This document outlines the technical specifications and requirements for the Spe
     *   Startup sequence implemented with `Task.sleep` for timing.
 *   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Implements Shutter Priority using KVO on `exposureTargetOffset` to automatically adjust ISO while maintaining a fixed shutter speed. Provides methods to temporarily lock SP adjustments during recording (`lock/unlockShutterPriorityExposureForRecording`). Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, `exposureTargetOffset` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`, coordinating with `CameraViewModel` which handles the specific lock calls (standard AE vs. SP custom).
 *   **Recording Service (`RecordingService`)**: Handles video/audio recording using `AVAssetWriter`. Configures inputs/outputs based on selected codec/resolution/log state. Applies orientation transform to video track. Optionally bakes in LUTs using `MetalFrameProcessor`. Saves final file to Photos library.
+*   **Service Layer**: Encapsulates framework interactions, improving testability and separation of concerns within `CameraViewModel`. Increases number of classes/protocols.
+*   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
+*   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
+*   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
+*   **Explicit Session Teardown/Reconfiguration**: Removing inputs/outputs explicitly in `stopSession` and fully reconfiguring (inputs + outputs) in `startSession` proved necessary to avoid AVFoundation resource exhaustion (`AVError -11872`) after repeated background/foreground cycles.
 
 ## Technical Requirements & Dependencies
 
@@ -107,5 +113,6 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
+*   **Explicit Session Teardown/Reconfiguration**: Removing inputs/outputs explicitly in `stopSession` and fully reconfiguring (inputs + outputs) in `startSession` proved necessary to avoid AVFoundation resource exhaustion (`AVError -11872`) after repeated background/foreground cycles.
 
 *(This specification includes deeper implementation details.)*
