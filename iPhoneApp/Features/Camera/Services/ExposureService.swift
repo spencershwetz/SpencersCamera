@@ -103,12 +103,15 @@ class ExposureService: NSObject {
         
         // Observe white balance gains changes
         whiteBalanceGainsObservation = device.observe(\.deviceWhiteBalanceGains, options: [.new]) { [weak self] device, change in
-            print("[TEMP DEBUG] WB KVO Callback Entered!") 
-            guard let self = self, let newGains = change.newValue else { 
-                // If self is nil here, the ExposureService instance was deallocated
-                print("[TEMP DEBUG] WB KVO: self is nil, exiting callback.")
-                return 
+            // REMOVE TEMP DEBUG
+            // print("[TEMP DEBUG] WB KVO Callback Entered!")
+            guard let self = self else {
+                // REMOVE TEMP DEBUG
+                // print("[TEMP DEBUG] WB KVO: self is nil, exiting callback.")
+                return
             }
+            // Ensure the gains array is not empty
+            guard let newGains = change.newValue else { return }
             // Always report WB changes if the delegate is available, regardless of mode?
             // Let the ViewModel decide if it cares based on its own state.
             // if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
