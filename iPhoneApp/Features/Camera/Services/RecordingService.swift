@@ -67,6 +67,46 @@ class RecordingService: NSObject {
         logger.info("REC_PERF: RecordingService initialized and outputs configured.")
     }
     
+    // NEW: Method to ensure outputs are added to the session
+    func ensureOutputsAreAdded() {
+        session.beginConfiguration()
+        logger.info("RecordingService: Ensuring outputs are added.")
+        
+        // Ensure Video Output
+        if let output = videoDataOutput {
+            if !session.outputs.contains(output) {
+                if session.canAddOutput(output) {
+                    session.addOutput(output)
+                    logger.info("RecordingService: Re-added video data output.")
+                } else {
+                    logger.error("RecordingService: Failed to re-add video data output.")
+                }
+            } else {
+                 logger.info("RecordingService: Video data output already present.")
+            }
+        } else {
+            logger.warning("RecordingService: videoDataOutput is nil, cannot ensure it's added.")
+        }
+
+        // Ensure Audio Output
+        if let output = audioDataOutput {
+            if !session.outputs.contains(output) {
+                if session.canAddOutput(output) {
+                    session.addOutput(output)
+                    logger.info("RecordingService: Re-added audio data output.")
+                } else {
+                    logger.error("RecordingService: Failed to re-add audio data output.")
+                }
+            } else {
+                 logger.info("RecordingService: Audio data output already present.")
+            }
+        } else {
+            logger.warning("RecordingService: audioDataOutput is nil, cannot ensure it's added.")
+        }
+        
+        session.commitConfiguration()
+    }
+    
     func setDevice(_ device: AVCaptureDevice) {
         self.device = device
     }

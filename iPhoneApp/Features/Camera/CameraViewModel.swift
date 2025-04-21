@@ -665,10 +665,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Initialize services with self as delegate
         // Ensure ExposureService is initialized before CameraSetupService
         exposureService = ExposureService(delegate: self)
-        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self) // Pass exposureService
+        // RecordingService MUST be initialized before CameraSetupService now
         recordingService = RecordingService(session: session, delegate: self)
-        // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
-        recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
+        recordingService.setMetalFrameProcessor(self.metalFrameProcessor)
+        
+        // UPDATE: Pass recordingService to CameraSetupService initializer
+        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, recordingService: recordingService, delegate: self)
+        
         videoFormatService = VideoFormatService(session: session, delegate: self)
         // Pass exposureService to CameraDeviceService initializer
         cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, exposureService: exposureService, delegate: self)

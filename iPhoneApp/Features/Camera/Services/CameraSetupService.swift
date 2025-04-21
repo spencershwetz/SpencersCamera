@@ -15,10 +15,12 @@ class CameraSetupService {
     private weak var delegate: CameraSetupServiceDelegate?
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var exposureService: ExposureService
+    private var recordingService: RecordingService
     
-    init(session: AVCaptureSession, exposureService: ExposureService, delegate: CameraSetupServiceDelegate) {
+    init(session: AVCaptureSession, exposureService: ExposureService, recordingService: RecordingService, delegate: CameraSetupServiceDelegate) {
         self.session = session
         self.exposureService = exposureService
+        self.recordingService = recordingService
         self.delegate = delegate
     }
     
@@ -152,11 +154,9 @@ class CameraSetupService {
             logger.info("Reconfigure: Audio input already exists.")
         }
         
-        // Add Video/Audio Outputs (Handled by RecordingService init now, ensure they are added if needed)
-        // Check if video/audio outputs exist, add if necessary (assuming RecordingService adds them)
-        let hasVideoOutput = session.outputs.contains { $0 is AVCaptureVideoDataOutput }
-        let hasAudioOutput = session.outputs.contains { $0 is AVCaptureAudioDataOutput }
-        logger.info("Reconfigure: Has Video Output: \(hasVideoOutput), Has Audio Output: \(hasAudioOutput) (Outputs managed by RecordingService)")
+        // ADD: Ensure RecordingService outputs are present
+        logger.info("Reconfigure: Ensuring RecordingService outputs are added...")
+        recordingService.ensureOutputsAreAdded()
         
         // --- Set Session Preset --- 
         setSessionPreset()
