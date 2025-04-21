@@ -115,7 +115,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         // Log the pixel buffer format
         let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
         let mediaTypeUInt = CMFormatDescriptionGetMediaType(CMSampleBufferGetFormatDescription(sampleBuffer)!)
-        let mediaTypeStr = FourCCString(mediaTypeUInt) // Convert media type code
+        let _ = FourCCString(mediaTypeUInt) // Convert media type code (Marked as unused)
         let formatStr = FourCCString(pixelFormat) // Convert pixel format code
         // logger.debug("Received pixel buffer: Format=\(formatStr) (\(pixelFormat)), MediaType=\(mediaTypeStr) (\(mediaTypeUInt))")
         
@@ -131,6 +131,11 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             lumaTexture = nil
             chromaTexture = nil
         }
+        
+        // ---> ADD: Flush cache before creating textures <--- 
+        CVMetalTextureCacheFlush(textureCache, 0)
+        // logger.trace("Flushed Metal texture cache.") // REMOVED
+        // ---> END FLUSH <--- 
         
         var textureRef: CVMetalTexture? // Temporary ref for cache function
         
@@ -216,19 +221,23 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         logger.debug("MTKView size changed to: \(String(describing: size))")
         // Flush texture cache when size changes
-        CVMetalTextureCacheFlush(textureCache, 0)
+        // CVMetalTextureCacheFlush(textureCache, 0) // REMOVED Cache flush here, only needed before creating textures
     }
     
     func draw(in view: MTKView) {
+        // logger.trace("MTKViewDelegate: draw(in:) called.") // REMOVED
+
         guard let currentDrawable = view.currentDrawable,
               let renderPassDescriptor = view.currentRenderPassDescriptor else {
             // Textures might not be ready yet, or drawable isn't available
+            // logger.trace("MTKViewDelegate: draw(in:) exiting early - currentDrawable or renderPassDescriptor nil.") // REMOVED Log
             return
         }
         
         _ = inFlightSemaphore.wait(timeout: .now() + .milliseconds(16))
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            // logger.warning("MTKViewDelegate: draw(in:) failed to make command buffer.") // REMOVED Log
             inFlightSemaphore.signal()
             return
         }
@@ -249,23 +258,26 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // Select pipeline and bind textures based on the current format
         if currentPixelFormat == kCVPixelFormatType_32BGRA, let texture = bgraTexture {
+            // Render BGRA Texture
             renderEncoder.setRenderPipelineState(rgbPipelineState)
-            renderEncoder.setFragmentTexture(texture, index: 0)    // BGRA texture
-            renderEncoder.setFragmentTexture(lutTexture, index: 1) // LUT texture
+            // logger.trace("MTKViewDelegate: draw(in:) - Using BGRA pipeline.") // REMOVED
+            renderEncoder.setFragmentTexture(texture, index: 0)
+            renderEncoder.setFragmentTexture(lutTexture, index: 1)
         } else if currentPixelFormat == 2016686642,
                   let yTexture = lumaTexture, let cbcrTexture = chromaTexture {
+            // Render YUV Texture
             renderEncoder.setRenderPipelineState(yuvPipelineState)
-            renderEncoder.setFragmentTexture(yTexture, index: 0)    // Luma (Y) texture
-            renderEncoder.setFragmentTexture(cbcrTexture, index: 1) // Chroma (CbCr) texture
-            renderEncoder.setFragmentTexture(lutTexture, index: 2)   // LUT texture
+            // logger.trace("MTKViewDelegate: draw(in:) - Using YUV pipeline.") // REMOVED
+            renderEncoder.setFragmentTexture(yTexture, index: 0)
+            renderEncoder.setFragmentTexture(cbcrTexture, index: 1)
+            renderEncoder.setFragmentTexture(lutTexture, index: 2)
             
             // --- Pass isLUTActive uniform ---
             var isLUTActive = lutManager.selectedLUTURL != nil // Check if a custom LUT is loaded
             renderEncoder.setFragmentBytes(&isLUTActive, length: MemoryLayout<Bool>.size, index: 0) // Pass boolean to shader buffer 0
             // --- End Pass isLUTActive ---
         } else {
-            //logger.trace("No valid textures available for current format: \(FourCCString(currentPixelFormat))")
-            // Don't draw anything if the textures for the current format aren't ready
+            // logger.warning("MTKViewDelegate: draw(in:) - No valid textures available for current format (\(FourCCString(self.currentPixelFormat))). Cannot draw.") // REMOVED Log
             renderEncoder.endEncoding()
             commandBuffer.commit() // Commit empty command buffer
             inFlightSemaphore.signal()

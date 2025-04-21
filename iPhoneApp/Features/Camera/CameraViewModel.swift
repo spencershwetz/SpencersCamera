@@ -390,6 +390,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         self.selectedFrameRate = settingsModel.selectedFrameRate
         
         super.init()
+        // Log ViewModel initialization
+        logger.info("[LIFECYCLE] CameraViewModel initializing...")
         print("\n=== Camera Initialization ===")
         
         // Initialize services
@@ -490,6 +492,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             .store(in: &cancellables) // Assuming you have a cancellables set
 
         // Observe session interruptions
+        logger.info("[LIFECYCLE] Adding session interruption observers...")
         NotificationCenter.default.addObserver(self,
                                                selector: #selector(sessionInterrupted(_:)),
                                                name: .AVCaptureSessionWasInterrupted,
@@ -505,17 +508,40 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
-        if let observer = settingsObserver {
-            NotificationCenter.default.removeObserver(observer)
+        logger.info("Deinitializing CameraViewModel")
+        // Remove all notification observers FIRST
+        NotificationCenter.default.removeObserver(self)
+
+        // Explicitly remove device observers BEFORE stopping the session
+        // This ensures observers are gone while exposureService is still valid.
+        exposureService.removeDeviceObservers()
+        logger.info("Explicitly removed ExposureService KVO observers in CameraViewModel deinit")
+
+        // Ensure the session is stopped if running
+        if session.isRunning {
+            logger.info("Stopping session in deinit (asynchronously)")
+            // Use sync on sessionQueue IF deinit isn't already on it, otherwise deadlock risk.
+            // Let's stick to async but acknowledge the timing risk.
+            sessionQueue.async { [weak self] in // Use sessionQueue
+                // Check session again inside async block as state might change
+                if self?.session.isRunning ?? false {
+                     self?.session.stopRunning()
+                     self?.logger.info("Session stopped asynchronously in deinit on sessionQueue")
+                } else {
+                     self?.logger.info("Session was already stopped before async block executed in deinit.")
+                }
+            }
+        } else {
+             logger.info("Session was not running at the start of deinit.")
+        }
+
+        // Deactivate WCSession delegate if needed
+        if WCSession.isSupported() {
+            WCSession.default.delegate = nil // Clear delegate
+            logger.info("Cleared WCSession delegate in deinit")
         }
         
-        // ADD: Remove session interruption observers
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionWasInterrupted, object: session)
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionInterruptionEnded, object: session)
-        NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionRuntimeError, object: session)
-
-        flashlightManager.cleanup()
-        NotificationCenter.default.removeObserver(self)
+        logger.info("CameraViewModel deinitialization sequence complete.") // Added final log
     }
     
     private func setupServices() {
@@ -785,7 +811,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var audioFrameCount = 0
     private var successfulVideoFrames = 0
     private var failedVideoFrames = 0
-    
+    // Add flag to track if frames are being processed after resume
+    private var isProcessingFramesAfterResume = false // NEW
+
     // Add helper property for tracking keyframes
     private var lastKeyFrameTime: CMTime?
 
@@ -916,8 +944,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         wcLogger.info("iOS App Active State changed: \(active)")
         // Start or stop session based on active state
         if active {
-            startSession()
+            logger.info("App became active. Session start will be handled by AppLifecycleObserver.") // Modified log
+            // startSession() // REMOVED: Let AppLifecycleObserver handle this
         } else {
+            logger.info("App became inactive, requesting session stop.")
             stopSession()
         }
         // Send updated state immediately
@@ -1136,15 +1166,39 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             if !self.session.isRunning {
+                self.logger.info("[SessionControl] Attempting to start session...") // Enhanced log
                 self.session.startRunning()
                 DispatchQueue.main.async {
-                    self.isSessionRunning = self.session.isRunning
-                    self.status = self.session.isRunning ? .running : .failed
-                    if !self.session.isRunning {
+                    // Verify session is ACTUALLY running after startRunning call
+                    let sessionSuccessfullyStarted = self.session.isRunning
+                    self.isSessionRunning = sessionSuccessfullyStarted
+                    self.status = sessionSuccessfullyStarted ? .running : .failed
+                    
+                    if sessionSuccessfullyStarted {
+                        self.logger.info("[SessionControl] Session started successfully: \(self.isSessionRunning)") // Enhanced log
+                        // Re-attach KVO observers AFTER session is confirmed running
+                        if let currentDevice = self.device {
+                            self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")
+                            self.exposureService.setDevice(currentDevice) // This removes old & adds new observers
+                        } else {
+                            self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
+                        }
+                    } else {
                         self.error = CameraError.sessionFailedToStart
+                        self.logger.error("[SessionControl] Session failed to start (isSessionRunning is false after startRunning call). Setting status to failed.") // Enhanced log
                     }
-                    self.logger.info("Session started: \(self.isSessionRunning)")
                 }
+            } else {
+                self.logger.info("[SessionControl] Start session requested, but session is already running.") // Enhanced log
+                // If already running, ensure observers are attached (could happen if startSession is called redundantly)
+                 DispatchQueue.main.async { // Ensure this is on main thread for observer setup
+                    if let currentDevice = self.device {
+                         self.logger.info("[SessionControl] Session already running. Ensuring ExposureService observers are attached for device: \(currentDevice.localizedName)")
+                         self.exposureService.setDevice(currentDevice)
+                     } else {
+                         self.logger.warning("[SessionControl] Session already running but device is nil. Cannot ensure ExposureService observers.")
+                     }
+                 }
             }
         }
     }
@@ -1154,53 +1208,96 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
             if self.session.isRunning {
+                self.logger.info("[SessionControl] Attempting to stop session...") // Enhanced log
                 self.session.stopRunning()
                 DispatchQueue.main.async {
                     self.isSessionRunning = false
-                    self.logger.info("Session stopped")
+                    self.logger.info("[SessionControl] Session stopped.") // Enhanced log
                 }
+            } else {
+                 self.logger.info("[SessionControl] Stop session requested, but session is not running.") // Enhanced log
             }
         }
     }
 
     // MARK: - Interruption Handlers
     @objc private func sessionInterrupted(_ notification: Notification) {
-        logger.warning("Session interrupted: \\(notification.userInfo ?? [:])")
+        // Remove observers IMMEDIATELY upon interruption notification
+        exposureService.removeDeviceObservers()
+        logger.warning("[SessionControl] ExposureService observers removed due to session interruption.") // Added log
+
+        logger.warning("[SessionControl] Session interrupted: \\(notification.userInfo ?? [:])")
         // Check the reason for interruption
         if let reasonValue = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
-           let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) {
-            logger.warning("Interruption Reason: \\(reason.description)")
-            // Optionally handle different reasons differently
-            // e.g., reason == .videoDeviceNotAvailableInBackground
-            // e.g., reason == .audioDeviceInUseByAnotherClient
+           let _ = AVCaptureSession.InterruptionReason(rawValue: reasonValue) {
+            // Use rawValue for logging instead of description
+            logger.warning("[SessionControl] Interruption Reason Raw Value: \\(reasonValue)")
+        } else {
+            logger.warning("[SessionControl] Interruption Reason: Could not determine reason.")
         }
         
         // Update session state immediately
         DispatchQueue.main.async {
             self.isSessionRunning = false
-            // Optionally stop recording if interrupted
-            // if self.isRecording { Task { await self.stopRecording() } }
+            // Optionally stop recording if interrupted - Add check if recording
+            // if self.isRecording { Task { await self.stopRecording() } } // Consider if this is needed
         }
+        // No need to call stopSession() explicitly here? The session is already interrupted by the system.
+        // Let's rely on the state update and the interruption ended handler.
     }
 
     @objc private func sessionInterruptionEnded(_ notification: Notification) {
-        logger.info("Session interruption ended, attempting to restart session")
-        // Attempt to restart the session on the dedicated queue
-        startSession()
+        logger.info("[SessionControl] Session interruption ended. Checking app state...") // Modified log
+        // Only attempt restart if the app is currently active
+        if isAppCurrentlyActive {
+            logger.info("[SessionControl] App is active. Requesting session restart.")
+            startSession() // Attempt restart
+        } else {
+            logger.info("[SessionControl] App is not active. Deferring session restart to AppLifecycleObserver.")
+            // Do nothing, let AppLifecycleObserver handle it when app becomes active
+        }
     }
 
     @objc private func sessionRuntimeError(_ notification: Notification) {
-        logger.error("Session runtime error: \\(notification.userInfo ?? [:])")
-        if let error = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError {
-            logger.error("Runtime Error Code: \\(error.code.rawValue) - \\(error.localizedDescription)")
-            // Handle specific errors if needed (e.g., media services were reset)
-            if error.code == .mediaServicesWereReset {
-                 logger.error("Media services were reset. Attempting full session restart.")
-                 // Consider a more robust reset if this happens
-            }
+        // Log the specific AVError code if available
+        var specificErrorCode: AVError.Code? = nil
+        if let avError = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError {
+            specificErrorCode = avError.code
+            logger.error("[SessionControl] Runtime Error is AVError. Code: \(specificErrorCode!.rawValue) - \(avError.localizedDescription)") // Log the code!
+        } else if let nsError = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError {
+             logger.error("[SessionControl] Runtime Error is NSError. Code: \(nsError.code) - Domain: \(nsError.domain) - \(nsError.localizedDescription)")
+        } else {
+             logger.error("[SessionControl] Runtime Error received, but couldn't extract specific error object. UserInfo: \(notification.userInfo ?? [:])")
         }
-        // Attempt to restart session after runtime error
-        startSession()
+
+        // !!! CRITICAL: Remove observers immediately BEFORE updating state for any runtime error
+        // This prevents KVO trying to access a potentially broken session/device.
+        logger.warning("[SessionControl] Runtime Error detected. Removing ExposureService observers immediately.")
+        exposureService.removeDeviceObservers()
+
+        // --- Decision Logic based on error --- 
+        
+        // Check if it's media services reset
+        if specificErrorCode == .mediaServicesWereReset {
+             logger.error("[SessionControl] Media services were reset. Avoiding immediate restart. Reconfiguration or app lifecycle should handle restart.")
+             // Do NOT attempt restart here, let the reconfiguration process or app lifecycle handle it.
+             DispatchQueue.main.async {
+                 self.isSessionRunning = false // Explicitly set running to false
+                 self.status = .failed
+                 self.error = .mediaServicesWereReset // Use specific error
+             }
+             return // Exit early for media services reset
+        }
+
+        // For OTHER runtime errors (AVError or NSError):
+        logger.error("[SessionControl] Generic runtime error occurred (Code: \(specificErrorCode?.rawValue ?? -1)). Session stopping. Recovery will be attempted by lifecycle events.")
+        DispatchQueue.main.async {
+            self.isSessionRunning = false // Ensure session state is false
+            self.status = .failed // Indicate failure
+            // Use a generic runtime error, or map specificErrorCode if needed
+            self.error = .sessionRuntimeError(code: specificErrorCode?.rawValue ?? -1) 
+        }
+        // DO NOT restart session here for generic errors
     }
 }
 
@@ -1401,4 +1498,5 @@ extension CameraViewModel: WCSessionDelegate {
         }
     }
 }
+
 

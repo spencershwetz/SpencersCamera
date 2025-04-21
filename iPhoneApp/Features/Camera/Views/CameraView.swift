@@ -82,19 +82,19 @@ struct CameraView: View {
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
-                startSession()
+                viewModel.startSession()
             }
             .onDisappear {
-                stopSession()
+                viewModel.stopSession()
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
                 // When app is moved to background
-                stopSession()
+                viewModel.stopSession()
             }
-            // Restart session when app becomes active again
+            // REINSTATE: Restart session when app becomes active again
             .onReceive(appLifecycleObserver.didBecomeActivePublisher) { _ in
-                print("DEBUG: Received didBecomeActivePublisher event, calling startSession()")
-                startSession()
+                print("DEBUG: Received didBecomeActivePublisher event, calling viewModel.startSession()")
+                viewModel.startSession()
             }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator
@@ -361,42 +361,6 @@ struct CameraView: View {
                 print("DEBUG: LUT import failed")
             }
         }
-    }
-    
-    private func startSession() {
-        // Start the camera session when the view appears
-        if !viewModel.session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                viewModel.session.startRunning()
-                DispatchQueue.main.async {
-                    viewModel.isSessionRunning = viewModel.session.isRunning
-                    viewModel.status = viewModel.session.isRunning ? .running : .failed
-                    viewModel.error = viewModel.session.isRunning ? nil : CameraError.sessionFailedToStart
-                    print("DEBUG: Camera session running: \(viewModel.isSessionRunning)")
-                }
-            }
-        }
-        
-        // Enable LUT preview by default
-        showLUTPreview = true
-        
-        // Enable device orientation notifications
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-    }
-    
-    private func stopSession() {
-        // Stop the camera session when the view disappears
-        if viewModel.session.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                viewModel.session.stopRunning()
-                DispatchQueue.main.async {
-                    viewModel.isSessionRunning = false
-                }
-            }
-        }
-        
-        // Disable device orientation notifications
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
     
     // Helper method to format shutter speed for display

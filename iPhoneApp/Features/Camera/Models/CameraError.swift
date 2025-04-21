@@ -12,6 +12,8 @@ enum CameraError: Error, Identifiable {
     case deviceUnavailable
     case invalidDeviceInput
     case custom(message: String)
+    case mediaServicesWereReset
+    case sessionRuntimeError(code: Int)
     
     var id: String { description }
     
@@ -39,6 +41,10 @@ enum CameraError: Error, Identifiable {
             return "Cannot add camera device input to session"
         case .custom(let message):
             return message
+        case .mediaServicesWereReset:
+            return "Media services were reset. Please try restarting the app."
+        case .sessionRuntimeError(let code):
+            return "An unexpected session runtime error occurred (Code: \(code))."
         }
     }
 }

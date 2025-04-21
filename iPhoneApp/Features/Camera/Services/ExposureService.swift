@@ -103,32 +103,8 @@ class ExposureService: NSObject {
         
         // Observe white balance gains changes
         whiteBalanceGainsObservation = device.observe(\.deviceWhiteBalanceGains, options: [.new]) { [weak self] device, change in
-            print("[TEMP DEBUG] WB KVO Callback Entered!") 
-            guard let self = self, let newGains = change.newValue else { 
-                // If self is nil here, the ExposureService instance was deallocated
-                print("[TEMP DEBUG] WB KVO: self is nil, exiting callback.")
-                return 
-            }
-            // Always report WB changes if the delegate is available, regardless of mode?
-            // Let the ViewModel decide if it cares based on its own state.
-            // if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
-                 // Convert gains to temperature AND TINT
-                let tempAndTint = device.temperatureAndTintValues(for: newGains)
-                let temperature = tempAndTint.temperature
-                let tint = tempAndTint.tint // Get the tint value
-                logger.debug("[KVO] White balance gains changed, corresponding temperature: \(temperature), tint: \(tint)")
-
-                if self.delegate == nil {
-                    self.logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
-                } else {
-                    self.logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\(temperature), tint: \(tint)) (Synchronous Call)")
-                    // Call delegate directly - CAUTION: This is not on the main thread!
-                    // If the delegate method directly updates UI, this could cause issues.
-                    // For now, it updates @Published properties, which *should* be main-thread.
-                    // We'll revert this if needed, but let's test.
-                    self.delegate?.didUpdateWhiteBalance(temperature, tint: tint) // Pass both values
-                }
-            // }
+            // Use the dedicated handler function
+            self?.handleWhiteBalanceGainsChange(device: device, change: change)
         }
         
         // Observe exposure target offset for Shutter Priority
@@ -141,7 +117,9 @@ class ExposureService: NSObject {
         reportCurrentDeviceValues()
     }
     
-    private func removeDeviceObservers() {
+    // Remove KVO observers
+    // Make internal so CameraViewModel's deinit can call it
+    func removeDeviceObservers() {
         logger.info("Removing KVO observers. Stack trace: \(Thread.callStackSymbols.joined(separator: "\\n"))")
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
@@ -173,10 +151,15 @@ class ExposureService: NSObject {
                  self.delegate?.didUpdateShutterSpeed(device.exposureDuration)
                   logger.debug("Reporting current Shutter: \(CMTimeGetSeconds(device.exposureDuration))s in mode \(device.exposureMode.rawValue)")
              }
-             // Report White Balance
+             // Report White Balance (Using Safe Helper)
              if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
-                 let tempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
-                 self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass tint here too
+                 // Use the safe helper function
+                 if let tempAndTint = self.safeGetTemperatureAndTint(for: device.deviceWhiteBalanceGains) {
+                     self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass tint here too
+                     logger.debug("Reporting current WB Temp: \(tempAndTint.temperature), Tint: \(tempAndTint.tint)")
+                 } else {
+                     logger.warning("Could not report initial white balance - conversion failed or gains invalid.")
+                 }
              }
         }
     }
@@ -652,7 +635,7 @@ class ExposureService: NSObject {
             // logger.debug("SP Disable: Already inactive.")
             return
         }
-        guard let device = device else {
+        guard let _ = device else {
             logger.error("SP Disable: No device available.")
             return
         }
@@ -763,7 +746,7 @@ class ExposureService: NSObject {
     // MARK: - Recording Lock for Shutter Priority
 
     func lockShutterPriorityExposureForRecording() {
-        guard isShutterPriorityActive, let device = device, let currentTargetDuration = targetShutterDuration else {
+        guard isShutterPriorityActive, let _ = device, let currentTargetDuration = targetShutterDuration else {
             logger.warning("Attempted to lock SP exposure for recording, but SP is not active or device/duration is missing.")
             return
         }
@@ -810,4 +793,65 @@ class ExposureService: NSObject {
     }
 
     // MARK: - Manual Exposure Control (Refined)
+
+    // MARK: - Safe White Balance Conversion (NEW HELPER)
+
+    private func safeGetTemperatureAndTint(for gains: AVCaptureDevice.WhiteBalanceGains) -> AVCaptureDevice.WhiteBalanceTemperatureAndTintValues? {
+        guard let device = device else {
+            logger.warning("Cannot get temp/tint, device is nil.")
+            return nil
+        }
+
+        // Validate gains: Check for NaN, infinity, and non-positive values
+        guard gains.redGain.isFinite, gains.redGain > 0,
+              gains.greenGain.isFinite, gains.greenGain > 0,
+              gains.blueGain.isFinite, gains.blueGain > 0 else {
+            logger.warning("Invalid white balance gains detected: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain). Cannot convert.")
+            return nil
+        }
+
+        do {
+            // Attempt the conversion within a do-catch block
+            let tempAndTint = try device.temperatureAndTintValues(for: gains)
+            // Additional sanity check (optional but good practice)
+            guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
+                logger.warning("Conversion resulted in non-finite temp/tint: Temp=\\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
+                return nil
+            }
+            return tempAndTint
+        } catch {
+            // Log the specific error if conversion fails
+            logger.error("Error converting white balance gains to temperature/tint: \\(error.localizedDescription). Gains were: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain)")
+            return nil
+        }
+    }
+
+    // MARK: - KVO Handlers (Adjusted)
+
+    // Observe white balance gains changes
+    private func handleWhiteBalanceGainsChange(device: AVCaptureDevice, change: NSKeyValueObservedChange<AVCaptureDevice.WhiteBalanceGains>) {
+        print("[TEMP DEBUG] WB KVO Callback Entered!")
+        guard let newGains = change.newValue else {
+            print("[TEMP DEBUG] WB KVO: No new gains value, exiting callback.")
+            return
+        }
+
+        // Use the safe helper function
+        if let tempAndTint = safeGetTemperatureAndTint(for: newGains) {
+            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \\(tempAndTint.temperature), tint: \\(tempAndTint.tint)")
+
+            if delegate == nil {
+                logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
+            } else {
+                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\\(tempAndTint.temperature), tint: \\(tempAndTint.tint)) (Synchronous Call)")
+                // Ensure delegate update happens on the main thread
+                 DispatchQueue.main.async { [weak self] in
+                     self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass both values
+                 }
+            }
+        } else {
+            // Log that conversion failed or gains were invalid
+            logger.warning("[KVO Safe] Could not convert new white balance gains to temperature/tint or gains were invalid.")
+        }
+    }
 } 
