@@ -82,7 +82,8 @@ struct CameraView: View {
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
-                viewModel.startSession()
+                viewModel.owningView = nil // Reset owningView on appear
+                // updatePreviewOrientation() // Removed initial call, handled by state changes
             }
             .onDisappear {
                 viewModel.stopSession()
@@ -93,8 +94,8 @@ struct CameraView: View {
             }
             // REINSTATE: Restart session when app becomes active again
             .onReceive(appLifecycleObserver.didBecomeActivePublisher) { _ in
-                print("DEBUG: Received didBecomeActivePublisher event, calling viewModel.startSession()")
-                viewModel.startSession()
+                print("DEBUG: Received didBecomeActivePublisher event. (startSession call removed)")
+                // viewModel.startSession() // REMOVED: Redundant call, handled by scenePhase in App struct
             }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator

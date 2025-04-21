@@ -4,7 +4,7 @@ import UIKit
 import Foundation
 
 protocol CameraDeviceServiceDelegate: AnyObject {
-    func didUpdateCurrentLens(_ lens: CameraLens)
+    func didUpdateCurrentLens(_ lens: CameraLens, device: AVCaptureDevice)
     func didUpdateZoomFactor(_ factor: CGFloat)
     func didEncounterError(_ error: CameraError)
     var isExposureCurrentlyLocked: Bool { get }
@@ -268,7 +268,7 @@ class CameraDeviceService {
                     finalLens = lens
                 }
                 logger.debug("🔄 Lens switch: Notifying delegate about logical lens update: \(finalLens.rawValue)x, physical: \(lens.rawValue)x, final zoom: \(zoomFactor)")
-                self.delegate?.didUpdateCurrentLens(finalLens) // Notify with the logical lens
+                self.delegate?.didUpdateCurrentLens(finalLens, device: newDevice) // Notify with the logical lens and device
             }
             
             logger.info("✅ Successfully switched to \(lens.rawValue)× lens")
@@ -333,7 +333,7 @@ class CameraDeviceService {
                 self?.delegate?.didUpdateZoomFactor(factor)
                 // Notify that the logical lens is now 2x if the factor matches
                 if factor == CameraLens.x2.zoomFactor {
-                     self?.delegate?.didUpdateCurrentLens(.x2)
+                     self?.delegate?.didUpdateCurrentLens(.x2, device: device)
                      self?.logger.debug("📸 Digital zoom set, notifying delegate that logical lens is now .x2")
                 }
             }

@@ -77,6 +77,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
     *   Startup sequence implemented with `Task.sleep` for timing.
 *   **Exposure Service (`ExposureService`)**: Manages exposure modes (`continuousAutoExposure`, `custom`, `locked`), manual controls (ISO, Shutter, WB, Tint), and exposure lock. Implements Shutter Priority using KVO on `exposureTargetOffset` to automatically adjust ISO while maintaining a fixed shutter speed. Provides methods to temporarily lock SP adjustments during recording (`lock/unlockShutterPriorityExposureForRecording`). Uses KVO to report real-time `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, `exposureTargetOffset` changes to the delegate. Handles auto-lock during recording based on `SettingsModel.isExposureLockEnabledDuringRecording`, coordinating with `CameraViewModel` which handles the specific lock calls (standard AE vs. SP custom).
+    *   **Optimization:** The `setDevice` method now checks if the provided device instance is the same as the current one and avoids unnecessary KVO observer removal/re-addition if the device hasn't changed, preventing potential instability during app resume.
 *   **Recording Service (`RecordingService`)**: Handles video/audio recording using `AVAssetWriter`. Configures inputs/outputs based on selected codec/resolution/log state. Applies orientation transform to video track. Optionally bakes in LUTs using `MetalFrameProcessor`. Saves final file to Photos library.
 *   **Settings**: 
     *   `SettingsModel` uses `UserDefaults` for persistence and `NotificationCenter` for change broadcasting.
@@ -126,5 +127,6 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
+*   **Optimized Observer Handling**: `ExposureService.setDevice` avoids redundant KVO observer reconfiguration when the device instance remains unchanged (e.g., during app resume).
 
 *(This specification includes deeper implementation details.)*

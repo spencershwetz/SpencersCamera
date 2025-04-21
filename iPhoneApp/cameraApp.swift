@@ -86,6 +86,8 @@ struct cameraApp: App {
             case .active:
                 print("iOS App Phase: Active")
                 cameraViewModel.setAppActive(true)
+                // Call startSession directly as it's synchronous again
+                cameraViewModel.startSession()
             case .inactive:
                 print("iOS App Phase: Inactive")
                 cameraViewModel.setAppActive(false)

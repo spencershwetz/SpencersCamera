@@ -51,15 +51,41 @@ class ExposureService: NSObject {
     
     func setDevice(_ device: AVCaptureDevice?) {
         logger.info("ExposureService setDevice called with: \(device?.localizedName ?? "nil")")
-        removeDeviceObservers()
-        self.device = device
-        if let device = device {
-            logger.info("ExposureService setupDeviceObservers called for device: \(device.localizedName)")
-            setupDeviceObservers(for: device)
-            self.isAutoExposureEnabled = (device.exposureMode == .continuousAutoExposure)
+
+        // --- START REVISED MODIFICATION ---
+        // Check if the new device is the same instance as the current one.
+        if let currentDevice = self.device, currentDevice === device {
+            // If the device is the same, check if observers are already set up.
+            // We use isoObservation as a proxy for all observers being set.
+            if isoObservation != nil {
+                // Observers exist and device is the same, skip reconfiguration.
+                logger.info("ExposureService setDevice: Device instance (\(device?.localizedName ?? "nil")) is the same and observers are valid. Skipping reconfiguration.")
+                return
+            } else {
+                // Device is the same, but observers are nil (likely removed by interruption).
+                // Force reconfiguration.
+                logger.info("ExposureService setDevice: Device instance (\(device?.localizedName ?? "nil")) is the same BUT observers are nil. Forcing observer setup.")
+                // Proceed to the reconfiguration logic below.
+            }
+        }
+        // --- END REVISED MODIFICATION ---
+
+        // If the device instance is different, or was nil, or if it was the same but observers were nil,
+        // proceed with full reconfiguration.
+        logger.info("ExposureService setDevice: Reconfiguring observers (Device changed, was nil, or observers needed reset).")
+        removeDeviceObservers() // Clean up any potential lingering observers
+        self.device = device // Store the new device (or nil)
+        
+        // Only setup observers if the new device is not nil
+        if let validDevice = device {
+            logger.info("ExposureService setupDeviceObservers called for device: \(validDevice.localizedName)")
+            setupDeviceObservers(for: validDevice)
+            // Update auto-exposure state based on the new device's mode
+            self.isAutoExposureEnabled = (validDevice.exposureMode == .continuousAutoExposure)
             logger.info("Initial auto exposure state set to: \(self.isAutoExposureEnabled)")
         } else {
-             logger.info("ExposureService setDevice called with nil, observers removed.")
+            // New device is nil, observers are already removed.
+            logger.info("ExposureService setDevice called with nil. Observers removed, device set to nil.")
         }
     }
     
@@ -77,12 +103,12 @@ class ExposureService: NSObject {
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
             // Log the KVO update regardless of mode for debugging SP
-            // self.logger.debug("[KVO ISO] Observed ISO change to: \(newISO) (Current Mode: \(device.exposureMode.rawValue))" ) // REMOVED
+            // self.logger.debug("[KVO ISO] Observed ISO change to: \\(newISO) (Current Mode: \\(device.exposureMode.rawValue))" ) // REMOVED
             // Report if in auto, locked, OR custom mode (since ISO can auto-adjust in custom mode too)
             if device.exposureMode == .continuousAutoExposure || 
                device.exposureMode == .locked || 
                device.exposureMode == .custom {
-                // logger.debug("[KVO] ISO changed to: \(newISO) while mode is \(device.exposureMode.rawValue)")
+                // logger.debug("[KVO] ISO changed to: \\(newISO) while mode is \\(device.exposureMode.rawValue)")
                 // Update delegate on the main thread as it might trigger UI updates
                 DispatchQueue.main.async {
                     self.delegate?.didUpdateISO(newISO)
@@ -94,7 +120,7 @@ class ExposureService: NSObject {
         exposureDurationObservation = device.observe(\.exposureDuration, options: [.new]) { [weak self] device, change in
             guard let self = self, let newDuration = change.newValue else { return }
             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
-                // logger.debug("[KVO] Exposure duration changed to: \(CMTimeGetSeconds(newDuration))")
+                // logger.debug("[KVO] Exposure duration changed to: \\(CMTimeGetSeconds(newDuration))")
                 DispatchQueue.main.async {
                     self.delegate?.didUpdateShutterSpeed(newDuration)
                 }
@@ -120,7 +146,7 @@ class ExposureService: NSObject {
     // Remove KVO observers
     // Make internal so CameraViewModel's deinit can call it
     func removeDeviceObservers() {
-        logger.info("Removing KVO observers. Stack trace: \(Thread.callStackSymbols.joined(separator: "\\n"))")
+        logger.info("Removing KVO observers. Stack trace: \(Thread.callStackSymbols.joined(separator: "\n"))")
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
         whiteBalanceGainsObservation?.invalidate()
@@ -245,7 +271,7 @@ class ExposureService: NSObject {
             
             // Delegate call moved inside completion handler
             // delegate?.didUpdateISO(clampedISO)
-            // logger.debug("Successfully set ISO to \(clampedISO)")
+            // logger.debug("Successfully set ISO to \\(clampedISO)")
         } catch {
             logger.error("ISO update error: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)
@@ -285,7 +311,7 @@ class ExposureService: NSObject {
                     // KVO should handle reporting the automatically adjusted ISO.
                     DispatchQueue.main.async {
                         self?.delegate?.didUpdateShutterSpeed(clampedSpeed)
-                        self?.logger.debug("Set shutter speed to \\(CMTimeGetSeconds(clampedSpeed))s via setExposureModeCustom (ISO should adjust automatically)")
+                        self?.logger.debug("Set shutter speed to \(CMTimeGetSeconds(clampedSpeed))s via setExposureModeCustom (ISO should adjust automatically)")
                     }
                 }
             } else {
@@ -360,7 +386,7 @@ class ExposureService: NSObject {
                     //     self.delegate?.didUpdateShutterSpeed(clampedDuration)
                     //     self.delegate?.didUpdateISO(clampedISO)
                     // }
-                     self?.logger.info("[setCustomExposure Completion] Successfully set custom exposure: Duration \\(CMTimeGetSeconds(clampedDuration))s, ISO \\(clampedISO)")
+                     self?.logger.info("[setCustomExposure Completion] Successfully set custom exposure: Duration \(CMTimeGetSeconds(clampedDuration))s, ISO \(clampedISO)")
                 }
             } else {
                  logger.warning("Custom exposure mode not supported.")
@@ -558,7 +584,7 @@ class ExposureService: NSObject {
         
         // WB temperature is typically relevant in auto or locked modes
         guard device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked else {
-            // logger.debug("Cannot get current WB temperature: WB mode is not auto or locked (\(device.whiteBalanceMode.rawValue))")
+            // logger.debug("Cannot get current WB temperature: WB mode is not auto or locked (\\(device.whiteBalanceMode.rawValue))")
             // Return nil or perhaps a default? Returning nil seems clearer.
             return nil
         }
@@ -566,12 +592,12 @@ class ExposureService: NSObject {
         // Ensure gains are valid before converting
         let gains = device.deviceWhiteBalanceGains
         guard gains.redGain > 0, gains.greenGain > 0, gains.blueGain > 0 else {
-            logger.warning("Cannot get current WB temperature: Invalid device gains (\(String(describing: gains))")
+            logger.warning("Cannot get current WB temperature: Invalid device gains (\(String(describing: gains)))")
             return nil
         }
 
         let tempAndTint = device.temperatureAndTintValues(for: gains)
-        // logger.debug("Queried current WB temp: \(tempAndTint.temperature)K")
+        // logger.debug("Queried current WB temp: \\(tempAndTint.temperature)K")
         return tempAndTint.temperature
     }
 
@@ -697,7 +723,7 @@ class ExposureService: NSObject {
 
         // Only adjust if EV offset is significant
         guard abs(newOffset) > evOffsetThreshold else {
-            // logger.debug("SP Adjust: KVO ignored (EV offset \(newOffset) within threshold \(evOffsetThreshold))")
+            // logger.debug("SP Adjust: KVO ignored (EV offset \\(newOffset) within threshold \\(evOffsetThreshold))")
             return
         }
 
@@ -719,7 +745,7 @@ class ExposureService: NSObject {
             // Only adjust if the change is significant enough
             let percentageChange = abs(idealISO - currentISO) / currentISO
             guard percentageChange > self.isoPercentageThreshold else {
-                // self.logger.debug("SP Adjust: KVO ignored (ISO change \(percentageChange * 100)% within threshold \(self.isoPercentageThreshold * 100)%)")
+                // self.logger.debug("SP Adjust: KVO ignored (ISO change \\(percentageChange * 100)% within threshold \\(self.isoPercentageThreshold * 100)%)")
                 return
             }
 
@@ -759,14 +785,14 @@ class ExposureService: NSObject {
             
             do {
                 try currentDevice.lockForConfiguration()
-                self.logger.info("[SP Lock] Applying lock: Duration \\(currentTargetDuration.seconds)s, ISO \\(currentISO)")
+                self.logger.info("[SP Lock] Applying lock: Duration \(currentTargetDuration.seconds)s, ISO \(currentISO)")
                 currentDevice.setExposureModeCustom(duration: currentTargetDuration, iso: currentISO) { _ in 
                     // Maybe report locked values?
                 }
                 self.isTemporarilyLockedForRecording = true // Set lock flag AFTER successful configuration
                 currentDevice.unlockForConfiguration()
             } catch {
-                self.logger.error("[SP Lock] Error locking exposure for recording: \\(error.localizedDescription)")
+                self.logger.error("[SP Lock] Error locking exposure for recording: \(error.localizedDescription)")
                 // Attempt to unlock configuration if lock failed during change
                 currentDevice.unlockForConfiguration()
                 // Should we revert isTemporarilyLockedForRecording?
@@ -806,24 +832,37 @@ class ExposureService: NSObject {
         guard gains.redGain.isFinite, gains.redGain > 0,
               gains.greenGain.isFinite, gains.greenGain > 0,
               gains.blueGain.isFinite, gains.blueGain > 0 else {
-            logger.warning("Invalid white balance gains detected: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain). Cannot convert.")
+            logger.warning("Invalid white balance gains detected: R:\(gains.redGain), G:\(gains.greenGain), B:\(gains.blueGain). Cannot convert.")
             return nil
         }
 
+        // REMOVED do-catch block as temperatureAndTintValues(for:) does not throw
+        // It might crash if gains are invalid, but we check for that above.
+        let tempAndTint = device.temperatureAndTintValues(for: gains)
+        // Additional sanity check (optional but good practice)
+        guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
+            logger.warning("Conversion resulted in non-finite temp/tint: Temp=\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
+            return nil
+        }
+        return tempAndTint
+
+        /*
+        // Original do-catch block (removed)
         do {
             // Attempt the conversion within a do-catch block
             let tempAndTint = try device.temperatureAndTintValues(for: gains)
             // Additional sanity check (optional but good practice)
             guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
-                logger.warning("Conversion resulted in non-finite temp/tint: Temp=\\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
+                logger.warning("Conversion resulted in non-finite temp/tint: Temp=\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
                 return nil
             }
             return tempAndTint
         } catch {
             // Log the specific error if conversion fails
-            logger.error("Error converting white balance gains to temperature/tint: \\(error.localizedDescription). Gains were: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain)")
+            logger.error("Error converting white balance gains to temperature/tint: \(error.localizedDescription). Gains were: R:\(gains.redGain), G:\(gains.greenGain), B:\(gains.blueGain)")
             return nil
         }
+        */
     }
 
     // MARK: - KVO Handlers (Adjusted)
@@ -838,12 +877,12 @@ class ExposureService: NSObject {
 
         // Use the safe helper function
         if let tempAndTint = safeGetTemperatureAndTint(for: newGains) {
-            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \\(tempAndTint.temperature), tint: \\(tempAndTint.tint)")
+            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \(tempAndTint.temperature), tint: \(tempAndTint.tint)")
 
             if delegate == nil {
                 logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
             } else {
-                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\\(tempAndTint.temperature), tint: \\(tempAndTint.tint)) (Synchronous Call)")
+                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\(tempAndTint.temperature), tint: \(tempAndTint.tint)) (Synchronous Call)")
                 // Ensure delegate update happens on the main thread
                  DispatchQueue.main.async { [weak self] in
                      self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass both values

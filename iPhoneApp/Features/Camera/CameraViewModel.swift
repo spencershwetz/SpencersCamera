@@ -944,8 +944,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         wcLogger.info("iOS App Active State changed: \(active)")
         // Start or stop session based on active state
         if active {
-            logger.info("App became active. Session start will be handled by AppLifecycleObserver.") // Modified log
-            // startSession() // REMOVED: Let AppLifecycleObserver handle this
+            logger.info("App became active.") // Simplified log
+            // startSession() // REMOVED: Let AppLifecycleObserver handle this -> Now handled by App struct
         } else {
             logger.info("App became inactive, requesting session stop.")
             stopSession()
@@ -1162,41 +1162,74 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     // MARK: - Session Control
     /// Start the AVCaptureSession on the dedicated queue and update state
-    func startSession() {
-        sessionQueue.async { [weak self] in
+    func startSession() { // <-- Make synchronous again
+        // Run session checks and start on the sessionQueue
+        sessionQueue.async { [weak self] in // <-- Keep original async dispatch to sessionQueue
             guard let self = self else { return }
+
+            // Check if the session is running *before* attempting to start
             if !self.session.isRunning {
-                self.logger.info("[SessionControl] Attempting to start session...") // Enhanced log
-                self.session.startRunning()
-                DispatchQueue.main.async {
-                    // Verify session is ACTUALLY running after startRunning call
-                    let sessionSuccessfullyStarted = self.session.isRunning
-                    self.isSessionRunning = sessionSuccessfullyStarted
-                    self.status = sessionSuccessfullyStarted ? .running : .failed
+                self.logger.info("[SessionControl] Attempting to start session after checking it's not running.")
+
+                // Schedule the startRunning call after a delay
+                let delay = DispatchTimeInterval.milliseconds(100)
+                self.logger.info("[SessionControl] Scheduling startRunning() call after 100ms delay...")
+
+                self.sessionQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self = self else { return }
+
+                    // Check again *right before* starting, in case state changed during delay
+                    guard !self.session.isRunning else {
+                        self.logger.warning("[SessionControl] Session became running during delay. Aborting startRunning() call.")
+                        // Ensure observers are handled if it became running
+                        DispatchQueue.main.async { // Ensure this is on main thread for observer setup
+                            if let currentDevice = self.device {
+                                 self.logger.info("[SessionControl] Session already running (checked after delay). Ensuring ExposureService observers are attached for device: \(currentDevice.localizedName)")
+                                 self.exposureService.setDevice(currentDevice)
+                             } else {
+                                 self.logger.warning("[SessionControl] Session already running (checked after delay) but device is nil. Cannot ensure ExposureService observers.")
+                             }
+                         }
+                        return // Don't call startRunning
+                    }
+
+                    // Call startRunning
+                    self.logger.info("[SessionControl] Delay finished. Calling startRunning() inside asyncAfter block.")
+                    self.session.startRunning()
                     
-                    if sessionSuccessfullyStarted {
-                        self.logger.info("[SessionControl] Session started successfully: \(self.isSessionRunning)") // Enhanced log
-                        // Re-attach KVO observers AFTER session is confirmed running
-                        if let currentDevice = self.device {
-                            self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")
-                            self.exposureService.setDevice(currentDevice) // This removes old & adds new observers
+                    // Verify on main queue
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        // Verify session is ACTUALLY running after startRunning call
+                        let sessionSuccessfullyStarted = self.session.isRunning
+                        self.isSessionRunning = sessionSuccessfullyStarted
+                        self.status = sessionSuccessfullyStarted ? .running : .failed
+                        
+                        if sessionSuccessfullyStarted {
+                            self.logger.info("[SessionControl] Session started successfully (verified on main): \(self.isSessionRunning)")
+                            // Re-attach KVO observers AFTER session is confirmed running
+                            if let currentDevice = self.device {
+                                self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")
+                                self.exposureService.setDevice(currentDevice) // This removes old & adds new observers
+                            } else {
+                                self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
+                            }
                         } else {
-                            self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
+                            self.error = CameraError.sessionFailedToStart
+                            self.logger.error("[SessionControl] Session failed to start (isSessionRunning is false after startRunning call verified on main). Setting status to failed.")
                         }
-                    } else {
-                        self.error = CameraError.sessionFailedToStart
-                        self.logger.error("[SessionControl] Session failed to start (isSessionRunning is false after startRunning call). Setting status to failed.") // Enhanced log
                     }
                 }
             } else {
-                self.logger.info("[SessionControl] Start session requested, but session is already running.") // Enhanced log
+                self.logger.info("[SessionControl] Start session requested, but session is already running (checked initially).")
                 // If already running, ensure observers are attached (could happen if startSession is called redundantly)
-                 DispatchQueue.main.async { // Ensure this is on main thread for observer setup
+                 DispatchQueue.main.async { [weak self] in // Ensure this is on main thread for observer setup
+                    guard let self = self else { return }
                     if let currentDevice = self.device {
-                         self.logger.info("[SessionControl] Session already running. Ensuring ExposureService observers are attached for device: \(currentDevice.localizedName)")
+                         self.logger.info("[SessionControl] Session already running (initial check). Ensuring ExposureService observers are attached for device: \(currentDevice.localizedName)")
                          self.exposureService.setDevice(currentDevice)
                      } else {
-                         self.logger.warning("[SessionControl] Session already running but device is nil. Cannot ensure ExposureService observers.")
+                         self.logger.warning("[SessionControl] Session already running (initial check) but device is nil. Cannot ensure ExposureService observers.")
                      }
                  }
             }
@@ -1422,13 +1455,14 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
         return self.isExposureLocked
     }
     
-    func didUpdateCurrentLens(_ lens: CameraLens) {
-        logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
+    func didUpdateCurrentLens(_ lens: CameraLens, device: AVCaptureDevice) {
+        logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x and device \(device.localizedName)")
         // Update properties on the main thread
         DispatchQueue.main.async {
+            self.device = device
             self.currentLens = lens
             self.lastLensSwitchTimestamp = Date() // Trigger preview update
-            self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
+            self.logger.debug("🔄 Delegate: Updated self.device to \(device.localizedName), currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
             
             // REMOVED: Re-applying exposure lock logic (now handled by CameraDeviceService)
             /*
