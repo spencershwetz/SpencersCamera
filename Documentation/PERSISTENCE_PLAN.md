@@ -18,21 +18,27 @@ This document outlines the plan to make *all* user-configurable settings persist
 
 ## 1. Modify `iPhoneApp/Features/Settings/SettingsModel.swift`
 
-*   **Ensure `@AppStorage` Properties for All Settings:**
-    *   Verify or add `@AppStorage` wrappers for all settings listed above.
-    *   Define unique `UserDefaults` keys and appropriate default values for each.
-    *   Example for new ones:
+*   **Refactor Existing and Add New Settings to use `@AppStorage`:**
+    *   Convert all existing `@Published` properties currently using `didSet` and manual `UserDefaults` logic (like `isAppleLogEnabled`, `flashlightIntensity`, `isBakeInLUTEnabled`, `isExposureLockEnabledDuringRecording`, `isWhiteBalanceLockEnabled`, `functionButton1Ability`, `functionButton2Ability`) to use the `@AppStorage` property wrapper.
+    *   Add new `@AppStorage` properties for settings not yet persisted: `selectedResolutionRaw`, `selectedCodecRaw`, `selectedFrameRate`, `isDebugEnabled`, `showGrid` (if not already persisted), `selectedLUTName` (if not already persisted).
+    *   Define unique `UserDefaults` keys and appropriate default values within the `@AppStorage` declaration for *all* properties.
+    *   Example structure:
         ```swift
+        // Refactored example:
+        @AppStorage("isAppleLogEnabled") var isAppleLogEnabled: Bool = false
+        // New example:
         @AppStorage("selectedResolutionRaw") var selectedResolutionRaw: String = CameraViewModel.Resolution.defaultRes.rawValue
         @AppStorage("selectedCodecRaw") var selectedCodecRaw: String = CameraViewModel.VideoCodec.defaultCodec.rawValue
         @AppStorage("selectedFrameRate") var selectedFrameRate: Double = 30.0
-        @AppStorage("isAppleLogEnabled") var isAppleLogEnabled: Bool = false // Example default
         @AppStorage("isDebugEnabled") var isDebugEnabled: Bool = false
-        // ... verify existing ones like selectedLUTName, isBakeInLUTEnabled, etc. ...
+        // ... ensure all settings from the list above are included ...
         ```
-*   **Remove Manual `UserDefaults` Logic:** Delete any `didSet` observers or `init()` logic that manually saves/loads these values using `UserDefaults.standard`, as `@AppStorage` handles this automatically.
+*   **Remove Manual `UserDefaults` Logic:**
+    *   Delete all `didSet` observers that were previously used to save values to `UserDefaults.standard`.
+    *   Remove the custom `init()` method entirely, or at least remove all logic within it related to reading from or writing default values to `UserDefaults.standard`. `@AppStorage` handles initialization and defaults automatically.
+    *   Remove the private `Keys` enum if it's no longer used elsewhere.
 *   **Add/Verify Computed Properties:**
-    *   Provide computed properties for cleaner access to enum types based on the raw string values stored by `@AppStorage`. Ensure they handle potential `nil` results from `rawValue` initializers gracefully.
+    *   Keep or add computed properties for cleaner access to enum types (like `Resolution`, `VideoCodec`, `FunctionButtonAbility`) based on the raw string/int values stored by `@AppStorage`. Ensure they handle potential `nil` results from `rawValue` initializers gracefully by returning a sensible default.
         ```swift
         var selectedResolution: CameraViewModel.Resolution {
             CameraViewModel.Resolution(rawValue: selectedResolutionRaw) ?? .defaultRes // Use actual default
