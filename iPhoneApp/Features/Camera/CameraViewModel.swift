@@ -91,76 +91,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
     }
     
-    @Published var isAppleLogEnabled = true { // Set Apple Log enabled by default
-        didSet {
-            print("\n=== Apple Log Toggle ===")
-            print("🔄 Status: \(status)")
-            print("📹 Capture Mode: \(captureMode)")
-            print("✅ Attempting to set Apple Log to: \(isAppleLogEnabled)")
-            
-            guard status == .running, captureMode == .video else {
-                print("❌ Cannot configure Apple Log - Status or mode incorrect")
-                print("Required: status == .running (is: \(status))")
-                print("Required: captureMode == .video (is: \(captureMode))")
-                return
-            }
-            
-            // Capture necessary values before the Task
-            let logEnabled = self.isAppleLogEnabled
-            let currentLensVal = self.currentLens.rawValue
-            let formatService = self.videoFormatService // Assume services are Sendable or actors
-            let deviceService = self.cameraDeviceService // Assume services are Sendable or actors
-            let logger = self.logger // Logger is Sendable
-
-            Task {
-                logger.info("🚀 Starting Task to configure Apple Log to \(logEnabled) for lens: \(currentLensVal)x")
-                do {
-                    // Update the service state first
-                    formatService?.setAppleLogEnabled(logEnabled) // Use captured value
-                    
-                    // Asynchronously configure the format
-                    if logEnabled {
-                        logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
-                        guard let formatService = formatService else { throw CameraError.setupFailed }
-                        try await formatService.configureAppleLog() // Use captured service
-                        logger.info("✅ Successfully completed configureAppleLog() device preparation.")
-                    } else {
-                        logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
-                        guard let formatService = formatService else { throw CameraError.setupFailed }
-                        try await formatService.resetAppleLog() // Use captured service
-                        logger.info("✅ Successfully completed resetAppleLog() device preparation.")
-                    }
-                    
-                    // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
-                    logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
-                    guard let deviceService = deviceService else { throw CameraError.setupFailed }
-                    try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
-                    logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
-
-                    logger.info("🏁 Finished Task for Apple Log configuration (enabled: \(logEnabled)) successfully.")
-                } catch let error as CameraError {
-                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
-                    // Update error on main thread
-                    Task { @MainActor in
-                        // *** ADDED: Revert state on failure ***
-                        self.isAppleLogEnabled = !logEnabled // Revert the toggle
-                        self.error = error
-                    }
-                } catch {
-                    logger.error("❌ Task failed during Apple Log configuration/reconfiguration with unknown error: \(error.localizedDescription)")
-                    let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
-                    // Update error on main thread
-                    Task { @MainActor in
-                        // *** ADDED: Revert state on failure ***
-                        self.isAppleLogEnabled = !logEnabled // Revert the toggle
-                        self.error = wrappedError
-                    }
-                }
-            }
-            print("=== End Apple Log Toggle ===\n")
-        }
-    }
-    
     @Published private(set) var isAppleLogSupported = false
     
     let session = AVCaptureSession()
@@ -184,11 +114,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         device?.activeFormat.maxISO ?? 1600
     }
     
-    @Published var selectedFrameRate: Double = 30.0 {
-        // Add didSet observer to re-apply shutter priority if active
-        didSet {
+    var selectedFrameRate: Double {
+        get { settingsModel.selectedFrameRate }
+        set {
+            settingsModel.selectedFrameRate = newValue
+            objectWillChange.send() // Notify SwiftUI about the change
             if isShutterPriorityEnabled {
-                logger.info("Frame rate changed to \(self.selectedFrameRate) while Shutter Priority is active. Re-applying 180° shutter.")
+                logger.info("Frame rate changed to \(newValue) while Shutter Priority is active. Re-applying 180° shutter.")
                 updateShutterAngle(180.0)
             }
         }
@@ -362,6 +294,57 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @Published var isSessionInterrupted: Bool = false
     // NEW: Track if session start is in progress to prevent interference
     @Published var isStartingSession: Bool = false
+    
+    // MARK: - Dependencies
+    private let settingsModel = SettingsModel()
+    
+    var isAppleLogEnabled: Bool {
+        get { settingsModel.isAppleLogEnabled }
+        set {
+            guard status == .running, captureMode == .video else {
+                logger.warning("Cannot configure Apple Log - Status or mode incorrect")
+                return
+            }
+            
+            // Capture necessary values before the Task
+            let logEnabled = newValue
+            let currentLensVal = self.currentLens.rawValue
+            let formatService = self.videoFormatService
+            let deviceService = self.cameraDeviceService
+            let logger = self.logger
+
+            Task {
+                logger.info("Starting Task to configure Apple Log to \(logEnabled) for lens: \(currentLensVal)x")
+                do {
+                    formatService?.setAppleLogEnabled(logEnabled)
+                    
+                    if logEnabled {
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.configureAppleLog()
+                    } else {
+                        guard let formatService = formatService else { throw CameraError.setupFailed }
+                        try await formatService.resetAppleLog()
+                    }
+                    
+                    guard let deviceService = deviceService else { throw CameraError.setupFailed }
+                    try await deviceService.reconfigureSessionForCurrentDevice()
+                    
+                    logger.info("Finished Task for Apple Log configuration successfully.")
+                    
+                    // Update the settings model on success
+                    await MainActor.run {
+                        settingsModel.isAppleLogEnabled = logEnabled
+                        objectWillChange.send() // Notify SwiftUI about the change
+                    }
+                } catch {
+                    logger.error("Task failed during Apple Log configuration: \(error.localizedDescription)")
+                    Task { @MainActor in
+                        self.error = error as? CameraError ?? CameraError.configurationFailed(message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
     
     // MARK: - Session Lifecycle Management (NEW)
 
@@ -1262,13 +1245,36 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.isSessionInterrupted = false
+            
+            // Store current Apple Log state before restart
+            let wasAppleLogEnabled = self.isAppleLogEnabled
+            
             // Attempt to restart the session only if the app is currently active
             if self.isAppCurrentlyActive {
-                self.logger.info("App is active, scheduling session restart after short delay.")
-                // ADD Delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    self?.logger.info("Executing delayed session restart.")
-                    self?.startSession() // Try starting the session again after delay
+                self.logger.info("App is active, scheduling session restart after interruption...")
+                
+                // Add delay to allow camera system to stabilize
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
+                    
+                    // First reset Apple Log to ensure clean state
+                    if self.isAppleLogEnabled {
+                        self.logger.info("Temporarily disabling Apple Log for clean restart")
+                        self.isAppleLogEnabled = false
+                    }
+                    
+                    // Start session
+                    self.startSession()
+                    
+                    // Re-enable Apple Log if it was previously enabled
+                    if wasAppleLogEnabled {
+                        // Add slight delay to ensure session is fully running
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                            guard let self = self else { return }
+                            self.logger.info("Restoring Apple Log state after interruption")
+                            self.isAppleLogEnabled = true
+                        }
+                    }
                 }
             } else {
                 self.logger.info("App is not active, deferring session restart until app becomes active.")
@@ -1320,24 +1326,24 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func rebootCamera() {
         logger.info("RebootCamera: Attempting camera system reboot...")
         
-        // Ensure we stop first, even if state seems inconsistent
+        // Store current settings before reboot
+        let wasAppleLogEnabled = self.isAppleLogEnabled
+        
+        // Ensure we stop first
         stopSession()
         
         // Use asyncAfter on the main queue for the delay and subsequent start
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in // Slightly longer delay for reboot
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self = self else { return }
             
-            self.logger.info("RebootCamera: Delay finished, clearing error and attempting session start.")
+            self.logger.info("RebootCamera: Delay finished, clearing error and attempting restart.")
             
-            // *** ADDED: Reset Apple Log state before reboot attempt ***
-            if self.isAppleLogEnabled {
-                self.logger.info("RebootCamera: Resetting isAppleLogEnabled to false before restart.")
-                // Directly set the property without triggering the full configuration logic
-                self.isAppleLogEnabled = false 
-                // Also update the service state directly if needed
-                self.videoFormatService?.setAppleLogEnabled(false)
+            // Reset Apple Log state temporarily
+            if wasAppleLogEnabled {
+                self.logger.info("RebootCamera: Temporarily disabling Apple Log for clean restart")
+                self.isAppleLogEnabled = false
             }
-
+            
             // Clear the error that triggered the reboot
             if self.error == .cameraSystemError {
                 self.error = nil
@@ -1347,6 +1353,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             
             // Attempt to start the session
             self.startSession()
+            
+            // Restore Apple Log state if needed
+            if wasAppleLogEnabled {
+                // Add delay to ensure session is stable
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self else { return }
+                    self.logger.info("RebootCamera: Restoring Apple Log state")
+                    self.isAppleLogEnabled = true
+                }
+            }
         }
     }
 }

@@ -16,14 +16,6 @@ extension Notification.Name {
 
 class SettingsModel: ObservableObject {
     // MARK: - Existing Settings
-    @Published var isAppleLogEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isAppleLogEnabled, forKey: Keys.isAppleLogEnabled)
-            NotificationCenter.default.post(name: .appleLogSettingChanged, object: nil)
-            print("Apple Log Enabled: \(isAppleLogEnabled)")
-        }
-    }
-    
     @Published var isFlashlightEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isFlashlightEnabled, forKey: Keys.isFlashlightEnabled)
@@ -91,10 +83,25 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    // MARK: - Persistent Settings
+    @AppStorage(Keys.selectedResolutionRaw) var selectedResolutionRaw: String = "3840x2160"
+    @AppStorage(Keys.selectedCodecRaw) var selectedCodecRaw: String = "hevc"
+    @AppStorage(Keys.selectedFrameRate) var selectedFrameRate: Double = 30.0
+    @AppStorage(Keys.isDebugEnabled) var isDebugEnabled: Bool = false
+    @AppStorage(Keys.showGrid) var showGrid: Bool = false
+    @AppStorage(Keys.selectedLUTURLString) var selectedLUTURLString: String?
+    
+    @Published var isAppleLogEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isAppleLogEnabled, forKey: Keys.isAppleLogEnabled)
+            NotificationCenter.default.post(name: .appleLogSettingChanged, object: nil)
+            print("Apple Log Enabled: \(isAppleLogEnabled)")
+        }
+    }
+    
     // MARK: - Initialization
     init() {
         // 1. Read all initial values from UserDefaults
-        let initialAppleLogEnabled = UserDefaults.standard.bool(forKey: Keys.isAppleLogEnabled)
         let initialFlashlightEnabled = UserDefaults.standard.bool(forKey: Keys.isFlashlightEnabled)
         let initialFlashlightIntensity = UserDefaults.standard.float(forKey: Keys.flashlightIntensity)
         let bakeInLUTValue = UserDefaults.standard.object(forKey: Keys.isBakeInLUTEnabled)
@@ -124,7 +131,6 @@ class SettingsModel: ObservableObject {
         let finalFn2Ability = FunctionButtonAbility(rawValue: rawFn2Ability ?? "") ?? .none
 
         // 3. Initialize all @Published properties
-        self.isAppleLogEnabled = initialAppleLogEnabled
         self.isFlashlightEnabled = initialFlashlightEnabled
         self.flashlightIntensity = finalFlashlightIntensity
         self.isBakeInLUTEnabled = finalBakeInLUTEnabled
@@ -132,6 +138,7 @@ class SettingsModel: ObservableObject {
         self.functionButton2Ability = finalFn2Ability
         self.isWhiteBalanceLockEnabled = initialWhiteBalanceLockEnabled
         self.isExposureLockEnabledDuringRecording = initialExposureLockEnabledDuringRecording
+        self.isAppleLogEnabled = UserDefaults.standard.bool(forKey: Keys.isAppleLogEnabled)
 
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
@@ -149,7 +156,6 @@ class SettingsModel: ObservableObject {
         }
 
         print("SettingsModel initialized:")
-        print("- Apple Log: \(isAppleLogEnabled)")
         print("- Flashlight: \(isFlashlightEnabled)")
         print("- Flashlight Intensity: \(flashlightIntensity)")
         print("- Bake LUT: \(isBakeInLUTEnabled)")
@@ -166,7 +172,13 @@ class SettingsModel: ObservableObject {
         static let isBakeInLUTEnabled = "isBakeInLUTEnabled"
         static let functionButton1Ability = "functionButton1Ability"
         static let functionButton2Ability = "functionButton2Ability"
-        static let isWhiteBalanceLockEnabled = "isWhiteBalanceLockSettingChanged"
+        static let isWhiteBalanceLockEnabled = "isWhiteBalanceLockEnabled"
         static let isExposureLockEnabledDuringRecording = "isExposureLockEnabledDuringRecording"
+        static let selectedResolutionRaw = "selectedResolutionRaw"
+        static let selectedCodecRaw = "selectedCodecRaw"
+        static let selectedFrameRate = "selectedFrameRate"
+        static let isDebugEnabled = "isDebugEnabled"
+        static let showGrid = "showGrid"
+        static let selectedLUTURLString = "selectedLUTURLString"
     }
 }

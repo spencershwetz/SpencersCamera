@@ -8,11 +8,18 @@ class LUTManager: ObservableObject {
     
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
     private let device: MTLDevice
+    private let settingsModel = SettingsModel()
     
     @Published var currentLUTFilter: CIFilter?
     @Published var currentLUTTexture: MTLTexture?
     private var dimension: Int = 0
-    @Published var selectedLUTURL: URL?
+    @Published var selectedLUTURL: URL? {
+        didSet {
+            // Save the URL string to UserDefaults via SettingsModel
+            settingsModel.selectedLUTURLString = self.selectedLUTURL?.absoluteString
+            logger.info("Saved selectedLUTURL to UserDefaults: \(self.selectedLUTURL?.absoluteString ?? "nil")")
+        }
+    }
     @Published var recentLUTs: [String: URL]? = [:]
     
     // Maximum number of recent LUTs to store
@@ -45,7 +52,23 @@ class LUTManager: ObservableObject {
         }
         self.device = metalDevice
         loadRecentLUTs()
-        setupIdentityLUTTexture()
+        
+        // Try to load the previously selected LUT
+        if let urlString = settingsModel.selectedLUTURLString,
+           let url = URL(string: urlString) {
+            logger.info("Attempting to load previously selected LUT from UserDefaults: \(url.path)")
+            importLUT(from: url) { success in
+                if success {
+                    self.logger.info("Successfully reloaded selected LUT from UserDefaults.")
+                } else {
+                    self.logger.warning("Failed to reload selected LUT from UserDefaults URL: \(urlString). Clearing.")
+                    self.settingsModel.selectedLUTURLString = nil
+                    self.setupIdentityLUTTexture()
+                }
+            }
+        } else {
+            setupIdentityLUTTexture()
+        }
     }
     
     // MARK: - Metal LUT Texture Setup
