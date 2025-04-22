@@ -1,6 +1,6 @@
 import Foundation
 
-enum CameraError: Error, Identifiable {
+enum CameraError: Error, Identifiable, Equatable {
     case cameraUnavailable
     case setupFailed
     case configurationFailed
@@ -14,6 +14,7 @@ enum CameraError: Error, Identifiable {
     case custom(message: String)
     case mediaServicesWereReset
     case sessionRuntimeError(Error)
+    case cameraSystemError
     
     var id: String { description }
     
@@ -45,6 +46,32 @@ enum CameraError: Error, Identifiable {
             return "Media services were reset. Please try again."
         case .sessionRuntimeError(let underlyingError):
             return "Session encountered a runtime error: \(underlyingError.localizedDescription)"
+        case .cameraSystemError:
+            return "Camera system unavailable. Please restart."
+        }
+    }
+    
+    static func == (lhs: CameraError, rhs: CameraError) -> Bool {
+        switch (lhs, rhs) {
+        case (.cameraUnavailable, .cameraUnavailable),
+             (.setupFailed, .setupFailed),
+             (.configurationFailed, .configurationFailed),
+             (.recordingFailed, .recordingFailed),
+             (.savingFailed, .savingFailed),
+             (.whiteBalanceError, .whiteBalanceError),
+             (.unauthorized, .unauthorized),
+             (.sessionFailedToStart, .sessionFailedToStart),
+             (.deviceUnavailable, .deviceUnavailable),
+             (.invalidDeviceInput, .invalidDeviceInput),
+             (.mediaServicesWereReset, .mediaServicesWereReset),
+             (.cameraSystemError, .cameraSystemError):
+            return true
+        case (.custom(let lhsMessage), .custom(let rhsMessage)):
+            return lhsMessage == rhsMessage
+        case (.sessionRuntimeError, .sessionRuntimeError):
+            return true
+        default:
+            return false
         }
     }
 }

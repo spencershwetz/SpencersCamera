@@ -35,57 +35,90 @@ struct CameraView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Background
-                Color.black
-                    .edgesIgnoringSafeArea(.all)
-                
-                // Camera preview with LUT
-                cameraPreview
-                    .edgesIgnoringSafeArea(.all)
-                
-                // Function buttons overlay
-                FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
-                    .zIndex(100)
-                    .allowsHitTesting(true)
-                
-                // Lens selection with zoom slider
-                VStack {
-                    Spacer()
-                        .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
+                // Main Content ZStack (existing structure)
+                ZStack {
+                    // Background
+                    Color.black
+                        .edgesIgnoringSafeArea(.all)
                     
-                    if !viewModel.availableLenses.isEmpty {
-                        ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
-                            .padding(.bottom, 20)
-                    }
+                    // Camera preview with LUT
+                    cameraPreview
+                        .edgesIgnoringSafeArea(.all)
                     
-                    Spacer()
-                }
-                .zIndex(99)
-                
-                // Bottom controls container
-                VStack {
-                    Spacer()
-                    ZStack {
-                        // Center record button
-                        recordButton
-                            .frame(width: 75, height: 75)
+                    // Function buttons overlay
+                    FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
+                        .zIndex(100)
+                        .allowsHitTesting(true)
+                        .disabled(viewModel.error == .cameraSystemError) // Disable if camera error
+                    
+                    // Lens selection with zoom slider
+                    VStack {
+                        Spacer()
+                            .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
                         
-                        // Position library button on the left and settings button on the right
-                        HStack {
-                            videoLibraryButton
-                                .frame(width: 60, height: 60)
-                                .disabled(viewModel.isRecording)
-                            Spacer()
-                            settingsButton
-                                .frame(width: 60, height: 60)
-                                .disabled(viewModel.isRecording)
+                        if !viewModel.availableLenses.isEmpty {
+                            ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                                .padding(.bottom, 20)
+                                .disabled(viewModel.error == .cameraSystemError) // Disable if camera error
                         }
-                        .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
+                        
+                        Spacer()
                     }
-                    .padding(.bottom, 30) // Approximately 1cm from USB-C port
+                    .zIndex(99)
+                    
+                    // Bottom controls container
+                    VStack {
+                        Spacer()
+                        ZStack {
+                            // Center record button
+                            recordButton
+                                .frame(width: 75, height: 75)
+                                .disabled(viewModel.error == .cameraSystemError || viewModel.isProcessingRecording) // Disable if camera error or processing
+                            
+                            // Position library button on the left and settings button on the right
+                            HStack {
+                                videoLibraryButton
+                                    .frame(width: 60, height: 60)
+                                    .disabled(viewModel.isRecording || viewModel.error == .cameraSystemError || viewModel.isProcessingRecording) // Disable if recording, error or processing
+                                Spacer()
+                                settingsButton
+                                    .frame(width: 60, height: 60)
+                                    .disabled(viewModel.isRecording || viewModel.error == .cameraSystemError || viewModel.isProcessingRecording) // Disable if recording, error or processing
+                            }
+                            .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
+                        }
+                        .padding(.bottom, 30) // Approximately 1cm from USB-C port
+                    }
+                    .ignoresSafeArea()
+                    .zIndex(101)
                 }
-                .ignoresSafeArea()
-                .zIndex(101)
+                // End Main Content ZStack
+                
+                // ---- ADDED: Error Overlay for Reboot ----
+                if viewModel.error == .cameraSystemError {
+                    VStack(spacing: 20) {
+                        Text("Camera System Error")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("The camera encountered an unrecoverable error. Please restart it.")
+                            .font(.body)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Button("Restart Camera") {
+                            viewModel.rebootCamera()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
+                    }
+                    .padding(30)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(20)
+                    .shadow(radius: 10)
+                    .foregroundColor(.white) // Ensure text is visible
+                    .transition(.opacity.animation(.easeInOut))
+                    .zIndex(200) // Ensure it's above everything else
+                }
+                // ---- END ADDED: Error Overlay ----
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
@@ -131,13 +164,6 @@ struct CameraView: View {
                     print("DEBUG: Scene became active - checking camera orientation enforcement.")
                     enforceCameraOrientationIfNeeded()
                 }
-            }
-            .alert(item: $viewModel.error) { error in
-                Alert(
-                    title: Text("Error"),
-                    message: Text(error.description),
-                    dismissButton: .default(Text("OK"))
-                )
             }
             .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
                 // Reset orientation lock when settings is dismissed

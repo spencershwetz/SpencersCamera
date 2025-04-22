@@ -10,11 +10,15 @@ All notable changes to this project will be documented in this file.
 *   Feature: Added temporary exposure lock during recording when Shutter Priority is active and "Lock Exposure During Recording" setting is enabled (`ExposureService`, `CameraViewModel`).
 *   Setting: Added "Lock Exposure During Recording" toggle in Settings.
 *   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts and restore the previous state when recording stops, if the setting is enabled.
+*   Error Handling: Introduced `CameraError.cameraSystemError` for unrecoverable errors (e.g., resource exhaustion -11872, media service reset).
+*   UI: Added a "Restart Camera" button overlay in `CameraView` that appears when `viewModel.error == .cameraSystemError`. This button calls `viewModel.rebootCamera()`.
+*   Functionality: Implemented `CameraViewModel.rebootCamera()` to stop, clear error, wait, and restart the camera session.
 
 ### Changed
 
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice`.
 *   Updated Watch App AccentColor to custom green (RGB: 0, 0.478, 0) for improved visibility and brand consistency.
+*   Modified `CameraViewModel.sessionRuntimeError` handler to map `AVError.Code(rawValue: -11872)` and `.mediaServicesWereReset` to the new `.cameraSystemError`.
 
 ### Fixed
 

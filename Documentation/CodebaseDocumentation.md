@@ -87,6 +87,8 @@ This document provides a detailed overview of key classes, components, and their
         *   Handles the "Lock Exposure During Recording" setting: If enabled, it stores the previous exposure state before recording. If Shutter Priority is *not* active, it calls `ExposureService.setExposureLock(locked: true)`. If Shutter Priority *is* active, it calls `ExposureService.lockShutterPriorityExposureForRecording()` to initiate the SP-specific lock. On stop, it calls the corresponding unlock/restore methods (`ExposureService.unlockShutterPriorityExposureAfterRecording()` or standard restore logic). Logic is designed to prevent conflicts between the standard AE lock (`isExposureLocked` state) and the internal SP recording lock.
         *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
         *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
+        *   **Error Handling**: Publishes errors via `@Published var error: CameraError?`. Handles `AVCaptureSessionRuntimeError` notifications, mapping specific errors (like `AVError.Code(rawValue: -11872)` or `.mediaServicesWereReset`) to the `.cameraSystemError` case.
+        *   **Camera Reboot**: Provides `rebootCamera()` function to attempt recovery from `.cameraSystemError`. It stops the session, clears the error, waits briefly, and then attempts to restart the session using `startSession()`.
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `GeometryReader` for layout.
@@ -98,6 +100,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages presentation state for Settings (`.fullScreenCover`), Library (`.fullScreenCover` with `OrientationFixView(allowsLandscapeMode: true)`), and LUT Document Picker (`.sheet`).
         *   Handles `onAppear`/`onDisappear` to start/stop session via ViewModel.
         *   Responds to `UIApplication.willResignActiveNotification`.
+        *   **Error Overlay**: Displays a dedicated overlay with a "Restart Camera" button when `viewModel.error == .cameraSystemError`. This overlay disables other controls.
         *   (Orientation logic fully delegated: Does not directly handle orientation changes or notifications).
     *   **`CameraPreviewView` (`CameraPreviewView.swift`)**: 
         *   `UIViewRepresentable` for `MTKView`.
@@ -108,28 +111,6 @@ This document provides a detailed overview of key classes, components, and their
         *   Coordinates service interactions for setup, lens/zoom changes, format changes (resolution, FPS, Apple Log), exposure/WB changes, recording start/stop, exposure lock.
         *   Acts as delegate for all services (`CameraSetupServiceDelegate`, `RecordingServiceDelegate`, etc.) and `WCSessionDelegate`.
         *   Handles state updates from services/delegates and publishes changes via `@Published` properties.
-    *   **Services (`iPhoneApp/Features/Camera/Services`)**: 
-        *   `CameraSetupService`: Initializes the `AVCaptureSession`.
-        *   Finds the default video device and attempts to configure it early (within `session.begin/commitConfiguration`) including setting focus mode, white balance mode, and crucially, attempting to set the initial exposure mode to `.continuousAutoExposure`.
-        *   Adds video and audio inputs to the session.
-        *   Sets the session preset (`.hd4K3840x2160` preferred).
-        *   Handles camera permission checks and requests.
-        *   Starts the `AVCaptureSession` (`startRunning`).
-        *   Includes logic after `startRunning` to *verify* and potentially *re-apply* the `.continuousAutoExposure` mode, as the session start can sometimes reset it. Notifies `ExposureService` of the final confirmed mode.
-        *   Communicates session status, errors, and the initialized device back to the delegate (`CameraViewModel`).
-        *   Includes `reconfigureSession()`: An internal method called by `CameraViewModel.startSession`. It adds required inputs (video, audio) and calls `RecordingService.ensureOutputsAreAdded()` to guarantee outputs are present before the session is started.
-        *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), setting the `AVCaptureConnection.videoRotationAngle` for correct *preview* orientation, and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
-        *   `VideoFormatService`: Finds and applies `AVCaptureDevice.Format` based on resolution, FPS, and Apple Log requirement (`findBestFormat`). Updates frame rate durations (`updateFrameRate`). Configures device for Apple Log or resets it (`configureAppleLog`, `resetAppleLog`). Reapplies color space based on `isAppleLogEnabled` state (`reapplyColorSpaceSettings`).
-        *   `ExposureService`: Holds a reference to the current `AVCaptureDevice`.
-        *   Initializes its internal `isAutoExposureEnabled` state based on the device's state when `setDevice` is called, attempting to set `.continuousAutoExposure` if supported.
-        *   Provides methods to update white balance (`updateWhiteBalance`), ISO (`updateISO`), shutter speed (`updateShutterSpeed`), shutter angle (`updateShutterAngle`), tint (`updateTint`), and exposure lock (`setExposureLock`).
-        *   **Shutter Priority**: 
-            *   `enableShutterPriority(duration:)`: Sets mode to `.custom` with fixed `duration` and current ISO. Activates KVO on `exposureTargetOffset`.
-            *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
-            *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
-            *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true` to pause auto-ISO adjustments.
-            *   `unlockShutterPriorityExposureAfterRecording()`: Sets `isTemporarilyLockedForRecording = false` to resume auto-ISO adjustments.
-        *   Manages transitions between `.continuousAutoExposure` and `.custom` exposure modes via `setAutoExposureEnabled` and `updateExposureMode`. Ensures values (like ISO) are clamped within device limits when setting custom exposure.
         *   Communicates errors and manual value updates (ISO, WB, Shutter) back to the delegate (`CameraViewModel`). Uses KVO on device properties (`iso`, `exposureDuration`, `deviceWhiteBalanceGains`, `exposureTargetOffset`) for real-time updates.
         *   The initial auto mode state is primarily managed and verified by `CameraSetupService` after the session starts.
         *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Before recording starts, calculates the `recordingOrientation` angle based on device/interface orientation and applies the corresponding `CGAffineTransform` to the `AVAssetWriterInput.transform` property to ensure correct *video file* metadata orientation. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` and `AVCaptureAudioDataOutputSampleBufferDelegate` to receive buffers during recording. If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer`. Appends video frames using `AVAssetWriterInputPixelBufferAdaptor.append(_:withPresentationTime:)` to handle frame timing correctly, especially for high frame rates. Saves finished video to `PHPhotoLibrary` and generates a thumbnail.
@@ -146,6 +127,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages recent LUT URLs in `UserDefaults`.
         *   `importLUT`: Copies selected LUT to app's Documents directory before loading.
         *   `clearLUT`: Resets `currentLUTTexture` to an identity LUT texture and clears `currentLUTFilter`.
+        *   Provides fallback to identity LUT if parsing fails significantly.
     *   **`CubeLUTLoader` (`CubeLUTLoader.swift`)**: 
         *   Static methods `loadCubeFile(name:)` and `loadCubeFile(from:)`.
         *   Parses `.cube` file format (handles comments, `LUT_3D_SIZE`, data lines).
@@ -165,9 +147,10 @@ This document provides a detailed overview of key classes, components, and their
 *   **Settings (`iPhoneApp/Features/Settings`)**
     *   **`SettingsModel` (`SettingsModel.swift`)**: `ObservableObject` holding `@Published` properties for `isAppleLogEnabled`, `isFlashlightEnabled`, `flashlightIntensity`, `isBakeInLUTEnabled`, `isWhiteBalanceLockEnabled`, `isExposureLockEnabledDuringRecording`. Also stores assigned `FunctionButtonAbility` for `functionButton1Ability` and `functionButton2Ability`. Uses `UserDefaults` for persistence (correctly defaults `isBakeInLUTEnabled` to false on first launch). Posts notifications (`.appleLogSettingChanged`, etc.) on `didSet` for some properties.
     *   **`FlashlightSettingsView` (`FlashlightSettingsView.swift`)**: Section within `SettingsView` for flashlight toggle and intensity slider. Interacts with `SettingsModel` and a local `FlashlightManager` instance.
-    *   **`SettingsView` (`SettingsView.swift`)**: SwiftUI `List` view presented modally. Contains pickers for `CameraViewModel` settings (Resolution, Color Space, Codec, FPS) and controls for `LUTManager` (Import, Remove, Recent) and `SettingsModel` (Bake-in LUT, Flashlight via `FlashlightSettingsView`, White Balance Lock During Recording, Exposure Lock During Recording, Debug Info). Uses `
+    *   **`SettingsView` (`SettingsView.swift`)**: SwiftUI `List` view presented modally. Contains pickers for `CameraViewModel` settings (Resolution, Color Space, Codec, FPS) and controls for `LUTManager` (Import, Remove, Recent) and `SettingsModel` (Bake-in LUT, Flashlight via `FlashlightSettingsView`, White Balance Lock During Recording, Exposure Lock During Recording, Debug Info). Uses `EnvironmentObject` for `SettingsModel`.
 *   **Camera (`iPhoneApp/Features/Camera/Models`)**
     *   **`FunctionButtonAbility.swift`**: Defines the `FunctionButtonAbility` enum (`none`, `lockExposure`, etc.) used for assigning actions to function buttons via context menus. Conforms to `String`, `CaseIterable`, `Identifiable`.
+    *   **`CameraError.swift`**: Defines the `CameraError` enum, which conforms to `Error`, `Identifiable`, and `Equatable`. Includes cases for various camera setup, configuration, recording, and runtime errors. Added `.cameraSystemError` specifically for unrecoverable system-level issues (like resource errors or media service resets) that require a full camera restart.
 
 ## SC Watch App
 

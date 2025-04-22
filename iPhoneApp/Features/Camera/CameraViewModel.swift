@@ -362,222 +362,218 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Session Lifecycle Management (NEW)
 
     func startSession() {
-        // Log initial state
-        // Use self. explicitly in logger string interpolation
-        // REMOVE verbose entry log
-        // logger.info("StartSession: Entered. isRunning=\(self.session.isRunning), isStarting=\(self.isStartingSession), isInterrupted=\(self.session.isInterrupted)")
+        // Use DispatchQueue.main.async to ensure UI-related checks happen on the main thread first
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
 
-        guard !session.isRunning else {
-            // Keep essential logs
-            logger.info("Session start requested but already running.")
-            return
-        }
-        guard !isStartingSession else {
-            // Keep essential logs
-            logger.info("Session start requested but already in progress.")
-            return
-        }
-        guard !session.isInterrupted else {
-            // Keep essential logs
-            logger.warning("Session start requested but session is currently interrupted. Waiting for interruption end.")
-            if !isSessionInterrupted {
-                DispatchQueue.main.async { self.isSessionInterrupted = true; self.status = .unknown }
-            }
-            return
-        }
-
-        // Keep essential logs
-        logger.info("Starting AVCaptureSession...")
-
-        DispatchQueue.main.async {
-            self.isStartingSession = true
-            // REMOVE verbose state set log
-            // self.logger.info("StartSession: MainThread - Set isStartingSession = true")
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                print("StartSession: BackgroundThread - self is nil, cannot proceed.")
-                return
-            }
-            
-            // REMOVE verbose background entry log
-            // self.logger.info("StartSession: BackgroundThread - Entered.")
-            
-            // --- ADDED: Reconfigure Session --- 
-            var reconfigureError: Error? = nil
-            self.session.beginConfiguration()
-            // REMOVE verbose config log
-            // self.logger.info("StartSession: BackgroundThread - Began configuration for reconfigure.")
-            do {
-                if let setupService = self.cameraSetupService {
-                    try setupService.reconfigureSession()
-                    // REMOVE verbose reconfig log
-                    // self.logger.info("StartSession: BackgroundThread - Reconfiguration successful.")
-                } else {
-                    self.logger.error("StartSession: BackgroundThread - cameraSetupService is nil, cannot reconfigure.")
-                    throw CameraError.setupFailed // Or a different appropriate error
-                }
-            } catch {
-                self.logger.error("StartSession: BackgroundThread - Reconfiguration FAILED: \(error.localizedDescription)")
-                reconfigureError = error
-            }
-            self.session.commitConfiguration()
-             // REMOVE verbose config log
-            // self.logger.info("StartSession: BackgroundThread - Committed configuration after reconfigure.")
-            
-            if let error = reconfigureError {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
-                    // Keep essential logs
-                    self.logger.error("StartSession: MainThreadCompletion - Exiting due to reconfiguration failure.")
-                    self.isStartingSession = false
-                    self.error = .configurationFailed(message: "Failed to reconfigure session: \(error.localizedDescription)")
-                    self.status = .failed
-                    self.isSessionRunning = false
-                }
-                return
-            }
-            // --- END ADDED ---
-            
-
-            // --- Pre-start device configuration check ---
-            if let currentDevice = self.device {
-                do {
-                    // REMOVE verbose pre-start log
-                    // self.logger.info("StartSession: BackgroundThread - Pre-start: Locking device for configuration check...")
-                    try currentDevice.lockForConfiguration()
-                    if currentDevice.exposureMode != .continuousAutoExposure && currentDevice.isExposureModeSupported(.continuousAutoExposure) {
-                        currentDevice.exposureMode = .continuousAutoExposure
-                        // REMOVE verbose pre-start log
-                        // self.logger.info("StartSession: BackgroundThread - Pre-start: Ensured exposure mode is continuousAutoExposure.")
-                    } else {
-                        // REMOVE verbose pre-start log
-                        // self.logger.info("StartSession: BackgroundThread - Pre-start: Exposure mode already continuousAutoExposure or not supported.")
-                    }
-                    currentDevice.unlockForConfiguration()
-                    // REMOVE verbose pre-start log
-                    // self.logger.info("StartSession: BackgroundThread - Pre-start: Device configuration check complete.")
-                } catch {
-                    // Keep essential logs
-                    self.logger.error("Pre-start: Failed to configure device exposure mode: \(error.localizedDescription)")
-                }
-            } else {
-                 // Keep essential logs
-                 self.logger.warning("Pre-start: Cannot check device configuration, device reference is nil.")
-            }
-            // --- END ADDED ---
-
-            var startError: Error? = nil
-            // REMOVE verbose logging variables
-            // var sessionWasRunningBeforeStartCall: Bool = self.session.isRunning
-            // self.logger.info("StartSession: BackgroundThread - Before startRunning(). isRunning=\(sessionWasRunningBeforeStartCall)")
-            do {
-                 // Keep essential logs
-                 self.logger.info("Attempting session.startRunning()...")
-                 try self.session.startRunning()
-                 // Keep essential logs
-                 self.logger.info("session.startRunning() completed.")
-             } catch {
-                 self.logger.error("StartSession: BackgroundThread - startRunning() THREW error: \(error.localizedDescription)")
-                 startError = error
-             }
-            // REMOVE verbose logging variable check
-            // var sessionIsRunningAfterStartCall: Bool = self.session.isRunning
-            // self.logger.info("StartSession: BackgroundThread - After startRunning(). isRunning=\(sessionIsRunningAfterStartCall)")
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { 
-                    print("StartSession: MainThreadCompletion - self is nil")
-                    return 
-                }
-                
-                let sessionIsRunningOnMain = self.session.isRunning
-                // REMOVE verbose state log
-                // self.logger.info("StartSession: MainThreadCompletion - Entered. isRunning=\(sessionIsRunningOnMain)")
-                self.isStartingSession = false
-                // REMOVE verbose state log
-                // self.logger.info("StartSession: MainThreadCompletion - Set isStartingSession = false")
-
-                self.isSessionRunning = sessionIsRunningOnMain
-                // Keep essential logs
-                self.logger.info("AVCaptureSession running state: \(self.isSessionRunning)")
-
+            // --- Refined Pre-checks on Main Thread ---
+            guard !self.session.isRunning else {
+                self.logger.info("StartSession: Denied - Session is already running.")
+                // If isSessionRunning publisher is somehow false, correct it.
                 if !self.isSessionRunning {
-                    // Keep essential logs
-                    self.logger.error("Failed to start session after returning to foreground. Error: \(startError?.localizedDescription ?? "None thrown, but session not running")")
-                    self.error = startError != nil ? .custom(message: "Session start failed: \(startError!.localizedDescription)") : .sessionFailedToStart
-                    self.status = .failed
+                    self.logger.warning("StartSession: Correcting isSessionRunning state (was false, session.isRunning is true).")
+                    self.isSessionRunning = true
+                    self.status = .running // Ensure status matches
+                }
+                return
+            }
+            guard !self.isStartingSession else {
+                self.logger.info("StartSession: Denied - Session start is already in progress.")
+                return
+            }
+            guard !self.isSessionInterrupted else {
+                 self.logger.warning("StartSession: Denied - Session is currently interrupted. Waiting for interruption end.")
+                 // Ensure state reflects interruption
+                 if self.status != .unknown { self.status = .unknown }
+                 if self.isSessionRunning { self.isSessionRunning = false }
+                return
+            }
+            // --- End Refined Pre-checks ---
+
+            self.logger.info("Starting AVCaptureSession...")
+            self.isStartingSession = true // Set flag immediately on main thread
+
+            // Proceed with background setup and start
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else {
+                    print("StartSession: BackgroundThread - self is nil, cannot proceed.")
+                    // Reset flag if self is nil early
+                    DispatchQueue.main.async { self?.isStartingSession = false }
+                    return
+                }
+
+                var setupError: Error? = nil
+                self.session.beginConfiguration()
+                do {
+                    // --- Conditional Reconfiguration ---
+                    // Only reconfigure if inputs/outputs are missing (e.g., after interruption stop)
+                    if self.session.inputs.isEmpty || self.session.outputs.isEmpty {
+                        self.logger.info("StartSession: Reconfiguring session inputs/outputs as they are missing.")
+                        try self.cameraSetupService.reconfigureSession()
+                    } else {
+                         self.logger.info("StartSession: Skipping reconfiguration, inputs/outputs already exist.")
+                    }
+                    // --- End Conditional Reconfiguration ---
+
+                    // --- Ensure Device Configuration ---
+                    /* REMOVED: Rely on reconfigureSession if needed
+                     if let currentDevice = self.cameraDeviceService.currentDevice { // Use service's device ref
+                         try currentDevice.lockForConfiguration()
+                         // Ensure preferred settings (like exposure mode) are applied if needed
+                         if currentDevice.exposureMode != .continuousAutoExposure && currentDevice.isExposureModeSupported(.continuousAutoExposure) {
+                             currentDevice.exposureMode = .continuousAutoExposure
+                             self.logger.info("StartSession: Ensured exposure mode is continuousAutoExposure.")
+                         }
+                         // Add other essential pre-start configurations here if necessary
+                         currentDevice.unlockForConfiguration()
+                     } else {
+                          self.logger.warning("StartSession: Cannot perform pre-start device config, device is nil.")
+                     }
+                     */
+                    // --- End Ensure Device Configuration ---
+
+                } catch {
+                    self.logger.error("StartSession: BackgroundThread - Configuration/Reconfiguration FAILED: \(error.localizedDescription)")
+                    setupError = error
+                }
+                self.session.commitConfiguration()
+
+                // Exit early if configuration failed
+                if let error = setupError {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.logger.error("StartSession: MainThreadCompletion - Exiting due to setup failure.")
+                        self.isStartingSession = false
+                        self.error = .configurationFailed(message: "Failed to configure session: \(error.localizedDescription)")
+                        self.status = .failed
+                        self.isSessionRunning = false
+                    }
+                    return
+                }
+
+                // --- Start Running ---
+                var startError: Error? = nil
+                // Remove the do-catch block, errors are handled by notification observer
+                self.logger.info("Attempting session.startRunning()...")
+                // Make sure we don't try to start if it somehow became running during setup
+                if !self.session.isRunning {
+                    // No 'try' needed here anymore for startRunning()
+                    self.session.startRunning()
+                    self.logger.info("session.startRunning() completed.")
                 } else {
-                    // Keep essential logs
-                    // self.logger.info("StartSession: MainThreadCompletion - SUCCESS.") // Redundant with running state log
-                    self.status = .running
-                    self.error = nil 
+                     self.logger.warning("session.startRunning() skipped, session became running during setup phase.")
+                }
+                // Check session.isRunning *after* the call to see if it succeeded
+                if !self.session.isRunning {
+                    // If it failed to start (and wasn't already running), set an error.
+                    // We don't have a specific error object here, rely on the runtime notification for details.
+                    self.logger.error("StartSession: BackgroundThread - session.startRunning() was called but session is not running afterwards.")
+                    // USE new error case
+                    startError = CameraError.cameraSystemError // Use a generic error
+                }
+
+                // --- End Start Running ---
+
+
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else {
+                        print("StartSession: MainThreadCompletion - self is nil")
+                        return
+                    }
+
+                    self.isStartingSession = false // Reset flag
+                    let sessionNowRunning = self.session.isRunning
+
+                    self.isSessionRunning = sessionNowRunning // Update published property reliably
+                    self.logger.info("AVCaptureSession running state: \(self.isSessionRunning)")
+
+                    // Check if session failed to start OR if a specific startError occurred
+                    if !sessionNowRunning {
+                        self.logger.error("Failed to start session. Error: \(startError?.localizedDescription ?? "None thrown, but session not running")")
+                        // Check if startError was already set (to .cameraSystemError)
+                        // Otherwise, default to .sessionFailedToStart
+                        self.error = (startError as? CameraError) ?? .sessionFailedToStart
+                        self.status = .failed
+                    } else {
+                        self.status = .running
+                        self.error = nil
+                        // Ensure WB polling starts if session is running
+                        self.handleSessionRunningStateChange(true)
+                    }
                 }
             }
         }
     }
 
     func stopSession() {
-        // REMOVE verbose entry log
-        // logger.info("StopSession: Entered. isRunning=\(self.session.isRunning), isStarting=\(self.isStartingSession)")
-        
-        guard session.isRunning else {
-            // Keep essential logs
-            logger.info("Session stop requested but not running.")
-            return
-        }
-        
-        // Keep essential logs
-        logger.info("Stopping AVCaptureSession...")
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else {
-                print("StopSession: BackgroundThread - self is nil, cannot proceed.")
+        // Use DispatchQueue.main.async to ensure UI-related checks happen on the main thread first
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            // --- Refined Pre-checks on Main Thread ---
+            guard self.session.isRunning else {
+                self.logger.info("StopSession: Denied - Session is not running.")
+                // If isSessionRunning publisher is somehow true, correct it.
+                if self.isSessionRunning {
+                     self.logger.warning("StopSession: Correcting isSessionRunning state (was true, session.isRunning is false).")
+                     self.isSessionRunning = false
+                }
                 return
             }
-            
-            // REMOVE verbose background entry log
-            // self.logger.info("StopSession: BackgroundThread - Entered. isRunning=\(self.session.isRunning)")
-            
-            let wasRunning = self.session.isRunning
-            if wasRunning {
-                // REMOVE verbose step log
-                // self.logger.info("StopSession: BackgroundThread - Removing inputs/outputs before stopping...")
-                self.session.inputs.forEach { self.session.removeInput($0) }
-                self.session.outputs.forEach { self.session.removeOutput($0) }
-                // REMOVE verbose step log
-                // self.logger.info("StopSession: BackgroundThread - Inputs/Outputs removed.")
-                
-                // REMOVE verbose step log
-                // self.logger.info("StopSession: BackgroundThread - Calling stopRunning()...")
-                self.session.stopRunning()
-                // REMOVE verbose step log
-                // self.logger.info("StopSession: BackgroundThread - stopRunning() completed.")
-            } else {
-                self.logger.warning("StopSession: BackgroundThread - Session was already not running before stopRunning() call.")
-            }
-             
-            // REMOVE verbose state check
-            // let isRunningAfter = self.session.isRunning
-            // self.logger.info("StopSession: BackgroundThread - After stopRunning(). isRunning=\(isRunningAfter)")
-
-             DispatchQueue.main.async { [weak self] in
-                 guard let self = self else { 
-                    print("StopSession: MainThreadCompletion - self is nil")
-                    return 
-                 }
-                 // REMOVE verbose state check
-                 // let isRunningOnMain = self.session.isRunning
-                 // self.logger.info("StopSession: MainThreadCompletion - Entered. isRunning=\(isRunningOnMain)")
-                 self.isSessionRunning = false
-                 
-                 if self.isStartingSession {
-                     self.logger.warning("StopSession: MainThreadCompletion - Resetting isStartingSession flag.")
-                     self.isStartingSession = false
-                 }
-                 // Keep essential logs
-                 self.logger.info("AVCaptureSession stopped.")
+             guard !self.isStartingSession else {
+                 self.logger.warning("StopSession: Denied - Session start is currently in progress. Stop will likely be ignored by OS or cause issues.")
+                 // Attempting to stop while starting can be problematic. Let start finish or fail.
+                 return
              }
+            // --- End Refined Pre-checks ---
+
+
+            self.logger.info("Stopping AVCaptureSession...")
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else {
+                    print("StopSession: BackgroundThread - self is nil, cannot proceed.")
+                    return
+                }
+
+                // Check again on background thread before stopping
+                if self.session.isRunning {
+                    self.logger.info("StopSession: BackgroundThread - Calling stopRunning()...")
+                    self.session.stopRunning() // Stop the session first
+                     self.logger.info("StopSession: BackgroundThread - stopRunning() completed.")
+
+                    // --- REINSTATE Input/Output Removal ---
+                    // Explicitly removing inputs/outputs after stopping to ensure a cleaner state.
+                    self.logger.info("StopSession: BackgroundThread - Removing inputs/outputs after stopping...")
+                    self.session.beginConfiguration()
+                    self.session.inputs.forEach { self.session.removeInput($0) }
+                    self.session.outputs.forEach { self.session.removeOutput($0) }
+                    self.session.commitConfiguration()
+                    self.logger.info("StopSession: BackgroundThread - Inputs/Outputs removed.")
+                    // --- End REINSTATE ---
+
+                } else {
+                    self.logger.warning("StopSession: BackgroundThread - Session was already stopped before executing stopRunning().")
+                }
+
+                 DispatchQueue.main.async { [weak self] in
+                     guard let self = self else {
+                        print("StopSession: MainThreadCompletion - self is nil")
+                        return
+                     }
+                     self.isSessionRunning = false // Update published property reliably
+                     self.status = .unknown // Reset status after stop
+                      // Stop polling WB etc.
+                     self.handleSessionRunningStateChange(false)
+
+                     // If stop was called while a start was somehow pending (though guarded against), reset flag.
+                     if self.isStartingSession {
+                         self.logger.warning("StopSession: MainThreadCompletion - Resetting isStartingSession flag during stop completion.")
+                         self.isStartingSession = false
+                     }
+                     self.logger.info("AVCaptureSession stopped.")
+                 }
+            }
         }
     }
 
@@ -1264,8 +1260,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.isSessionInterrupted = false
             // Attempt to restart the session only if the app is currently active
             if self.isAppCurrentlyActive {
-                self.logger.info("App is active, attempting to restart session after interruption ended.")
-                self.startSession() // Try starting the session again
+                self.logger.info("App is active, scheduling session restart after short delay.")
+                // ADD Delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.logger.info("Executing delayed session restart.")
+                    self?.startSession() // Try starting the session again after delay
+                }
             } else {
                 self.logger.info("App is not active, deferring session restart until app becomes active.")
             }
@@ -1286,13 +1286,17 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let cameraError: CameraError
         switch error.code {
         case .mediaServicesWereReset:
-            cameraError = .mediaServicesWereReset
             // Attempting session restart might be appropriate here, but needs careful handling
             // to avoid loops. For now, just report.
             logger.warning("Media services were reset. Session restart might be needed after reconfiguration.")
+            cameraError = .cameraSystemError // Use new error for reset too
         case .sessionNotRunning:
              cameraError = .sessionFailedToStart // Or a more specific error
              logger.error("Runtime error indicates session is not running.")
+        // ADDED: Explicit check for the hardware resource error code
+        case AVError.Code(rawValue: -11872):
+            logger.error("Camera hardware resource error detected.")
+            cameraError = .cameraSystemError // Use new error
         default:
             cameraError = .sessionRuntimeError(error)
         }
@@ -1303,6 +1307,33 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.error = cameraError
             self.status = .failed // Set status to failed on runtime error
             self.isSessionRunning = false // Ensure state reflects the error
+        }
+    }
+
+    // MARK: - Camera Reboot
+    
+    /// Attempts to fully stop and restart the camera session to recover from certain errors.
+    func rebootCamera() {
+        logger.info("RebootCamera: Attempting camera system reboot...")
+        
+        // Ensure we stop first, even if state seems inconsistent
+        stopSession()
+        
+        // Use asyncAfter on the main queue for the delay and subsequent start
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in // Slightly longer delay for reboot
+            guard let self = self else { return }
+            
+            self.logger.info("RebootCamera: Delay finished, clearing error and attempting session start.")
+            
+            // Clear the error that triggered the reboot
+            if self.error == .cameraSystemError {
+                self.error = nil
+            }
+            // Reset status to unknown before starting
+            self.status = .unknown
+            
+            // Attempt to start the session
+            self.startSession()
         }
     }
 }

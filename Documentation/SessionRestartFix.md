@@ -36,3 +36,29 @@ The fix involved ensuring a more robust teardown and setup cycle for the `AVCapt
 ## Summary
 
 By explicitly removing inputs *and* outputs when stopping the session and explicitly re-adding inputs *and ensuring* outputs are re-added before starting, we guarantee a cleaner state transition. This prevents the accumulation of resource demands that previously led to the `-11872` runtime error and session start failure after multiple background/foreground cycles. 
+
+## Additional Recovery Mechanism: Manual Reboot
+
+While the explicit teardown/reconfiguration significantly reduces the occurrence of session start failures, unrecoverable errors like `-11872` or media service resets (`.mediaServicesWereReset`) can potentially still occur under high system pressure or other edge cases.
+
+To provide a user-initiated recovery path for these situations:
+
+1.  **Error Detection (`CameraViewModel.sessionRuntimeError`):
+    *   The runtime error handler now specifically detects `AVError.Code -11872` and `.mediaServicesWereReset`.
+    *   When detected, these errors (along with other critical session start failures) are mapped to a new specific error case: `CameraError.cameraSystemError`.
+    *   This error is published via the `viewModel.error` property.
+
+2.  **UI Feedback (`CameraView`):
+    *   `CameraView` observes `viewModel.error`.
+    *   When `viewModel.error == .cameraSystemError`, a modal overlay is presented to the user.
+    *   This overlay explains that a system error occurred and provides a \"Restart Camera\" button, while disabling other camera controls.
+
+3.  **Reboot Action (`CameraViewModel.rebootCamera`):
+    *   Tapping the \"Restart Camera\" button calls the `viewModel.rebootCamera()` function.
+    *   This function performs a controlled restart sequence:
+        *   Calls `stopSession()` to ensure the session is fully stopped (if it wasn't already).
+        *   Clears the `.cameraSystemError` from the `viewModel.error` state.
+        *   Waits for a short duration (e.g., 0.75 seconds) to allow system resources to settle.
+        *   Calls `startSession()` to attempt a fresh start of the camera system.
+
+This manual reboot mechanism acts as a final fallback, allowing the user to attempt recovery from severe system-level camera errors without needing to force-quit the application. 
