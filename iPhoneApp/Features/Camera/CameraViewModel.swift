@@ -142,6 +142,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     logger.error("❌ Task failed during Apple Log configuration/reconfiguration: \(error.description)")
                     // Update error on main thread
                     Task { @MainActor in
+                        // *** ADDED: Revert state on failure ***
+                        self.isAppleLogEnabled = !logEnabled // Revert the toggle
                         self.error = error
                     }
                 } catch {
@@ -149,6 +151,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     let wrappedError = CameraError.configurationFailed(message: "Apple Log setup failed: \(error.localizedDescription)")
                     // Update error on main thread
                     Task { @MainActor in
+                        // *** ADDED: Revert state on failure ***
+                        self.isAppleLogEnabled = !logEnabled // Revert the toggle
                         self.error = wrappedError
                     }
                 }
@@ -1325,6 +1329,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             
             self.logger.info("RebootCamera: Delay finished, clearing error and attempting session start.")
             
+            // *** ADDED: Reset Apple Log state before reboot attempt ***
+            if self.isAppleLogEnabled {
+                self.logger.info("RebootCamera: Resetting isAppleLogEnabled to false before restart.")
+                // Directly set the property without triggering the full configuration logic
+                self.isAppleLogEnabled = false 
+                // Also update the service state directly if needed
+                self.videoFormatService?.setAppleLogEnabled(false)
+            }
+
             // Clear the error that triggered the reboot
             if self.error == .cameraSystemError {
                 self.error = nil
