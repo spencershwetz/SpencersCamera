@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice`.
+*   Updated Watch App AccentColor to custom green (RGB: 0, 0.478, 0) for improved visibility and brand consistency.
 
 ### Fixed
 

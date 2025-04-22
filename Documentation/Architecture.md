@@ -122,3 +122,17 @@ The project is organized into the following main components:
     *   `CameraViewModel` observes notifications or directly uses `SettingsModel` state to configure services (e.g., `RecordingService` for bake-in LUT state).
 *   **Watch Connectivity**: 
     *   `CameraViewModel` acts as `WCSessionDelegate`
+*   **`AppDelegate` (`AppDelegate.swift`)**: 
+    *   UIKit App Delegate (`@UIApplicationDelegateAdaptor`).
+    *   Implements robust state management:
+        *   Uses `isTransitioningState` flag to prevent concurrent state transitions
+        *   Dedicated `stateQueue` for serializing state changes
+        *   Tracks `lastActiveState` for state history
+        *   Enhanced lifecycle methods with proper queuing and synchronization
+    *   Handles app lifecycle with improved resource management:
+        *   Robust audio session handling with other audio checks
+        *   Proper device orientation notification lifecycle
+        *   Background task management
+        *   Memory warning handling
+    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control orientation.
+    *   Provides helper extension `UIViewController.topMostViewController()`.

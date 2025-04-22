@@ -15,9 +15,19 @@ This document provides a detailed overview of key classes, components, and their
     *   Uses `@Environment(\.scenePhase)` and `.onChange` to inform `CameraViewModel` about app active/inactive/background state changes for Watch Connectivity updates.
 *   **`AppDelegate` (`AppDelegate.swift`)**: 
     *   UIKit App Delegate (`@UIApplicationDelegateAdaptor`).
-    *   Handles app lifecycle (`didFinishLaunching`, `applicationWillTerminate`), mainly for setting up/tearing down `UIDevice.begin/endGeneratingDeviceOrientationNotifications()`.
-    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control *interface* orientation based on the topmost view controller. Checks `OrientationFixViewController.allowsLandscapeMode`. Defaults to portrait. (Simplified: Removed internal flags).
-    *   Provides a helper extension `UIViewController.topMostViewController()`.
+    *   Implements robust state management system:
+        *   Uses `isTransitioningState` flag to prevent concurrent transitions
+        *   Dedicated serial `stateQueue` for state changes
+        *   Tracks `lastActiveState` for app state history
+        *   All lifecycle methods run on the dedicated queue with proper guards
+    *   Enhanced resource management:
+        *   Proper audio session handling with checks for other audio
+        *   Complete device orientation notification lifecycle
+        *   Background task management with proper cleanup
+        *   Memory warning handling
+    *   Handles app lifecycle (`didFinishLaunching`, `applicationWillTerminate`).
+    *   Implements dynamic orientation control via `application(_:supportedInterfaceOrientationsFor:)`.
+    *   Provides `UIViewController.topMostViewController()` extension.
 
 ### Core (`iPhoneApp/Core`)
 
@@ -158,3 +168,10 @@ This document provides a detailed overview of key classes, components, and their
     *   **`SettingsView` (`SettingsView.swift`)**: SwiftUI `List` view presented modally. Contains pickers for `CameraViewModel` settings (Resolution, Color Space, Codec, FPS) and controls for `LUTManager` (Import, Remove, Recent) and `SettingsModel` (Bake-in LUT, Flashlight via `FlashlightSettingsView`, White Balance Lock During Recording, Exposure Lock During Recording, Debug Info). Uses `
 *   **Camera (`iPhoneApp/Features/Camera/Models`)**
     *   **`FunctionButtonAbility.swift`**: Defines the `FunctionButtonAbility` enum (`none`, `lockExposure`, etc.) used for assigning actions to function buttons via context menus. Conforms to `String`, `CaseIterable`, `Identifiable`.
+
+## SC Watch App
+
+*   **Assets**:
+    *   Custom AccentColor set to green (RGB: 0, 0.478, 0) for improved visibility and brand consistency
+    *   App icons in various required watchOS sizes
+    *   Color assets configured for universal platform support

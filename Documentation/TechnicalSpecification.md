@@ -52,6 +52,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   iPhone (`CameraViewModel`): Sends state (`isRecording`, `isAppActive`, `selectedFrameRate`, `recordingStartTime`) via `WCSession.updateApplicationContext(_:)`. Receives commands (`startRecording`, `stopRecording`) via `session(_:didReceiveMessage:replyHandler:)`.
     *   Watch (`WatchConnectivityService`): Receives context via `session(_:didReceiveApplicationContext:)` and publishes `latestContext`. Sends commands via `WCSession.sendMessage(_:replyHandler:errorHandler:)`.
     *   Watch `ContentView` observes `latestContext` and uses a `Timer` to calculate/display elapsed time from `recordingStartTime`.
+    *   Custom AccentColor (RGB: 0, 0.478, 0) for improved visibility and brand consistency.
 *   **Video Library**: 
     *   Uses `Photos` framework (`PHPhotoLibrary`, `PHAsset`, `PHImageManager`).
     *   `VideoLibraryViewModel` fetches assets matching `mediaType = .video`, sorted by `creationDate`.
@@ -114,5 +115,11 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
 *   **Explicit Session Teardown/Reconfiguration**: Removing inputs/outputs explicitly in `stopSession` and fully reconfiguring (inputs + outputs) in `startSession` proved necessary to avoid AVFoundation resource exhaustion (`AVError -11872`) after repeated background/foreground cycles.
+*   **Robust State Management**: Implementation of a comprehensive state management system in AppDelegate:
+    *   Serial queue (`stateQueue`) ensures state transitions are processed sequentially
+    *   State transition guard (`isTransitioningState`) prevents concurrent transitions
+    *   State tracking (`lastActiveState`) enables informed state change decisions
+    *   Enhanced cleanup sequences with proper resource management
+    *   Trade-off: Slight increase in complexity for significantly improved stability
 
 *(This specification includes deeper implementation details.)*

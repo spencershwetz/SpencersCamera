@@ -1,6 +1,8 @@
 import UIKit
 import SwiftUI
 import os.log
+import AVFoundation
+import Photos
 
 /// Main application delegate that handles orientation locking and other app-level functionality
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -8,38 +10,180 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // Logger for AppDelegate
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppDelegateOrientation")
-
+    
+    // MARK: - Properties
+    
+    private var isFirstLaunch = true
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private var isTransitioningState = false
+    private let stateQueue = DispatchQueue(label: "com.spencerscamera.stateTransition")
+    private var lastActiveState: UIApplication.State = .inactive
+    
     // MARK: - Orientation Lock Properties
-    
-    /// Static variable to track view controllers that need landscape support
     static var landscapeEnabledViewControllers: [String] = []
-    
-    // Track whether status bar should be hidden
     static var shouldHideStatusBar: Bool = true
     
     // MARK: - Application Lifecycle
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // REMOVED: Manual window setup, root view controller assignment, and appearance settings.
-        // The SwiftUI App lifecycle (@main, WindowGroup) will handle this.
-
-        // Keep essential non-UI setup:
         logger.info("Setting up AppDelegate for iOS 18+")
-        // Register for device orientation notifications
+        setupNotificationObservers()
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        // REMOVED: Setup orientation lock observer (using custom CameraOrientationLock)
-        // UIWindowScene.setupOrientationLockSupport()
-        
-        // Remove debug observer for orientation (if this was specific to the old setup)
-        // NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
-        
+        setupAudioSession()
+        requestPermissions()
         return true
     }
     
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isTransitioningState else { return }
+            
+            self.isTransitioningState = true
+            self.logger.info("App entering background - deactivating audio session")
+            
+            // End existing background task if any
+            self.endBackgroundTask()
+            
+            // Start new background task
+            self.backgroundTask = application.beginBackgroundTask { [weak self] in
+                self?.endBackgroundTask()
+            }
+            
+            // Deactivate audio session
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                self.logger.error("Failed to deactivate audio session: \(error.localizedDescription)")
+            }
+            
+            self.cleanupResources()
+            self.lastActiveState = .background
+            self.isTransitioningState = false
+        }
+    }
+    
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isTransitioningState else { return }
+            
+            self.isTransitioningState = true
+            self.logger.info("App entering foreground - reactivating audio session")
+            
+            // Wait briefly to ensure background cleanup is complete
+            Thread.sleep(forTimeInterval: 0.1)
+            
+            self.setupAudioSession()
+            self.endBackgroundTask()
+            self.lastActiveState = .active
+            self.isTransitioningState = false
+        }
+    }
+    
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard !self.isTransitioningState else { return }
+            
+            if self.isFirstLaunch {
+                self.requestPermissions()
+                self.isFirstLaunch = false
+            }
+            
+            self.lastActiveState = .active
+        }
+    }
+    
     func applicationWillTerminate(_ application: UIApplication) {
-        // Stop device orientation notifications to clean up
-        logger.info("Stopping device orientation notifications.")
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.logger.info("App terminating - cleaning up resources")
+            self.cleanupResources()
+            NotificationCenter.default.removeObserver(self)
+            self.endBackgroundTask()
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+    }
+    
+    private func cleanupResources() {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        
+        // Ensure audio session deactivation is done safely
+        do {
+            if AVAudioSession.sharedInstance().isOtherAudioPlaying {
+                try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+            } else {
+                try AVAudioSession.sharedInstance().setActive(false)
+            }
+        } catch {
+            logger.error("Failed to deactivate audio session during cleanup: \(error.localizedDescription)")
+        }
+    }
+    
+    private func endBackgroundTask() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+    
+    @objc private func handleMemoryWarning() {
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            self.logger.warning("Received memory warning - cleaning up resources")
+            self.cleanupResources()
+        }
+    }
+    
+    // MARK: - Setup Methods
+    
+    private func setupAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            try audioSession.setCategory(.playAndRecord,
+                                      mode: .videoRecording,
+                                      options: [.allowBluetooth,
+                                              .allowBluetoothA2DP,
+                                              .mixWithOthers,
+                                              .defaultToSpeaker])
+            
+            try audioSession.setPreferredSampleRate(48000.0)
+            try audioSession.setPreferredIOBufferDuration(0.005)
+            
+            if let preferredInput = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+                try audioSession.setPreferredInput(preferredInput)
+            }
+            
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+            logger.info("Audio session configured successfully")
+        } catch {
+            logger.error("Failed to configure audio session: \(error.localizedDescription)")
+        }
+    }
+    
+    private func requestPermissions() {
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+            self?.logger.info("Camera permission \(granted ? "granted" : "denied")")
+        }
+        
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            self?.logger.info("Microphone permission \(granted ? "granted" : "denied")")
+        }
+        
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { [weak self] status in
+            self?.logger.info("Photos permission status: \(status.rawValue)")
+        }
     }
     
     // MARK: - Debug Helpers
