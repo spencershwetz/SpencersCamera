@@ -1263,7 +1263,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         var specificErrorCode: AVError.Code? = nil
         if let avError = notification.userInfo?[AVCaptureSessionErrorKey] as? AVError {
             specificErrorCode = avError.code
-            logger.error("[SessionControl] Runtime Error is AVError. Code: \(specificErrorCode!.rawValue) - \(avError.localizedDescription)") // Log the code!
+            logger.error("[SessionControl] Runtime Error is AVError. Code: \(specificErrorCode!.rawValue) - \(avError.localizedDescription)")
         } else if let nsError = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError {
              logger.error("[SessionControl] Runtime Error is NSError. Code: \(nsError.code) - Domain: \(nsError.domain) - \(nsError.localizedDescription)")
         } else {
@@ -1271,16 +1271,29 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
 
         // !!! CRITICAL: Remove observers immediately BEFORE updating state for any runtime error
-        // This prevents KVO trying to access a potentially broken session/device.
         logger.warning("[SessionControl] Runtime Error detected. Removing ExposureService observers immediately.")
         exposureService.removeDeviceObservers()
 
-        // --- Decision Logic based on error --- 
-        
+        // --- Handle 'Cannot Record' error by reconfiguring session ---
+        if specificErrorCode == .cannotRecord {
+            logger.error("[SessionControl] CannotRecord error detected. Reconfiguring session...")
+            sessionQueue.async { [weak self] in
+                guard let self = self else { return }
+                do {
+                    try self.cameraSetupService.setupSession()
+                    DispatchQueue.main.async {
+                        self.startSession()
+                    }
+                } catch {
+                    self.logger.error("[SessionControl] Failed to reconfigure session after CannotRecord: \(error)")
+                }
+            }
+            return
+        }
+
         // Check if it's media services reset
         if specificErrorCode == .mediaServicesWereReset {
              logger.error("[SessionControl] Media services were reset. Avoiding immediate restart. Reconfiguration or app lifecycle should handle restart.")
-             // Do NOT attempt restart here, let the reconfiguration process or app lifecycle handle it.
              DispatchQueue.main.async {
                  self.isSessionRunning = false // Explicitly set running to false
                  self.status = .failed
@@ -1294,8 +1307,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         DispatchQueue.main.async {
             self.isSessionRunning = false // Ensure session state is false
             self.status = .failed // Indicate failure
-            // Use a generic runtime error, or map specificErrorCode if needed
-            self.error = .sessionRuntimeError(code: specificErrorCode?.rawValue ?? -1) 
+            self.error = .sessionRuntimeError(code: specificErrorCode?.rawValue ?? -1)
         }
         // DO NOT restart session here for generic errors
     }

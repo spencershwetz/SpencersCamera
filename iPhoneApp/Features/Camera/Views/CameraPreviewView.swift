@@ -24,9 +24,10 @@ struct CameraPreviewView: UIViewRepresentable {
         let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager)
         context.coordinator.metalDelegate = metalDelegate
         
-        // Set up video output
+        // Setup video output and store it on coordinator
         let videoOutput = AVCaptureVideoDataOutput()
         videoOutput.setSampleBufferDelegate(context.coordinator, queue: DispatchQueue(label: "com.spencershwetz.spencerscamera.videoQueue"))
+        context.coordinator.videoOutput = videoOutput  // Add storing of output reference
         
         // Configure video output settings
         videoOutput.videoSettings = [
@@ -59,6 +60,16 @@ struct CameraPreviewView: UIViewRepresentable {
         return mtkView
     }
     
+    /// Properly remove the preview output when the view is torn down
+    func dismantleUIView(_ uiView: MTKView, coordinator: Coordinator) {
+        session.beginConfiguration()
+        if let output = coordinator.videoOutput {
+            session.removeOutput(output)
+            logger.info("Removed preview videoOutput in dismantleUIView")
+        }
+        session.commitConfiguration()
+    }
+    
     func updateUIView(_ uiView: MTKView, context: Context) {
         logger.trace("updateUIView called.")
     }
@@ -71,6 +82,7 @@ struct CameraPreviewView: UIViewRepresentable {
     class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var parent: CameraPreviewView
         var metalDelegate: MetalPreviewView?
+        var videoOutput: AVCaptureVideoDataOutput?  // Store reference for removal
         
         init(parent: CameraPreviewView) {
             self.parent = parent
