@@ -61,10 +61,9 @@ class RecordingService: NSObject {
             autoreleaseFrequency: .workItem
         )
         super.init()
-        // SETUP OUTPUTS ON INIT
-        setupVideoDataOutput()
+        // Only setup audio output now
         setupAudioDataOutput()
-        logger.info("REC_PERF: RecordingService initialized and outputs configured.")
+        logger.info("REC_PERF: RecordingService initialized with audio output configured.")
     }
     
     func setDevice(_ device: AVCaptureDevice) {
@@ -94,21 +93,6 @@ class RecordingService: NSObject {
         self.selectedFrameRate = frameRate
         self.selectedResolution = resolution
         self.selectedCodec = codec
-    }
-    
-    func setupVideoDataOutput() {
-        guard videoDataOutput == nil else {
-            logger.info("Video data output already configured.")
-            return
-        }
-        videoDataOutput = AVCaptureVideoDataOutput()
-        videoDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
-        if session.canAddOutput(videoDataOutput!) {
-            session.addOutput(videoDataOutput!)
-            logger.info("Added video data output to session")
-        } else {
-            logger.error("Failed to add video data output to session")
-        }
     }
     
     func setupAudioDataOutput() {
@@ -500,6 +484,57 @@ class RecordingService: NSObject {
         }
         
         return sampleBuffer
+    }
+    
+    // Add new method to process sample buffers from CameraViewModel
+    func process(sampleBuffer: CMSampleBuffer) {
+        guard isRecording else { return }
+        
+        if let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
+           CMFormatDescriptionGetMediaType(formatDescription) == kCMMediaType_Video {
+            videoFrameCount += 1
+            
+            // Process video frame
+            do {
+                if assetWriter?.status == .unknown {
+                    let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                    recordingStartTime = startTime
+                    assetWriter?.startWriting()
+                    assetWriter?.startSession(atSourceTime: startTime)
+                }
+                
+                if assetWriter?.status == .writing {
+                    if let input = assetWriterInput, input.isReadyForMoreMediaData {
+                        // If we have a Metal processor and LUT baking is enabled, process the frame
+                        if isBakeInLUTEnabled, let processor = metalFrameProcessor {
+                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                                if let processedBuffer = processor.processFrame(pixelBuffer: pixelBuffer, bakeInLUT: true) {
+                                    let success = assetWriterPixelBufferAdaptor?.append(processedBuffer, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) ?? false
+                                    if success {
+                                        successfulVideoFrames += 1
+                                    } else {
+                                        failedVideoFrames += 1
+                                        logger.error("Failed to append processed video frame")
+                                    }
+                                }
+                            }
+                        } else {
+                            // Direct append without processing
+                            let success = input.append(sampleBuffer)
+                            if success {
+                                successfulVideoFrames += 1
+                            } else {
+                                failedVideoFrames += 1
+                                logger.error("Failed to append video frame")
+                            }
+                        }
+                    }
+                }
+            } catch {
+                logger.error("Error processing video frame: \(error.localizedDescription)")
+                failedVideoFrames += 1
+            }
+        }
     }
 }
 

@@ -15,11 +15,13 @@ class CameraSetupService {
     private weak var delegate: CameraSetupServiceDelegate?
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var exposureService: ExposureService
+    private weak var viewModelDelegate: CameraViewModel?
     
-    init(session: AVCaptureSession, exposureService: ExposureService, delegate: CameraSetupServiceDelegate) {
+    init(session: AVCaptureSession, exposureService: ExposureService, delegate: CameraSetupServiceDelegate, viewModel: CameraViewModel) {
         self.session = session
         self.exposureService = exposureService
         self.delegate = delegate
+        self.viewModelDelegate = viewModel
     }
     
     func setupSession() throws {
@@ -97,6 +99,10 @@ class CameraSetupService {
             session.commitConfiguration()
             return
         }
+        
+        logger.info("Setting up video data output via ViewModel delegate...")
+        let _ = print("DEBUG_DEVICE: CameraSetupService calling setupUnifiedVideoOutput on delegate: \(viewModelDelegate != nil ? "VALID" : "NIL")")
+        viewModelDelegate?.setupUnifiedVideoOutput()
         
         // Commit configuration after all settings are applied
         session.commitConfiguration()

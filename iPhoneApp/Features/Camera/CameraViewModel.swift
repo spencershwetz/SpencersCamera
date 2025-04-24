@@ -380,6 +380,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Add a dedicated queue for session operations
     private let sessionQueue = DispatchQueue(label: "com.camera.sessionQueue", qos: .userInitiated)
     
+    // Unified video output
+    private let processingQueue = DispatchQueue(label: "com.spencerscamera.processing", qos: .userInitiated)
+    private var unifiedVideoOutput: AVCaptureVideoDataOutput?
+    var metalPreviewDelegate: MetalPreviewView?
+    
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
         
@@ -508,7 +513,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     deinit {
-        logger.info("Deinitializing CameraViewModel")
+        logger.info("[LIFECYCLE] CameraViewModel DEINIT")
         // Remove all notification observers FIRST
         NotificationCenter.default.removeObserver(self)
 
@@ -548,7 +553,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Initialize services with self as delegate
         // Ensure ExposureService is initialized before CameraSetupService
         exposureService = ExposureService(delegate: self)
-        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self) // Pass exposureService
+        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self) // Pass self (ViewModel) here
         recordingService = RecordingService(session: session, delegate: self)
         // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
         recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
@@ -1275,8 +1280,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         exposureService.removeDeviceObservers()
 
         // --- Handle 'Cannot Record' error by reconfiguring session ---
-        if specificErrorCode == .cannotRecord {
-            logger.error("[SessionControl] CannotRecord error detected. Reconfiguring session...")
+        if specificErrorCode == .mediaServicesWereReset || specificErrorCode == .sessionWasInterrupted {
+            logger.error("[SessionControl] Recording/Session error detected. Reconfiguring session...")
             sessionQueue.async { [weak self] in
                 guard let self = self else { return }
                 do {
@@ -1310,6 +1315,198 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.error = .sessionRuntimeError(code: specificErrorCode?.rawValue ?? -1)
         }
         // DO NOT restart session here for generic errors
+    }
+
+    func setupUnifiedVideoOutput() {
+        logger.info("Setting up unified video output")
+        session.beginConfiguration()
+        
+        // Remove any existing video outputs
+        session.outputs.forEach { output in
+            if output is AVCaptureVideoDataOutput {
+                session.removeOutput(output)
+            }
+        }
+        
+        // Create and configure the unified video output
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.setSampleBufferDelegate(self, queue: processingQueue)
+        
+        // Set video settings for Metal compatibility
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferMetalCompatibilityKey as String: true
+        ]
+        
+        // Ensure we don't drop frames
+        videoOutput.alwaysDiscardsLateVideoFrames = false
+        
+        if session.canAddOutput(videoOutput) {
+            session.addOutput(videoOutput)
+            unifiedVideoOutput = videoOutput
+            
+            // Configure video connection
+            if let connection = videoOutput.connection(with: .video) {
+                // Enable video stabilization if available
+                if connection.isVideoStabilizationSupported {
+                    connection.preferredVideoStabilizationMode = .auto
+                }
+                
+                // Set video orientation
+                connection.videoRotationAngle = 0  // 0 degrees for portrait
+                
+                logger.info("UNIFIED_VIDEO: Connection configured - rotation: \(connection.videoRotationAngle)°, stabilization: \(connection.isVideoStabilizationEnabled)")
+            }
+        } else {
+            logger.error("Failed to add unified video output to session")
+        }
+        
+        session.commitConfiguration()
+    }
+
+    // Update the AVCaptureVideoDataOutputSampleBufferDelegate method
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // ---> REMOVE ASYNC DISPATCH - Already on processingQueue <--- 
+        // processingQueue.async { [weak self] in 
+            // Use direct self reference now
+            // guard let self = self else { return }
+            
+            // Determine if the buffer is video or audio
+            if output == self.unifiedVideoOutput {
+                // ---> REMOVE PRINT 1 <--- 
+                // let _ = print("DEBUG_DEVICE: CameraViewModel.captureOutput received VIDEO frame")
+                // Video Frame Processing
+                self.videoFrameCount += 1
+                // logger.trace("VID FRAME #\\(self.videoFrameCount)") // Removed excessive log
+
+                guard CMSampleBufferIsValid(sampleBuffer) else {
+                    logger.error("[VideoCapture] Invalid sample buffer received")
+                    return
+                }
+                
+                // Create a copy of the sample buffer for processing
+                var copiedBuffer: CMSampleBuffer?
+                let copyStatus = CMSampleBufferCreateCopy(allocator: kCFAllocatorDefault, sampleBuffer: sampleBuffer, sampleBufferOut: &copiedBuffer)
+                
+                guard copyStatus == noErr, let copiedBuffer = copiedBuffer else {
+                    logger.error("[VideoCapture] Failed to copy sample buffer: \(copyStatus)")
+                    return
+                }
+
+                // ---> ADD CHECK FOR NIL DELEGATE <--- 
+                if self.metalPreviewDelegate == nil {
+                    // Only print this periodically to avoid flooding console if it's always nil
+                    if self.videoFrameCount % 60 == 0 { // Print once every ~2 seconds at 30fps
+                        print("DEBUG_DEVICE: metalPreviewDelegate is NIL in captureOutput (frame #\(self.videoFrameCount))")
+                    }
+                }
+                // ---> END CHECK <--- 
+                
+                // Call directly on processingQueue
+                self.metalPreviewDelegate?.updateTexture(with: copiedBuffer)
+                
+                // Forward to recording service if recording
+                if self.isRecording {
+                    self.recordingService?.process(sampleBuffer: copiedBuffer)
+                }
+                
+                // Log frame processing for debugging
+                if self.videoFrameCount % self.frameRateUpdateInterval == 0 {
+                    logger.debug("[VideoCapture] Processed \(self.videoFrameCount) frames")
+                }
+            } else {
+                // Audio Frame Processing
+                self.audioFrameCount += 1
+                // logger.trace("AUD FRAME #\(self.audioFrameCount)") // Removed excessive log
+            }
+        // } // End removed async dispatch
+        // ---> END REMOVAL <--- 
+    }
+
+    // Add method to set recording service
+    func setRecordingService(_ service: RecordingService) {
+        self.recordingService = service
+    }
+
+    func configureSession() {
+        sessionQueue.async {
+            self.session.beginConfiguration()
+            
+            // Configure inputs
+            self.configureVideoInput()
+            self.configureAudioInput()
+            
+            // Configure unified video output
+            self.setupUnifiedVideoOutput()
+            
+            self.session.commitConfiguration()
+            
+            // Start running the session
+            self.session.startRunning()
+            self.isSessionRunning = self.session.isRunning
+        }
+    }
+
+    private func configureVideoInput() {
+        logger.info("Configuring video input")
+        
+        // Remove any existing video inputs
+        session.inputs.forEach { input in
+            if input.ports.contains(where: { $0.mediaType == .video }) {
+                session.removeInput(input)
+            }
+        }
+        
+        // Get the default video device
+        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            logger.error("Failed to get default video device")
+            return
+        }
+        
+        do {
+            // Create and add video device input
+            let videoInput = try AVCaptureDeviceInput(device: videoDevice)
+            if session.canAddInput(videoInput) {
+                session.addInput(videoInput)
+                self.videoDeviceInput = videoInput
+                self.device = videoDevice
+                logger.info("Successfully added video input to session")
+            } else {
+                logger.error("Could not add video device input to session")
+            }
+        } catch {
+            logger.error("Error creating video device input: \(error.localizedDescription)")
+        }
+    }
+
+    private func configureAudioInput() {
+        logger.info("Configuring audio input")
+        
+        // Remove any existing audio inputs
+        session.inputs.forEach { input in
+            if input.ports.contains(where: { $0.mediaType == .audio }) {
+                session.removeInput(input)
+            }
+        }
+        
+        // Get the default audio device
+        guard let audioDevice = AVCaptureDevice.default(for: .audio) else {
+            logger.error("Failed to get default audio device")
+            return
+        }
+        
+        do {
+            // Create and add audio device input
+            let audioInput = try AVCaptureDeviceInput(device: audioDevice)
+            if session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                logger.info("Successfully added audio input to session")
+            } else {
+                logger.error("Could not add audio device input to session")
+            }
+        } catch {
+            logger.error("Error creating audio device input: \(error.localizedDescription)")
+        }
     }
 }
 

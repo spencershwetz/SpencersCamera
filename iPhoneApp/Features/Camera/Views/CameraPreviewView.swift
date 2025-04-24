@@ -13,6 +13,15 @@ struct CameraPreviewView: UIViewRepresentable {
     // Logger for CameraPreviewView (UIViewRepresentable part)
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewRepresentable")
 
+    // ---> ADD INIT LOG <---
+    init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
+        self.session = session
+        self.lutManager = lutManager
+        self.viewModel = viewModel
+        logger.info("[LIFECYCLE] CameraPreviewView (Representable) INIT")
+    }
+    // ---> END INIT LOG <---
+
     func makeUIView(context: Context) -> MTKView {
         logger.info("makeUIView: Creating MTKView")
         
@@ -22,35 +31,8 @@ struct CameraPreviewView: UIViewRepresentable {
 
         // Create and assign the delegate, passing the lutManager
         let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager)
-        context.coordinator.metalDelegate = metalDelegate
-        
-        // Setup video output and store it on coordinator
-        let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.setSampleBufferDelegate(context.coordinator, queue: DispatchQueue(label: "com.spencershwetz.spencerscamera.videoQueue"))
-        context.coordinator.videoOutput = videoOutput  // Add storing of output reference
-        
-        // Configure video output settings
-        videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
-        
-        // Add output to session
-        session.beginConfiguration()
-        if session.canAddOutput(videoOutput) {
-            session.addOutput(videoOutput)
-            
-            // Ensure connection orientation is correct
-            if let connection = videoOutput.connection(with: .video) {
-                // Log connection info
-                logger.info("PREVIEW_ORIENT: Connection videoRotationAngle: \(connection.videoRotationAngle)° (Should be 0)") // Verify it's 0
-                logger.info("PREVIEW_ORIENT: Connection active: \(connection.isActive), enabled: \(connection.isEnabled)")
-                logger.info("PREVIEW_ORIENT: Connection videoOrientation: \(connection.videoOrientation.rawValue)")
-                logger.info("PREVIEW_ORIENT: Connection videoMirrored: \(connection.isVideoMirrored)")
-            }
-        } else {
-            logger.error("Could not add video output to session")
-        }
-        session.commitConfiguration()
+        viewModel.metalPreviewDelegate = metalDelegate
+        let _ = print("DEBUG_DEVICE: Assigned metalPreviewDelegate in makeUIView. Delegate: \(metalDelegate)")
         
         // Ensure initial layout
         mtkView.setNeedsLayout()
@@ -58,16 +40,6 @@ struct CameraPreviewView: UIViewRepresentable {
         
         logger.info("makeUIView: MTKView and MetalPreviewView delegate created.")
         return mtkView
-    }
-    
-    /// Properly remove the preview output when the view is torn down
-    func dismantleUIView(_ uiView: MTKView, coordinator: Coordinator) {
-        session.beginConfiguration()
-        if let output = coordinator.videoOutput {
-            session.removeOutput(output)
-            logger.info("Removed preview videoOutput in dismantleUIView")
-        }
-        session.commitConfiguration()
     }
     
     func updateUIView(_ uiView: MTKView, context: Context) {
@@ -79,20 +51,13 @@ struct CameraPreviewView: UIViewRepresentable {
         return Coordinator(parent: self)
     }
     
-    class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    class Coordinator: NSObject {
         var parent: CameraPreviewView
-        var metalDelegate: MetalPreviewView?
-        var videoOutput: AVCaptureVideoDataOutput?  // Store reference for removal
         
         init(parent: CameraPreviewView) {
             self.parent = parent
             super.init()
             parent.logger.info("Coordinator initialized.")
-        }
-        
-        func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-            // Pass the frame to our Metal preview
-            metalDelegate?.updateTexture(with: sampleBuffer)
         }
     }
 }

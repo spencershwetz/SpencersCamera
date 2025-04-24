@@ -155,43 +155,64 @@ struct CameraView: View {
     private var cameraPreview: some View {
         GeometryReader { geometry in
             Group {
-                if viewModel.isSessionRunning {
-                    // Camera is running - show camera preview
-                    CameraPreviewView(
-                        session: viewModel.session,
-                        lutManager: viewModel.lutManager,
-                        viewModel: viewModel
-                    )
-                    .aspectRatio(9.0/16.0, contentMode: .fit)
-                    .scaleEffect(0.9)
-                    .clipped()
-                    .padding(.top, geometry.safeAreaInsets.top + 10)
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .topLeading) {
-                        if settings.isDebugEnabled {
-                            debugOverlay
-                                .padding(.top, geometry.safeAreaInsets.top + 70)
-                                .padding(.leading, 20)
-                        }
-                    }
+                #if DEBUG
+                // Check if running in Xcode Preview environment
+                if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" {
+                    let _ = print("DEBUG: Running in Xcode Preview, showing placeholder.")
+                    // Always show placeholder in Xcode Previews
+                    PlaceholderCameraPreview()
+                         .padding(.top, geometry.safeAreaInsets.top + 10) // Apply similar padding
+                         .frame(maxWidth: .infinity)
                 } else {
-                    // Show loading or error state
-                    VStack {
-                        Text("Starting camera...")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        if viewModel.status == .failed, let error = viewModel.error {
-                            Text("Error: \(error.description)")
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .padding()
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.black)
+                    // Running on actual device or simulator, use live preview logic
+                    liveCameraPreview(geometry: geometry)
+                }
+                #else
+                // In release builds, always use live preview logic
+                liveCameraPreview(geometry: geometry)
+                #endif
+            }
+        }
+    }
+    
+    // Helper function extracted to avoid duplication
+    @ViewBuilder
+    private func liveCameraPreview(geometry: GeometryProxy) -> some View {
+        if viewModel.isSessionRunning {
+            // Camera is running - show camera preview
+            CameraPreviewView(
+                session: viewModel.session,
+                lutManager: viewModel.lutManager,
+                viewModel: viewModel
+            )
+            .aspectRatio(9.0/16.0, contentMode: .fit)
+            .scaleEffect(0.9)
+            .clipped()
+            .padding(.top, geometry.safeAreaInsets.top + 10)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .topLeading) {
+                if settings.isDebugEnabled {
+                    debugOverlay
+                        .padding(.top, geometry.safeAreaInsets.top + 70)
+                        .padding(.leading, 20)
                 }
             }
+        } else {
+            // Show loading or error state
+            VStack {
+                Text("Starting camera...")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                if viewModel.status == .failed, let error = viewModel.error {
+                    Text("Error: \(error.description)")
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                        .padding()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black)
         }
     }
     
@@ -376,9 +397,44 @@ struct CameraView: View {
     }
 }
 
-// Add preview at the bottom of the file
-#Preview("Camera View") {
-    CameraView(viewModel: CameraViewModel())
-        .preferredColorScheme(.dark)
-        .environment(\.colorScheme, .dark)
+// MARK: - Preview
+
+#if DEBUG
+struct CameraView_Previews: PreviewProvider {
+    static var previews: some View {
+        // Create a dummy/mock SettingsModel for the preview
+        let mockSettings = SettingsModel()
+        
+        // Create a CameraViewModel instance JUST for the preview.
+        // IMPORTANT: This still runs the CameraViewModel init logic, which tries
+        // to set up the camera. For a truly isolated preview, you'd create a
+        // MockCameraViewModel protocol/class that doesn't touch AVCaptureSession.
+        // However, for just displaying the UI structure, this might be sufficient,
+        // although the preview might still log errors from the ViewModel init.
+        let previewViewModel = CameraViewModel(settingsModel: mockSettings)
+
+        // Inject a mock SettingsModel into the environment for the preview
+        CameraView(viewModel: previewViewModel)
+            .environmentObject(mockSettings) // Provide the mock SettingsModel
+            .preferredColorScheme(.dark) // Example: force dark mode for preview
+            .onAppear {
+                 // Optionally simulate states for previewing UI elements
+                 // previewViewModel.isSessionRunning = false // Simulate loading state
+                 // previewViewModel.error = CameraError.cameraUnavailable // Simulate error state
+                 // previewViewModel.isRecording = true // Simulate recording state
+            }
+    }
 }
+
+// Simple placeholder for the camera feed in previews if CameraPreviewView causes issues
+struct PlaceholderCameraPreview: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.secondary) // Use a gray color
+            .aspectRatio(9.0/16.0, contentMode: .fit)
+            .scaleEffect(0.9)
+            .clipped()
+            .overlay(Text("Camera Preview").foregroundColor(.white))
+    }
+}
+#endif

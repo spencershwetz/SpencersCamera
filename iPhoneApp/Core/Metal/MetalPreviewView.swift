@@ -65,7 +65,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         mtkView.delegate = self
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.framebufferOnly = true
-        mtkView.preferredFramesPerSecond = 60
+        mtkView.preferredFramesPerSecond = 30
         mtkView.enableSetNeedsDisplay = false // Use continuous rendering
         mtkView.isPaused = false
         
@@ -117,7 +117,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         let mediaTypeUInt = CMFormatDescriptionGetMediaType(CMSampleBufferGetFormatDescription(sampleBuffer)!)
         let _ = FourCCString(mediaTypeUInt) // Convert media type code (Marked as unused)
         let formatStr = FourCCString(pixelFormat) // Convert pixel format code
-        // logger.debug("Received pixel buffer: Format=\(formatStr) (\(pixelFormat)), MediaType=\(mediaTypeStr) (\(mediaTypeUInt))")
         
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
@@ -134,8 +133,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // ---> ADD: Flush cache before creating textures <--- 
         CVMetalTextureCacheFlush(textureCache, 0)
-        // logger.trace("Flushed Metal texture cache.") // REMOVED
-        // ---> END FLUSH <--- 
         
         var textureRef: CVMetalTexture? // Temporary ref for cache function
         
@@ -146,6 +143,14 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 .bgra8Unorm, width, height, 0, &textureRef
             )
             
+            // ---> LOG TEXTURE CREATION RESULT <---
+            if result != kCVReturnSuccess {
+                logger.error("BGRA Texture Creation FAILED: Result Code \(result)")
+            } else {
+                // logger.trace("BGRA Texture Creation SUCCESS") // Optional success log
+            }
+            // ---> END LOG <---
+
             guard result == kCVReturnSuccess, let unwrappedTextureRef = textureRef else {
                 logger.warning("Failed to create BGRA Metal texture from pixel buffer")
                 return
@@ -155,17 +160,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             chromaTexture = nil
             
         } else if pixelFormat == 2016686642 { // 'x422' 10-bit Biplanar Apple Log format
-            // logger.info("Handling Apple Log 'x422' 10-bit format")
             // --- Handle YUV 422 10-bit Bi-Planar (Apple Log 'x422') ---
-            
-            // Log detailed format information
-            // logger.info("Apple Log Format details:")
-            // for i in 0..<CVPixelBufferGetPlaneCount(pixelBuffer) {
-            //     let planeWidth = CVPixelBufferGetWidthOfPlane(pixelBuffer, i)
-            //     let planeHeight = CVPixelBufferGetHeightOfPlane(pixelBuffer, i)
-            //     let planeBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, i)
-            //     logger.info("  Plane \(i): Width=\(planeWidth), Height=\(planeHeight), BytesPerRow=\(planeBytesPerRow)")
-            // }
             
             // Create Luma (Y) texture (Plane 0)
             var lumaTextureRef: CVMetalTexture?
@@ -178,6 +173,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 &lumaTextureRef
             )
             
+            // ---> LOG TEXTURE CREATION RESULT <---
+            if lumaResult != kCVReturnSuccess {
+                logger.error("YUV Luma Texture Creation FAILED: Result Code \(lumaResult)")
+            }
+            // ---> END LOG <---
+            
             // Create Chroma (CbCr) texture (Plane 1)
             var chromaTextureRef: CVMetalTexture?
             let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
@@ -189,6 +190,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 &chromaTextureRef
             )
             
+            // ---> LOG TEXTURE CREATION RESULT <---
+            if chromaResult != kCVReturnSuccess {
+                logger.error("YUV Chroma Texture Creation FAILED: Result Code \(chromaResult)")
+            }
+            // ---> END LOG <---
+            
             guard lumaResult == kCVReturnSuccess, let unwrappedLumaRef = lumaTextureRef,
                   chromaResult == kCVReturnSuccess, let unwrappedChromaRef = chromaTextureRef else {
                 logger.warning("Failed to create YUV Metal textures. Luma result: \(lumaResult), Chroma result: \(chromaResult)")
@@ -199,12 +206,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef) 
             chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
             bgraTexture = nil // Ensure BGRA texture is nil
-            
-            // --- Code related to chromaTex and chromaRegion remains commented out --- 
-            // // Update internal textures - No need for chromaTex or chromaRegion variables
-            // self.textureY = yTexture
-            // self.textureCbCr = cbcrTexture
-            // ... etc ...
             
         } else {
             logger.warning("Ignoring unsupported pixel format: \(formatStr)")
@@ -225,19 +226,15 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
-        // logger.trace("MTKViewDelegate: draw(in:) called.") // REMOVED
-
         guard let currentDrawable = view.currentDrawable,
               let renderPassDescriptor = view.currentRenderPassDescriptor else {
             // Textures might not be ready yet, or drawable isn't available
-            // logger.trace("MTKViewDelegate: draw(in:) exiting early - currentDrawable or renderPassDescriptor nil.") // REMOVED Log
             return
         }
         
         _ = inFlightSemaphore.wait(timeout: .now() + .milliseconds(16))
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            // logger.warning("MTKViewDelegate: draw(in:) failed to make command buffer.") // REMOVED Log
             inFlightSemaphore.signal()
             return
         }
@@ -260,14 +257,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         if currentPixelFormat == kCVPixelFormatType_32BGRA, let texture = bgraTexture {
             // Render BGRA Texture
             renderEncoder.setRenderPipelineState(rgbPipelineState)
-            // logger.trace("MTKViewDelegate: draw(in:) - Using BGRA pipeline.") // REMOVED
             renderEncoder.setFragmentTexture(texture, index: 0)
             renderEncoder.setFragmentTexture(lutTexture, index: 1)
         } else if currentPixelFormat == 2016686642,
                   let yTexture = lumaTexture, let cbcrTexture = chromaTexture {
             // Render YUV Texture
             renderEncoder.setRenderPipelineState(yuvPipelineState)
-            // logger.trace("MTKViewDelegate: draw(in:) - Using YUV pipeline.") // REMOVED
             renderEncoder.setFragmentTexture(yTexture, index: 0)
             renderEncoder.setFragmentTexture(cbcrTexture, index: 1)
             renderEncoder.setFragmentTexture(lutTexture, index: 2)
@@ -277,7 +272,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setFragmentBytes(&isLUTActive, length: MemoryLayout<Bool>.size, index: 0) // Pass boolean to shader buffer 0
             // --- End Pass isLUTActive ---
         } else {
-            // logger.warning("MTKViewDelegate: draw(in:) - No valid textures available for current format (\(FourCCString(self.currentPixelFormat))). Cannot draw.") // REMOVED Log
             renderEncoder.endEncoding()
             commandBuffer.commit() // Commit empty command buffer
             inFlightSemaphore.signal()
@@ -294,4 +288,10 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         commandBuffer.present(currentDrawable)
         commandBuffer.commit()
     }
+    
+    // ---> ADD DEINIT <--- 
+    deinit {
+        logger.info("MetalPreviewView DEINIT")
+    }
+    // ---> END DEINIT <--- 
 } 
