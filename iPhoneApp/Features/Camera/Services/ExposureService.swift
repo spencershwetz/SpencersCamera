@@ -104,7 +104,7 @@ class ExposureService: NSObject {
         // Observe white balance gains changes
         whiteBalanceGainsObservation = device.observe(\.deviceWhiteBalanceGains, options: [.new]) { [weak self] device, change in
             // Use the dedicated handler function
-            self?.handleWhiteBalanceGainsChange(device: device, change: change)
+            self?.handleWhiteBalanceGainsChange(device, change: change)
         }
         
         // Observe exposure target offset for Shutter Priority
@@ -675,7 +675,6 @@ class ExposureService: NSObject {
         // Ensure SP is active and we have the necessary info
         guard isShutterPriorityActive,
               let targetDuration = targetShutterDuration,
-              let device = device,
               let newOffset = change.newValue else {
             // logger.debug("SP Adjust: KVO ignored (SP inactive or missing data)")
             return
@@ -810,26 +809,20 @@ class ExposureService: NSObject {
             return nil
         }
 
-        do {
-            // Attempt the conversion within a do-catch block
-            let tempAndTint = try device.temperatureAndTintValues(for: gains)
-            // Additional sanity check (optional but good practice)
-            guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
-                logger.warning("Conversion resulted in non-finite temp/tint: Temp=\\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
-                return nil
-            }
-            return tempAndTint
-        } catch {
-            // Log the specific error if conversion fails
-            logger.error("Error converting white balance gains to temperature/tint: \\(error.localizedDescription). Gains were: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain)")
+        // Attempt the conversion (no try needed)
+        let tempAndTint = device.temperatureAndTintValues(for: gains)
+        // Additional sanity check (optional but good practice)
+        guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
+            logger.warning("Conversion resulted in non-finite temp/tint: Temp=\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
             return nil
         }
+        return tempAndTint
     }
 
     // MARK: - KVO Handlers (Adjusted)
 
     // Observe white balance gains changes
-    private func handleWhiteBalanceGainsChange(device: AVCaptureDevice, change: NSKeyValueObservedChange<AVCaptureDevice.WhiteBalanceGains>) {
+    private func handleWhiteBalanceGainsChange(_: AVCaptureDevice, change: NSKeyValueObservedChange<AVCaptureDevice.WhiteBalanceGains>) {
         print("[TEMP DEBUG] WB KVO Callback Entered!")
         guard let newGains = change.newValue else {
             print("[TEMP DEBUG] WB KVO: No new gains value, exiting callback.")
@@ -838,12 +831,12 @@ class ExposureService: NSObject {
 
         // Use the safe helper function
         if let tempAndTint = safeGetTemperatureAndTint(for: newGains) {
-            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \\(tempAndTint.temperature), tint: \\(tempAndTint.tint)")
+            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \(tempAndTint.temperature), tint: \(tempAndTint.tint)")
 
             if delegate == nil {
                 logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
             } else {
-                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\\(tempAndTint.temperature), tint: \\(tempAndTint.tint)) (Synchronous Call)")
+                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\(tempAndTint.temperature), tint: \(tempAndTint.tint)) (Synchronous Call)")
                 // Ensure delegate update happens on the main thread
                  DispatchQueue.main.async { [weak self] in
                      self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass both values

@@ -495,44 +495,39 @@ class RecordingService: NSObject {
             videoFrameCount += 1
             
             // Process video frame
-            do {
-                if assetWriter?.status == .unknown {
-                    let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-                    recordingStartTime = startTime
-                    assetWriter?.startWriting()
-                    assetWriter?.startSession(atSourceTime: startTime)
-                }
-                
-                if assetWriter?.status == .writing {
-                    if let input = assetWriterInput, input.isReadyForMoreMediaData {
-                        // If we have a Metal processor and LUT baking is enabled, process the frame
-                        if isBakeInLUTEnabled, let processor = metalFrameProcessor {
-                            if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
-                                if let processedBuffer = processor.processFrame(pixelBuffer: pixelBuffer, bakeInLUT: true) {
-                                    let success = assetWriterPixelBufferAdaptor?.append(processedBuffer, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) ?? false
-                                    if success {
-                                        successfulVideoFrames += 1
-                                    } else {
-                                        failedVideoFrames += 1
-                                        logger.error("Failed to append processed video frame")
-                                    }
+            if assetWriter?.status == .unknown {
+                let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                recordingStartTime = startTime
+                assetWriter?.startWriting()
+                assetWriter?.startSession(atSourceTime: startTime)
+            }
+            
+            if assetWriter?.status == .writing {
+                if let input = assetWriterInput, input.isReadyForMoreMediaData {
+                    // If we have a Metal processor and LUT baking is enabled, process the frame
+                    if isBakeInLUTEnabled, let processor = metalFrameProcessor {
+                        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                            if let processedBuffer = processor.processFrame(pixelBuffer: pixelBuffer, bakeInLUT: true) {
+                                let success = assetWriterPixelBufferAdaptor?.append(processedBuffer, withPresentationTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)) ?? false
+                                if success {
+                                    successfulVideoFrames += 1
+                                } else {
+                                    failedVideoFrames += 1
+                                    logger.error("Failed to append processed video frame")
                                 }
                             }
+                        }
+                    } else {
+                        // Direct append without processing
+                        let success = input.append(sampleBuffer)
+                        if success {
+                            successfulVideoFrames += 1
                         } else {
-                            // Direct append without processing
-                            let success = input.append(sampleBuffer)
-                            if success {
-                                successfulVideoFrames += 1
-                            } else {
-                                failedVideoFrames += 1
-                                logger.error("Failed to append video frame")
-                            }
+                            failedVideoFrames += 1
+                            logger.error("Failed to append video frame")
                         }
                     }
                 }
-            } catch {
-                logger.error("Error processing video frame: \(error.localizedDescription)")
-                failedVideoFrames += 1
             }
         }
     }
@@ -568,7 +563,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             if shouldLog {
                 
                 // Log sample buffer orientation info
-                if let orientationAttachment = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data {
+                if let _ = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data { // <-- Check existence only
                     // The presence of this attachment often implies orientation info, though not directly the angle.
                 } else {
                 }
@@ -638,7 +633,6 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                    let pixelBuffer = CMSampleBufferGetImageBuffer(bufferToAppend) { // Get pixel buffer from the final sample buffer
                     
                     let presentationTime = CMSampleBufferGetPresentationTimeStamp(bufferToAppend)
-                    let appendStartTime = Date.nowTimestamp() // START APPEND TIMER
 
                     // --> Use the Pixel Buffer Adaptor <--
                     if let adaptor = assetWriterPixelBufferAdaptor {
@@ -650,13 +644,6 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                          logger.error("Error: assetWriterPixelBufferAdaptor is nil for frame #\(self.videoFrameCount). Skipping append.")
                     }
                     // --> END Use the Pixel Buffer Adaptor <--
-
-                    let appendEndTime = Date.nowTimestamp() // END APPEND TIMER
-                    
-                    // Optional: Log append time if needed
-                    // if shouldLog {
-                    //     logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] Append time: \(String(format: "%.6f", appendEndTime - appendStartTime))s")
-                    // }
                 } else {
                      // This case handles if bufferToAppend is nil OR getting pixelBuffer failed
                      failedVideoFrames += 1

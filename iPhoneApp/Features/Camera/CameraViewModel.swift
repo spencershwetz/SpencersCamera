@@ -1355,7 +1355,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 // Set video orientation
                 connection.videoRotationAngle = 0  // 0 degrees for portrait
                 
-                logger.info("UNIFIED_VIDEO: Connection configured - rotation: \(connection.videoRotationAngle)°, stabilization: \(connection.isVideoStabilizationEnabled)")
+                logger.info("UNIFIED_VIDEO: Connection configured - rotation: \(connection.videoRotationAngle)°, stabilization: \((connection.activeVideoStabilizationMode != .off))")
             }
         } else {
             logger.error("Failed to add unified video output to session")

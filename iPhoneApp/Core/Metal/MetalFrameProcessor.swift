@@ -108,7 +108,7 @@ class MetalFrameProcessor {
                  // CVMetalTextureCacheFlush(cache, 0) // Flush if we created textures before this check? Maybe not needed yet.
                  return nil // Signal to use original buffer
              }
-             guard let currentLUTTexture = lutTexture else {
+             guard lutTexture != nil else {
                  logger.warning("Bake-in requested for YUV (v210) but no LUT texture set. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil
@@ -145,7 +145,7 @@ class MetalFrameProcessor {
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil // Signal to use original buffer
              }
-             guard let currentLUTTexture = lutTexture else {
+             guard lutTexture != nil else {
                  logger.warning("Bake-in requested for YUV (x422 - Apple Log) but no LUT texture set. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil
@@ -182,7 +182,7 @@ class MetalFrameProcessor {
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil // Signal to use original buffer
              }
-             guard let currentLUTTexture = lutTexture else {
+             guard lutTexture != nil else {
                  logger.warning("Bake-in requested for YUV (420v/f) but no LUT texture set. Skipping Metal processing.")
                  // CVMetalTextureCacheFlush(cache, 0)
                  return nil

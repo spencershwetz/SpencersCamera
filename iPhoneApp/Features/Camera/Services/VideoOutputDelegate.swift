@@ -40,7 +40,7 @@ class VideoOutputDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         // --- Frame Processing ---
         // Always pass the raw sample buffer to the view model.
         if isLoggingFrame { logger.debug("VIDEOUTPUT: Calling viewModel.processVideoFrame...") }
-        viewModel.processVideoFrame(sampleBuffer) // Ignore return value warning
+        _ = viewModel.processVideoFrame(sampleBuffer) // Explicitly ignore return value
         
         // --- Remove Metal Preview Update --- 
         // This is handled elsewhere, likely triggered by the ViewModel.

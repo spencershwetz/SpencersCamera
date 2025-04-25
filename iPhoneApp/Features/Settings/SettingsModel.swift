@@ -184,10 +184,10 @@ class SettingsModel: ObservableObject {
         let finalCodecRaw = initialCodecRaw ?? defaultCodecRaw
         let finalFrameRate = initialFrameRate == 0.0 ? defaultFrameRate : initialFrameRate
         
-        var shouldWriteResolutionDefault = initialResolutionRaw == nil
-        var shouldWriteCodecDefault = initialCodecRaw == nil
-        var shouldWriteFrameRateDefault = initialFrameRate == 0.0
-        var shouldWriteDebugDefault = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) == nil
+        let shouldWriteResolutionDefault = initialResolutionRaw == nil
+        let shouldWriteCodecDefault = initialCodecRaw == nil
+        let shouldWriteFrameRateDefault = initialFrameRate == 0.0
+        let shouldWriteDebugDefault = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) == nil
 
         // 3. Initialize all @Published properties
         self.isAppleLogEnabled = initialAppleLogEnabled

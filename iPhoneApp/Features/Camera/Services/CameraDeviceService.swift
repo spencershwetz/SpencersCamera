@@ -113,18 +113,13 @@ class CameraDeviceService {
         }
 
         // ---> ADDED: Re-apply specific frame duration lock <---
-        do {
-            let frameDuration = self.videoFormatService.getFrameDuration(for: currentFPS)
-            if newDevice.activeVideoMinFrameDuration != frameDuration || newDevice.activeVideoMaxFrameDuration != frameDuration {
-                newDevice.activeVideoMinFrameDuration = frameDuration
-                newDevice.activeVideoMaxFrameDuration = frameDuration
-                logger.info("✅ [configureSession] Applied specific frame duration lock for \(currentFPS) FPS.")
-            } else {
-                logger.info("ℹ️ [configureSession] Device already locked to the correct frame duration for \(currentFPS) FPS.")
-            }
-        } catch {
-            logger.warning("⚠️ [configureSession] Could not get or apply frame duration lock: \(error.localizedDescription)")
-            // Potentially throw here if strict frame rate is essential?
+        let frameDuration = self.videoFormatService.getFrameDuration(for: currentFPS)
+        if newDevice.activeVideoMinFrameDuration != frameDuration || newDevice.activeVideoMaxFrameDuration != frameDuration {
+            newDevice.activeVideoMinFrameDuration = frameDuration
+            newDevice.activeVideoMaxFrameDuration = frameDuration
+            logger.info("✅ [configureSession] Applied specific frame duration lock for \(currentFPS) FPS.")
+        } else {
+            logger.info("ℹ️ [configureSession] Device already locked to the correct frame duration for \(currentFPS) FPS.")
         }
         // ---> END Added Code <---
         
