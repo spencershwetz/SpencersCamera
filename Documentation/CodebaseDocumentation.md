@@ -105,26 +105,31 @@ This document provides a detailed overview of key classes, components, and their
         *   Coordinates service interactions for setup, lens/zoom changes, format changes (resolution, FPS, Apple Log), exposure/WB changes, recording start/stop, exposure lock.
         *   Acts as delegate for all services (`CameraSetupServiceDelegate`, `RecordingServiceDelegate`, etc.) and `WCSessionDelegate`.
         *   Handles state updates from services/delegates and publishes changes via `@Published` properties.
-    *   **Services (`iPhoneApp/Features/Camera/Services`)**: 
-        *   `CameraSetupService`: Initializes the `AVCaptureSession`.
-        *   Finds the default video device and attempts to configure it early (within `session.begin/commitConfiguration`) including setting focus mode, white balance mode, and crucially, attempting to set the initial exposure mode to `.continuousAutoExposure`.
-        *   Adds video and audio inputs to the session.
-        *   Sets the session preset (`.hd4K3840x2160` preferred).
-        *   Handles camera permission checks and requests.
-        *   Starts the `AVCaptureSession` (`startRunning`).
         *   Includes logic after `startRunning` to *verify* and potentially *re-apply* the `.continuousAutoExposure` mode, as the session start can sometimes reset it. Notifies `ExposureService` of the final confirmed mode.
         *   Communicates session status, errors, and the initialized device back to the delegate (`CameraViewModel`).
-        *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), setting the `AVCaptureConnection.videoRotationAngle` for correct *preview* orientation, and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
+        *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
         *   `VideoFormatService`: Finds and applies `AVCaptureDevice.Format` based on resolution, FPS, and Apple Log requirement (`findBestFormat`). Updates frame rate durations (`updateFrameRate`). Configures device for Apple Log or resets it (`configureAppleLog`, `resetAppleLog`). Reapplies color space based on `isAppleLogEnabled` state (`reapplyColorSpaceSettings`).
         *   `ExposureService`: Holds a reference to the current `AVCaptureDevice`.
-        *   Initializes its internal `isAutoExposureEnabled` state based on the device's state when `setDevice` is called, attempting to set `.continuousAutoExposure` if supported.
+        *   Initializes its internal `isAutoExposureEnabled` state based on the device's state when `setDevice` is called, attempting to set `.continuousAutoExposure` if supported. Uses KVO to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` properties on the `AVCaptureDevice` to report real-time value changes to the delegate, ensuring UI reflects actual camera state.
         *   Provides methods to update white balance (`updateWhiteBalance`), ISO (`updateISO`), shutter speed (`updateShutterSpeed`), shutter angle (`updateShutterAngle`), tint (`updateTint`), and exposure lock (`setExposureLock`).
         *   **Shutter Priority**: 
             *   `enableShutterPriority(duration:)`: Sets mode to `.custom` with fixed `duration` and current ISO. Activates KVO on `exposureTargetOffset`.
             *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
             *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
             *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true` to pause auto-ISO adjustments.
-            *   `unlockShutterPriorityExposureAfterRecording()`: Sets `
+            *   `unlockShutterPriorityExposureAfterRecording()`: Sets `isTemporarilyLockedForRecording = false` and restores the exposure mode based on the situation (likely back to the SP custom mode with auto-ISO active, or continuous if SP was disabled). Reverts exposure mode to `.continuousAutoExposure` if supported, otherwise leaves it as is.
+        *   Communicates errors and manual value updates back to the delegate (`CameraViewModel`).
+        *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Before recording starts, calculates the recording orientation angle (using `UIDeviceOrientation.videoRotationAngleValue`) and applies the corresponding `CGAffineTransform` to the `AVAssetWriterInput.transform` property. Implements delegates to receive buffers. If LUT bake-in is enabled, passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer`. Appends frames using `AVAssetWriterInputPixelBufferAdaptor.append`. Saves finished video to `PHPhotoLibrary`. 
+        *   `VolumeButtonHandler`: Uses `AVCaptureEventInteraction` to trigger recording.
+    *   **Camera Feature**:
+        *   `CameraView` observes `CameraViewModel`. It uses `@StateObject` to manage an `AppLifecycleObserver` instance.
+        *   `AppLifecycleObserver` manages the `UIApplication.didBecomeActiveNotification` observer lifecycle and publishes an event when the app becomes active.
+        *   `CameraView` receives the event from `AppLifecycleObserver` and calls `startSession()` on the `CameraViewModel` to ensure the camera restarts when the app returns from the background.
+        *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings. It also sets the initial preview orientation via `AVCaptureConnection.videoRotationAngle` during video output setup.
+        *   `CameraSetupService` configures the `AVCaptureSession`, sets initial device settings (including attempting to set `.continuousAutoExposure` mode early and verifying after start), requests permissions, adds inputs, sets preset, calls `ViewModel` to setup video output, and reports status/device via delegate.
+        *   `CameraDeviceService` handles lens switching and zoom, interacting directly with `AVCaptureDevice`, coordinating with `VideoFormatService` for format/color space, and notifying `CameraViewModel` via delegate.
+        *   `VideoFormatService` sets resolution, frame rate, and color space (`isAppleLogEnabled` state) on `AVCaptureDevice`, coordinated by `CameraViewModel`.
+        *   `ExposureService` sets exposure mode, ISO, shutter, WB, tint based on `CameraViewModel` requests. It also attempts to set `.continuousAutoExposure` upon device initialization (`setDevice`), with the final state synchronized via `CameraSetupService`. It uses Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains` and `exposureTargetOffset` on the `AVCaptureDevice`. 
 *   **Settings**: 
     *   `SettingsModel` (`iPhoneApp/Features/Settings/SettingsModel.swift`): 
         *   `ObservableObject` with `@Published` properties for app settings.

@@ -6,31 +6,30 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-*   Feature: Implemented Shutter Priority mode (Function Button 2). Locks shutter speed (180°) and automatically adjusts ISO based on scene brightness changes (`ExposureService`, `CameraViewModel`).
+*   Feature: Implemented Shutter Priority mode (Function Button 2). Locks shutter speed (180°) and automatically adjusts ISO based on scene brightness changes (`ExposureService`, `CameraViewModel`). Uses KVO on `exposureTargetOffset`.
 *   Feature: Added temporary exposure lock during recording when Shutter Priority is active and "Lock Exposure During Recording" setting is enabled (`ExposureService`, `CameraViewModel`).
 *   Setting: Added "Lock Exposure During Recording" toggle in Settings.
-*   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts and restore the previous state when recording stops, if the setting is enabled.
+*   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts (standard AE lock or temporary SP lock) and restore the previous state when recording stops, if the setting is enabled.
+*   Core: Added `AppLifecycleObserver` to manage `didBecomeActiveNotification` observation cleanly within `CameraView`'s lifecycle.
 
 ### Changed
 
-*   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice`.
+*   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice` for real-time updates and Shutter Priority logic.
+*   Refined exposure locking logic in `CameraViewModel` to correctly handle interaction between standard AE lock and Shutter Priority's temporary recording lock.
 *   Adjusted camera preview position and scale using `.scaleEffect(0.9)` and padding in `CameraView`.
+*   Improved initialization sequence in `CameraSetupService` and `ExposureService` to more reliably set `.continuousAutoExposure` mode on startup.
+*   Updated `RecordingService` to calculate video orientation transform using `UIDeviceOrientation.videoRotationAngleValue` instead of relying on potentially deprecated properties.
 
 ### Fixed
 
 *   Resolved issue where camera preview would not restart after the app returned from the background by using `AppLifecycleObserver` to trigger `startSession`.
-*   Correctly handled `UIApplication.didBecomeActiveNotification` observer lifecycle using `ObservableObject` (`AppLifecycleObserver`) to prevent logging loops and ensure proper removal.
-*   Resolved issue where ISO would incorrectly continue to adjust during recording when Shutter Priority and "Lock Exposure During Recording" were both enabled. Decoupled UI lock state (`isExposureLocked`) from internal SP recording lock logic in `CameraViewModel`.
+*   Correctly handled `UIApplication.didBecomeActiveNotification` observer lifecycle using `AppLifecycleObserver` to prevent potential issues and ensure proper removal.
+*   Resolved issue where ISO would incorrectly continue to adjust during recording when Shutter Priority and "Lock Exposure During Recording" were both enabled. Decoupled UI lock state (`isExposureLocked`) from internal SP recording lock logic in `CameraViewModel` and `ExposureService`.
 *   Prevented manual exposure lock (`toggleExposureLock`) from being activated while Shutter Priority is enabled (`CameraViewModel`).
 *   Ensured manual exposure lock UI state (`isExposureLocked`) is correctly turned off when Shutter Priority is enabled (`CameraViewModel`).
-*   Corrected KVO KeyPath syntax in `ExposureService`.
-*   Added missing explicit `self` references within closures in `ExposureService`.
-*   Removed incorrect optional chaining `?.` on non-optional `self` in `ExposureService`.
-*   Removed check for non-existent `isLockedForConfiguration` property in `ExposureService` error handling blocks.
-*   Fixed logging string interpolation syntax errors in `ExposureService`.
-*   Implemented multiple strategies in `CameraSetupService` and `ExposureService` to ensure the camera device consistently initializes with `.continuousAutoExposure` mode, addressing issues where it would default to `.custom` after session start. This involved setting the mode at different lifecycle stages and verifying the final state.
-*   Fixed issue where Apple Log setting was not properly applied at startup, causing color space to remain as Rec.709 despite being enabled in settings
-*   Updated debug overlay to show actual camera device color space instead of just the setting value
+*   Corrected KVO KeyPath syntax and usage in `ExposureService`.
+*   Fixed issue where Apple Log setting was not properly applied at startup or after lens changes, ensuring `VideoFormatService` reapplies the correct color space.
+*   Updated debug overlay to show actual camera device color space instead of just the setting value.
 
 ### Removed
 

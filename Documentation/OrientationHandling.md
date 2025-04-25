@@ -37,9 +37,9 @@ The core goals are:
 
 *   **`RecordingService.swift` (`Features/Camera/Services`)**:
     *   Responsible for **embedding correct video metadata orientation**.
-    *   Before starting recording, it determines the appropriate rotation angle (0, 90, 180, 270 degrees) based on the current device and interface orientation.
+    *   Before starting recording, it determines the appropriate rotation angle (0, 90, 180, 270 degrees) based on the current device and interface orientation, using the value from `UIDeviceOrientation.videoRotationAngleValue`.
     *   It calculates a `CGAffineTransform` for this rotation.
-    *   This transform is applied to the `AVAssetWriterInput` (`transform` property). This ensures the video file itself has the correct orientation flag, regardless of the UI's locked state.
+    *   This transform is applied to the `AVAssetWriterInput` (`transform` property). This ensures the video file itself has the correct orientation flag, regardless of the UI's locked state. (Note: This avoids using the deprecated `videoOrientation` property on `AVCaptureConnection` for file metadata).
 
 *   **`CameraView.swift` / `CameraViewModel.swift`**:
     *   These components are now largely **passive** regarding orientation.
@@ -51,6 +51,6 @@ The core goals are:
 1.  **Physical Orientation**: `DeviceOrientationViewModel` tracks the physical device orientation.
 2.  **UI Element Rotation**: `RotatingView` observes the `DeviceOrientationViewModel` and rotates its content accordingly.
 3.  **Interface Lock/Allow**: When a view is presented (especially modally), `OrientationFixView` wraps it if specific orientation rules are needed. `AppDelegate` queries the `OrientationFixViewController`'s `allowsLandscapeMode` property (or defaults to portrait) to tell the system which interface orientations are permitted *at that moment*.
-4.  **Video Metadata**: When recording starts, `RecordingService` calculates the necessary transform based on the current orientation and applies it to the video track, ensuring correct playback later.
+4.  **Video Metadata**: When recording starts, `RecordingService` calculates the necessary transform based on the current orientation (using the angle from `videoRotationAngleValue`) and applies it to the video track, ensuring correct playback later.
 
 This approach separates concerns: physical orientation tracking, UI element rotation, interface orientation locking, and video metadata are handled by distinct, specialized components. 
