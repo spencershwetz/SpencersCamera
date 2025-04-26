@@ -17,6 +17,9 @@ class CameraSetupService {
     private var exposureService: ExposureService
     private weak var viewModelDelegate: CameraViewModel?
     
+    // Add configuration state tracking
+    private var isInConfiguration = false
+    
     init(session: AVCaptureSession, exposureService: ExposureService, delegate: CameraSetupServiceDelegate, viewModel: CameraViewModel) {
         self.session = session
         self.exposureService = exposureService
@@ -26,54 +29,73 @@ class CameraSetupService {
     
     func setupSession() throws {
         logger.info("Setting up camera session")
+        
+        // Add configuration state check
+        if isInConfiguration {
+            logger.error("⛔️ [setupSession] Session is already being configured! Stack trace: \(Thread.callStackSymbols.joined(separator: "\n"))")
+            throw CameraError.setupFailed
+        }
+        
+        // Store session state
+        let wasRunning = session.isRunning
+        if wasRunning {
+            session.stopRunning()
+        }
+        
+        // Begin configuration
+        logger.info("🔧 [setupSession] Beginning configuration block...")
+        isInConfiguration = true
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         session.beginConfiguration()
         
-        // Start with wide angle camera
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
-                                                    for: .video,
-                                                    position: .back) else {
-            logger.error("No camera device available")
-            delegate?.didEncounterError(.cameraUnavailable)
-            delegate?.didUpdateSessionStatus(.failed)
-            session.commitConfiguration()
-            return
-        }
-        
-        logger.info("Found camera device: \(videoDevice.localizedName)")
-        
-        // Configure device within session configuration block
         do {
-            try videoDevice.lockForConfiguration()
-            
-            // Reset all exposure settings first
-            if videoDevice.isExposureModeSupported(.locked) {
-                videoDevice.exposureMode = .locked
-                logger.info("Reset: Set exposure mode to locked first")
+            // Start with wide angle camera
+            guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera,
+                                                        for: .video,
+                                                        position: .back) else {
+                logger.error("No camera device available")
+                delegate?.didEncounterError(.cameraUnavailable)
+                delegate?.didUpdateSessionStatus(.failed)
+                session.commitConfiguration()
+                return
             }
             
-            // Configure white balance mode
-            if videoDevice.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
-                videoDevice.whiteBalanceMode = .continuousAutoWhiteBalance
+            logger.info("Found camera device: \(videoDevice.localizedName)")
+            
+            // Configure device within session configuration block
+            do {
+                try videoDevice.lockForConfiguration()
+                
+                // Reset all exposure settings first
+                if videoDevice.isExposureModeSupported(.locked) {
+                    videoDevice.exposureMode = .locked
+                    logger.info("Reset: Set exposure mode to locked first")
+                }
+                
+                // Configure white balance mode
+                if videoDevice.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    videoDevice.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+                
+                // Configure focus mode
+                if videoDevice.isFocusModeSupported(.continuousAutoFocus) {
+                    videoDevice.focusMode = .continuousAutoFocus
+                }
+                
+                // Finally set exposure mode to auto
+                if videoDevice.isExposureModeSupported(.continuousAutoExposure) {
+                    videoDevice.exposureMode = .continuousAutoExposure
+                    logger.info("Initial configuration: Set exposure mode to continuousAutoExposure")
+                }
+                
+                videoDevice.unlockForConfiguration()
+            } catch {
+                logger.error("Failed to configure device: \(error.localizedDescription)")
+                session.commitConfiguration()
+                throw CameraError.setupFailed
             }
             
-            // Configure focus mode
-            if videoDevice.isFocusModeSupported(.continuousAutoFocus) {
-                videoDevice.focusMode = .continuousAutoFocus
-            }
-            
-            // Finally set exposure mode to auto
-            if videoDevice.isExposureModeSupported(.continuousAutoExposure) {
-                videoDevice.exposureMode = .continuousAutoExposure
-                logger.info("Initial configuration: Set exposure mode to continuousAutoExposure")
-            }
-            
-            videoDevice.unlockForConfiguration()
-        } catch {
-            logger.error("Failed to configure device: \(error.localizedDescription)")
-        }
-        
-        do {
+            // Set up inputs
             let input = try AVCaptureDeviceInput(device: videoDevice)
             videoDeviceInput = input
             
@@ -82,6 +104,8 @@ class CameraSetupService {
                 logger.info("Added video input to session")
             } else {
                 logger.error("Failed to add video input to session")
+                session.commitConfiguration()
+                throw CameraError.setupFailed
             }
             
             if let audioDevice = AVCaptureDevice.default(for: .audio),
@@ -93,30 +117,41 @@ class CameraSetupService {
             
             delegate?.didInitializeCamera(device: videoDevice)
             
+            logger.info("Setting up video data output via ViewModel delegate...")
+            let _ = print("DEBUG_DEVICE: CameraSetupService calling setupUnifiedVideoOutput on delegate: \(viewModelDelegate != nil ? "VALID" : "NIL")")
+            viewModelDelegate?.setupUnifiedVideoOutput()
+            
+            // Commit configuration after all settings are applied
+            isInConfiguration = false
+            session.commitConfiguration()
+            
+            // Configure session preset after committing initial configuration
+            if session.canSetSessionPreset(.hd4K3840x2160) {
+                session.sessionPreset = .hd4K3840x2160
+                logger.info("Using 4K preset")
+            } else if session.canSetSessionPreset(.hd1920x1080) {
+                session.sessionPreset = .hd1920x1080
+                logger.info("Using 1080p preset")
+            }
+            
+            // Request camera permissions if needed
+            checkCameraPermissionsAndStart()
+            
         } catch {
             logger.error("Error setting up camera: \(error.localizedDescription)")
             delegate?.didEncounterError(.setupFailed)
+            
+            // Ensure configuration is committed on error
+            isInConfiguration = false
             session.commitConfiguration()
-            return
+            
+            // Restore session state if needed
+            if wasRunning {
+                session.startRunning()
+            }
+            
+            throw error
         }
-        
-        logger.info("Setting up video data output via ViewModel delegate...")
-        let _ = print("DEBUG_DEVICE: CameraSetupService calling setupUnifiedVideoOutput on delegate: \(viewModelDelegate != nil ? "VALID" : "NIL")")
-        viewModelDelegate?.setupUnifiedVideoOutput()
-        
-        // Commit configuration after all settings are applied
-        session.commitConfiguration()
-        
-        if session.canSetSessionPreset(.hd4K3840x2160) {
-            session.sessionPreset = .hd4K3840x2160
-            logger.info("Using 4K preset")
-        } else if session.canSetSessionPreset(.hd1920x1080) {
-            session.sessionPreset = .hd1920x1080
-            logger.info("Using 1080p preset")
-        }
-        
-        // Request camera permissions if needed
-        checkCameraPermissionsAndStart()
     }
     
     private func checkCameraPermissionsAndStart() {
@@ -162,8 +197,16 @@ class CameraSetupService {
             guard let self = self else { return }
             
             self.logger.info("Starting camera session...")
+            
+            // Add configuration state check
+            if self.isInConfiguration {
+                self.logger.error("⛔️ [startCameraSession] Session is already being configured! Stack trace: \(Thread.callStackSymbols.joined(separator: "\n"))")
+                return
+            }
+            
             if !self.session.isRunning {
                 // Begin a new configuration before starting
+                self.isInConfiguration = true
                 self.session.beginConfiguration()
                 
                 // Ensure device is still in auto mode before starting
@@ -181,6 +224,7 @@ class CameraSetupService {
                 }
                 
                 // Commit configuration before starting
+                self.isInConfiguration = false
                 self.session.commitConfiguration()
                 
                 // Start the session

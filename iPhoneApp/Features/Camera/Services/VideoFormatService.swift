@@ -15,6 +15,9 @@ class VideoFormatService {
     private var session: AVCaptureSession
     private var device: AVCaptureDevice?
     
+    // Add configuration state tracking
+    private var isInConfiguration = false
+    
     // Make this internal so CameraDeviceService can access it
     var isAppleLogEnabled = false
     // Remove the redundant computed property
@@ -44,6 +47,12 @@ class VideoFormatService {
     }
     
     func updateCameraFormat(for resolution: CameraViewModel.Resolution) async throws {
+        // Add configuration state check
+        if isInConfiguration {
+            logger.error("⛔️ [updateCameraFormat] Session is already being configured! Stack trace: \(Thread.callStackSymbols.joined(separator: "\n"))")
+            throw CameraError.configurationFailed(message: "Session already being configured")
+        }
+        
         guard let device = device else { 
             logger.error("No camera device available")
             throw CameraError.configurationFailed 
@@ -57,8 +66,8 @@ class VideoFormatService {
         }
         
         do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
+            isInConfiguration = true
+            session.beginConfiguration()
             
             // Find all formats that match our resolution
             let matchingFormats = device.formats.filter { format in
@@ -88,9 +97,6 @@ class VideoFormatService {
                 throw CameraError.configurationFailed
             }
             
-            // Begin configuration
-            session.beginConfiguration()
-            
             // Set the format
             device.activeFormat = selectedFormat
             
@@ -109,6 +115,8 @@ class VideoFormatService {
             }
             
             // Commit the configuration
+            logger.info("Camera format updated successfully")
+            isInConfiguration = false
             session.commitConfiguration()
             
             // Restore session state if it was running
@@ -116,10 +124,9 @@ class VideoFormatService {
                 session.startRunning()
             }
             
-            logger.info("Camera format updated successfully")
-            
         } catch {
             logger.error("Error updating camera format: \(error.localizedDescription)")
+            isInConfiguration = false
             session.commitConfiguration()
             
             if wasRunning {
@@ -426,97 +433,155 @@ class VideoFormatService {
     func configureAppleLog() async throws {
         logger.info("➡️ [configureAppleLog] Starting device preparation...")
         
-        guard let device = device else {
-            logger.error("❌ [configureAppleLog] Failed: No camera device available.")
-            throw CameraError.configurationFailed
+        // Add configuration state check
+        if isInConfiguration {
+            logger.error("⛔️ [configureAppleLog] Session is already being configured! Stack trace: \(Thread.callStackSymbols.joined(separator: "\n"))")
+            throw CameraError.configurationFailed(message: "Session already being configured")
         }
-        logger.debug("Using device: \(device.localizedName)")
         
-        // Get current settings from delegate
-        logger.debug("Fetching current settings from delegate...")
-        guard let currentFPS = getCurrentFrameRateFromDelegate(),
-              let currentResolution = getCurrentResolutionFromDelegate() else {
-            logger.error("❌ [configureAppleLog] Failed: Could not get current FPS/Resolution from delegate.")
-            throw CameraError.configurationFailed(message: "Missing current settings for Apple Log config.")
+        // Store session state before configuration
+        let wasRunning = session.isRunning
+        
+        // Stop session if running
+        if wasRunning {
+            logger.info("Stopping session before configuration...")
+            session.stopRunning()
         }
-        logger.info("Delegate settings: FPS=\(currentFPS), Resolution=\(currentResolution.rawValue)")
-                
+        
         do {
-            logger.debug("🔒 [configureAppleLog] Locking device for configuration...")
-            try device.lockForConfiguration()
-             defer { 
-                 logger.debug("🔓 [configureAppleLog] Unlocking device configuration.")
-                 device.unlockForConfiguration() 
-             }
+            // Begin configuration
+            isInConfiguration = true
+            session.beginConfiguration()
             
-            // --- Use findBestFormat --- 
-            logger.info("🔍 [configureAppleLog] Searching for best format: Res=\(currentResolution.rawValue), FPS=\(currentFPS), AppleLog=true")
-            guard let selectedFormat = findBestFormat(for: device, resolution: currentResolution, frameRate: currentFPS, requireAppleLog: true) else {
-                logger.error("❌ [configureAppleLog] Failed: No suitable Apple Log format found matching current settings.")
-                 throw CameraError.configurationFailed(message: "No format supports Apple Log with Res=\(currentResolution.rawValue), FPS=\(currentFPS)")
-            }
-            logger.info("✅ [configureAppleLog] Found suitable Apple Log format: \(selectedFormat.description)")
-            // --- End findBestFormat usage ---
-            
-            // Set the format first
-            if device.activeFormat != selectedFormat {
-                logger.info("🎞️ [configureAppleLog] Setting activeFormat...")
-                device.activeFormat = selectedFormat
-                logger.info("✅ [configureAppleLog] Applied best format for Apple Log.")
-            } else {
-                logger.info("ℹ️ [configureAppleLog] Active format is already the target format.")
-            }
-            
-            // Verify the format supports Apple Log
-            logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
-            guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
-                logger.error("❌ [configureAppleLog] Failed: Selected format \(selectedFormat.description) does not support Apple Log despite findBestFormat.")
+            guard let device = device else {
+                logger.error("❌ [configureAppleLog] Failed: No camera device available.")
+                session.commitConfiguration()
                 throw CameraError.configurationFailed
             }
-            logger.debug("✅ [configureAppleLog] Format supports Apple Log.")
+            logger.debug("Using device: \(device.localizedName)")
             
-            // Set frame duration
-            logger.info("⏱️ [configureAppleLog] Calling updateFrameRateForCurrentFormat for FPS \(currentFPS)...")
-            try updateFrameRateForCurrentFormat(fps: currentFPS)
-            logger.info("✅ [configureAppleLog] Frame rate updated.")
-            
-            // Configure HDR
-            logger.info("☀️ [configureAppleLog] Configuring HDR settings...")
-            if selectedFormat.isVideoHDRSupported {
-                logger.debug("HDR Supported. Setting automaticallyAdjustsVideoHDREnabled=false, isVideoHDREnabled=true")
-                device.automaticallyAdjustsVideoHDREnabled = false 
-                device.isVideoHDREnabled = true
-                logger.info("✅ [configureAppleLog] Enabled HDR video mode for Apple Log.")
-            } else {
-                logger.debug("HDR NOT Supported. Setting automaticallyAdjustsVideoHDREnabled=true, isVideoHDREnabled=false")
-                device.automaticallyAdjustsVideoHDREnabled = true
-                device.isVideoHDREnabled = false
-                 logger.info("ℹ️ [configureAppleLog] Selected Apple Log format does not support HDR video.")
+            // Get current settings from delegate
+            logger.debug("Fetching current settings from delegate...")
+            guard let currentFPS = getCurrentFrameRateFromDelegate(),
+                  let currentResolution = getCurrentResolutionFromDelegate() else {
+                logger.error("❌ [configureAppleLog] Failed: Could not get current FPS/Resolution from delegate.")
+                session.commitConfiguration()
+                throw CameraError.configurationFailed(message: "Missing current settings for Apple Log config.")
+            }
+            logger.info("Delegate settings: FPS=\(currentFPS), Resolution=\(currentResolution.rawValue)")
+                    
+            do {
+                logger.debug("🔒 [configureAppleLog] Locking device for configuration...")
+                try device.lockForConfiguration()
+                defer { 
+                    logger.debug("🔓 [configureAppleLog] Unlocking device configuration.")
+                    device.unlockForConfiguration() 
+                }
+                
+                // --- Use findBestFormat --- 
+                logger.info("🔍 [configureAppleLog] Searching for best format: Res=\(currentResolution.rawValue), FPS=\(currentFPS), AppleLog=true")
+                guard let selectedFormat = findBestFormat(for: device, resolution: currentResolution, frameRate: currentFPS, requireAppleLog: true) else {
+                    logger.error("❌ [configureAppleLog] Failed: No suitable Apple Log format found matching current settings.")
+                    session.commitConfiguration()
+                    throw CameraError.configurationFailed(message: "No format supports Apple Log with Res=\(currentResolution.rawValue), FPS=\(currentFPS)")
+                }
+                logger.info("✅ [configureAppleLog] Found suitable Apple Log format: \(selectedFormat.description)")
+                
+                // Set the format first
+                if device.activeFormat != selectedFormat {
+                    logger.info("🎞️ [configureAppleLog] Setting activeFormat...")
+                    device.activeFormat = selectedFormat
+                    logger.info("✅ [configureAppleLog] Applied best format for Apple Log.")
+                } else {
+                    logger.info("ℹ️ [configureAppleLog] Active format is already the target format.")
+                }
+                
+                // Verify the format supports Apple Log
+                logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
+                guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
+                    logger.error("❌ [configureAppleLog] Failed: Selected format \(selectedFormat.description) does not support Apple Log despite findBestFormat.")
+                    session.commitConfiguration()
+                    throw CameraError.configurationFailed
+                }
+                logger.debug("✅ [configureAppleLog] Format supports Apple Log.")
+                
+                // Set frame duration
+                logger.info("⏱️ [configureAppleLog] Calling updateFrameRateForCurrentFormat for FPS \(currentFPS)...")
+                try updateFrameRateForCurrentFormat(fps: currentFPS)
+                logger.info("✅ [configureAppleLog] Frame rate updated.")
+                
+                // Configure HDR
+                logger.info("☀️ [configureAppleLog] Configuring HDR settings...")
+                if selectedFormat.isVideoHDRSupported {
+                    logger.debug("HDR Supported. Setting automaticallyAdjustsVideoHDREnabled=false, isVideoHDREnabled=true")
+                    device.automaticallyAdjustsVideoHDREnabled = false 
+                    device.isVideoHDREnabled = true
+                    logger.info("✅ [configureAppleLog] Enabled HDR video mode for Apple Log.")
+                } else {
+                    logger.debug("HDR NOT Supported. Setting automaticallyAdjustsVideoHDREnabled=true, isVideoHDREnabled=false")
+                    device.automaticallyAdjustsVideoHDREnabled = true
+                    device.isVideoHDREnabled = false
+                    logger.info("ℹ️ [configureAppleLog] Selected Apple Log format does not support HDR video.")
+                }
+                
+                // Set color space
+                logger.info("🎨 [configureAppleLog] Setting activeColorSpace to .appleLog...")
+                if device.activeColorSpace != .appleLog { 
+                    device.activeColorSpace = .appleLog
+                    logger.info("✅ [configureAppleLog] Set activeColorSpace to Apple Log within lock.")
+                } else {
+                    logger.info("ℹ️ [configureAppleLog] activeColorSpace already set to Apple Log within lock.")
+                }
+                
+                logger.info("✅ [configureAppleLog] Successfully prepared device for Apple Log format.")
+                
+            } catch let error as CameraError {
+                logger.error("❌ [configureAppleLog] Failed during device preparation: \(error.description)")
+                session.commitConfiguration()
+                throw error
+            } catch {
+                logger.error("❌ [configureAppleLog] Failed during device preparation with generic error: \(error.localizedDescription)")
+                session.commitConfiguration()
+                throw CameraError.configurationFailed(message: "Configuring Apple Log failed: \(error.localizedDescription)")
             }
             
-            // Set color space - This might be overwritten by reapplyColorSpaceSettings later, but good to set
-            logger.info("🎨 [configureAppleLog] Setting activeColorSpace to .appleLog (will be verified later)...")
-            if device.activeColorSpace != .appleLog { 
-                device.activeColorSpace = .appleLog
-                logger.info("✅ [configureAppleLog] Set activeColorSpace to Apple Log within lock.")
-            } else {
-                 logger.info("ℹ️ [configureAppleLog] activeColorSpace already set to Apple Log within lock.")
+            // Commit all changes
+            logger.info("📝 [configureAppleLog] Committing configuration changes...")
+            isInConfiguration = false
+            session.commitConfiguration()
+            
+            // Only restart session after successful commit if it was running before
+            if wasRunning {
+                logger.info("🔄 [configureAppleLog] Restarting session after successful configuration...")
+                session.startRunning()
             }
             
-            logger.info("✅ [configureAppleLog] Successfully prepared device for Apple Log format.")
+            logger.info("🏁 [configureAppleLog] Finished device preparation process.")
             
-        } catch let error as CameraError {
-             logger.error("❌ [configureAppleLog] Failed during device preparation: \(error.description)")
-             throw error // Re-throw specific camera errors
         } catch {
-            logger.error("❌ [configureAppleLog] Failed during device preparation with generic error: \(error.localizedDescription)")
-            throw CameraError.configurationFailed(message: "Configuring Apple Log failed: \(error.localizedDescription)")
+            // Ensure configuration is committed if not already done
+            if session.isRunning {
+                session.stopRunning()
+            }
+            isInConfiguration = false
+            session.commitConfiguration()
+            
+            // Restore session state if needed, but only after ensuring configuration is committed
+            if wasRunning {
+                logger.info("🔄 [configureAppleLog] Restarting session after error handling...")
+                session.startRunning()
+            }
+            
+            // Re-throw the error
+            throw error
         }
-        logger.info("🏁 [configureAppleLog] Finished device preparation process.")
     }
     
     func resetAppleLog() async throws {
         logger.info("➡️ [resetAppleLog] Starting device preparation for reset...")
+        // Begin session configuration before modifying the device.
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
         
         guard let device = device else {
             logger.error("❌ [resetAppleLog] Failed: No camera device available.")

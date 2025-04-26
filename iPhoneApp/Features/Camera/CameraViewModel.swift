@@ -1332,9 +1332,39 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let videoOutput = AVCaptureVideoDataOutput()
         videoOutput.setSampleBufferDelegate(self, queue: processingQueue)
         
+        // Get available pixel format types
+        let availableFormats = videoOutput.availableVideoPixelFormatTypes
+        
+        // Default to most compatible format
+        var chosenPixelFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        
+        if isAppleLogEnabled {
+            // Try to use 10-bit 4:2:2 for Apple Log if available
+            if availableFormats.contains(kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange) {
+                chosenPixelFormat = kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange
+                logger.info("Using 10-bit 4:2:2 format for Apple Log")
+            } else {
+                logger.warning("10-bit 4:2:2 format not available, falling back to 8-bit 4:2:0")
+            }
+        } else {
+            // Verify 8-bit 4:2:0 is available
+            if !availableFormats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) {
+                logger.error("Standard 8-bit 4:2:0 format not available")
+                // Try to find any supported format
+                if let firstAvailable = availableFormats.first {
+                    chosenPixelFormat = firstAvailable
+                    logger.warning("Falling back to available format: \(firstAvailable)")
+                }
+            }
+        }
+        
+        // Log available formats for debugging
+        logger.debug("Available pixel formats: \(availableFormats)")
+        logger.info("Selected pixel format: \(chosenPixelFormat)")
+        
         // Set video settings for Metal compatibility
         videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferPixelFormatTypeKey as String: chosenPixelFormat,
             kCVPixelBufferMetalCompatibilityKey as String: true
         ]
         

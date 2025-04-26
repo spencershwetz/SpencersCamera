@@ -6,10 +6,12 @@ class OrientationFixViewController: UIViewController {
     private let contentView: UIView
     private(set) var allowsLandscapeMode: Bool
     private var hasAppliedInitialOrientation = false
+    private var shouldHideStatusBar: Bool
     
-    init(rootView: UIView, allowLandscape: Bool = false) {
+    init(rootView: UIView, allowLandscape: Bool = false, hideStatusBar: Bool = true) {
         self.contentView = rootView
         self.allowsLandscapeMode = allowLandscape
+        self.shouldHideStatusBar = hideStatusBar
         super.init(nibName: nil, bundle: nil)
         
         // Set black background color
@@ -100,7 +102,7 @@ class OrientationFixViewController: UIViewController {
     
     // Hide status bar
     override var prefersStatusBarHidden: Bool {
-        return AppDelegate.shouldHideStatusBar
+        return shouldHideStatusBar
     }
 }
 
@@ -121,10 +123,12 @@ extension UIViewController {
 struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
     var content: Content
     var allowsLandscapeMode: Bool
+    var hideStatusBar: Bool
     
-    init(allowsLandscapeMode: Bool = false, @ViewBuilder content: () -> Content) {
+    init(allowsLandscapeMode: Bool = false, hideStatusBar: Bool = true, @ViewBuilder content: () -> Content) {
         self.content = content()
         self.allowsLandscapeMode = allowsLandscapeMode
+        self.hideStatusBar = hideStatusBar
     }
     
     func makeUIViewController(context: Context) -> OrientationFixViewController {
@@ -139,7 +143,7 @@ struct OrientationFixView<Content: View>: UIViewControllerRepresentable {
         hostingController.view.backgroundColor = .black
         
         // Create and return the orientation fix view controller
-        return OrientationFixViewController(rootView: contentView, allowLandscape: allowsLandscapeMode)
+        return OrientationFixViewController(rootView: contentView, allowLandscape: allowsLandscapeMode, hideStatusBar: hideStatusBar)
     }
     
     func updateUIViewController(_ uiViewController: OrientationFixViewController, context: Context) {
