@@ -381,7 +381,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private let sessionQueue = DispatchQueue(label: "com.camera.sessionQueue", qos: .userInitiated)
     
     // Unified video output
-    private let processingQueue = DispatchQueue(label: "com.spencerscamera.processing", qos: .userInitiated)
+    private let processingQueue = DispatchQueue(label: "com.spencerscamera.processing", qos: .userInteractive)
     private var unifiedVideoOutput: AVCaptureVideoDataOutput?
     var metalPreviewDelegate: MetalPreviewView?
     
@@ -1338,8 +1338,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             kCVPixelBufferMetalCompatibilityKey as String: true
         ]
         
-        // Ensure we don't drop frames
-        videoOutput.alwaysDiscardsLateVideoFrames = false
+        // Ensure we drop frames
+        videoOutput.alwaysDiscardsLateVideoFrames = true
         
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
@@ -1366,7 +1366,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     // Update the AVCaptureVideoDataOutputSampleBufferDelegate method
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // ---> REMOVE ASYNC DISPATCH - Already on processingQueue <--- 
+        // Process the frame if needed, or handle any frame-level logic
+        // For now, just returning the pixel buffer from the sample buffer
         // processingQueue.async { [weak self] in 
             // Use direct self reference now
             // guard let self = self else { return }
@@ -1707,5 +1708,3 @@ extension CameraViewModel: WCSessionDelegate {
         }
     }
 }
-
-

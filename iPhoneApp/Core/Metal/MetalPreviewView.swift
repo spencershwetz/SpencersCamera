@@ -68,7 +68,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         mtkView.delegate = self
         mtkView.colorPixelFormat = .bgra8Unorm
         mtkView.framebufferOnly = true
-        mtkView.preferredFramesPerSecond = 30
+        mtkView.preferredFramesPerSecond = 60
         mtkView.enableSetNeedsDisplay = false // Use continuous rendering
         mtkView.isPaused = false
         
@@ -122,8 +122,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             return
         }
         
-        // Log the pixel buffer format
         let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        if pixelFormat != currentPixelFormat {
+            CVMetalTextureCacheFlush(textureCache, 0)
+            currentPixelFormat = pixelFormat
+        }
+        
+        // Log the pixel buffer format
         let mediaTypeUInt = CMFormatDescriptionGetMediaType(CMSampleBufferGetFormatDescription(sampleBuffer)!)
         let _ = FourCCString(mediaTypeUInt) // Convert media type code (Marked as unused)
         let formatStr = FourCCString(pixelFormat) // Convert pixel format code
@@ -134,15 +139,11 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         // Update current pixel format tracker
         if pixelFormat != currentPixelFormat {
             logger.info("Pixel format changed from \(FourCCString(self.currentPixelFormat)) to \(formatStr)")
-            currentPixelFormat = pixelFormat
             // Clear old textures when format changes
             bgraTexture = nil
             lumaTexture = nil
             chromaTexture = nil
         }
-        
-        // ---> ADD: Flush cache before creating textures <--- 
-        CVMetalTextureCacheFlush(textureCache, 0)
         
         var textureRef: CVMetalTexture? // Temporary ref for cache function
         
@@ -318,16 +319,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             return
         }
         
-        _ = inFlightSemaphore.wait(timeout: .now() + .milliseconds(16))
-        
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            inFlightSemaphore.signal()
             return
         }
         commandBuffer.label = "Preview Frame"
         
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
-            inFlightSemaphore.signal()
             return
         }
         
@@ -335,7 +332,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
              logger.warning("LUT Texture is nil, cannot draw.")
              renderEncoder.endEncoding()
              commandBuffer.commit() // Commit empty command buffer
-             inFlightSemaphore.signal()
              return
          }
         
@@ -359,7 +355,6 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         } else {
             renderEncoder.endEncoding()
             commandBuffer.commit() // Commit empty command buffer
-            inFlightSemaphore.signal()
             return
         }
         

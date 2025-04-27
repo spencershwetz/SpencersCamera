@@ -112,6 +112,7 @@ The project is organized into the following main components:
         *   It reports real-time values via delegate.
     *   `RecordingService` uses the configured session/device to write video/audio using `AVAssetWriter`. It receives pixel buffers, potentially processes them using `MetalFrameProcessor` (for LUT bake-in) based on `SettingsModel` state provided via `CameraViewModel`, applies the correct orientation transform, and saves the final file.
     *   `CameraView` displays preview via `CameraPreviewView` (which uses `MetalPreviewView` internally).
+    *   **Preview Performance**: Frames are now delivered on a `.userInteractive` queue (`processingQueue`) with `alwaysDiscardsLateVideoFrames = true`. `MetalPreviewView` is configured for `60fps` (`preferredFramesPerSecond = 60`) and no manual semaphore waits to minimize preview latency.
     *   `MetalPreviewView` receives raw `CMSampleBuffer`s, creates Metal textures, and renders them using shaders from `PreviewShaders.metal`, applying the `currentLUTTexture` from `LUTManager` in the fragment shader.
 *   **LUT Feature**: 
     *   `LUTManager` loads `.cube` files (using `CubeLUTLoader`), creates both a `MTLTexture` (`currentLUTTexture`).
