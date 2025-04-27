@@ -329,8 +329,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
         renderEncoder.setFragmentBuffer(isBT709Buffer, offset: 0, index: 1)
         
-        // Draw quad
-        renderEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6)
+        // Draw quad with 4 vertices
+        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
         
         if let drawable = view.currentDrawable {
