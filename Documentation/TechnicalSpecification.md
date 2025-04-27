@@ -69,8 +69,10 @@ This document outlines the technical specifications and requirements for the Spe
     *   Centralized Logic: `CameraViewModel` and `CameraView` are passive regarding orientation; `DeviceOrientationViewModel` provides physical orientation, `AppDelegate`/`OrientationFixView` control interface lock, `RotatingView` rotates specific UI, and `RecordingService` handles video metadata.
 *   **Real-time Preview**: 
     *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
-    *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
-    *   Metal Buffer Creation: Uses mutable variables for buffer creation to support inout parameters when creating Metal buffers for LUT active flag and BT.709 flag.
+    *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` (unused) -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`, using `vertexShaderWithRotation`) -> `MTKView` Drawable.
+    *   Pixel Format Handling: `MetalPreviewView` creates textures for `kCVPixelFormatType_32BGRA`, `'x422'` (Apple Log), and `'420v'` (BT.709 video range).
+    *   Metal Buffer Creation: Uses `device.makeBuffer()` to create buffers for shader uniforms (e.g., LUT active flag, BT.709 flag, rotation angle). Buffer content updated via `memcpy`.
+    *   Preview Rotation: `MetalPreviewView` includes rotation logic via its `updateRotation` method and `rotationBuffer` uniform. However, `CameraPreviewView` calls `updateRotation(angle: 90)` during initialization, effectively fixing the preview rendering to portrait.
     *   Visual adjustments (`.scaleEffect(0.9)`, padding) are applied to the `CameraPreviewView` within `CameraView.swift` for positioning.
     *   Triple buffering managed via `DispatchSemaphore` in `MetalPreviewView`.
 *   **Recording Light**: 

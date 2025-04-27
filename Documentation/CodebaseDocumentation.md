@@ -16,8 +16,13 @@ This document provides a detailed overview of key classes, components, and their
 *   **`AppDelegate` (`AppDelegate.swift`)**: 
     *   UIKit App Delegate (`@UIApplicationDelegateAdaptor`).
     *   Handles app lifecycle (`didFinishLaunching`, `applicationWillTerminate`), mainly for setting up/tearing down `UIDevice.begin/endGeneratingDeviceOrientationNotifications()`.
-    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control *interface* orientation based on the topmost view controller. Checks `OrientationFixViewController.allowsLandscapeMode`. Defaults to portrait. (Simplified: Removed internal flags).
+    *   Implements `application(_:supportedInterfaceOrientationsFor:)` to dynamically control *interface* orientation based on the topmost view controller. 
+        *   Checks if the top controller is a `PresentationHostingController`, examining its child's name against `AppDelegate.landscapeEnabledViewControllers`.
+        *   Checks if the top controller is an `OrientationFixViewController`, using its `allowsLandscapeMode` property.
+        *   Checks if the top controller's name matches entries in `AppDelegate.landscapeEnabledViewControllers`.
+        *   Defaults to portrait if no condition matches.
     *   Provides a helper extension `UIViewController.topMostViewController()`.
+    *   Includes a static list `landscapeEnabledViewControllers` used in the orientation logic.
 
 ### Core (`iPhoneApp/Core`)
 
@@ -25,10 +30,11 @@ This document provides a detailed overview of key classes, components, and their
     *   **`MetalPreviewView` (`MetalPreviewView.swift`)**: 
         *   `NSObject`, `MTKViewDelegate`. Initialized with an `MTKView` and `LUTManager`.
         *   Creates and manages `MTLDevice`, `MTLCommandQueue`, `CVMetalTextureCache`.
-        *   Creates Metal render pipelines (`rgbPipelineState`, `yuvPipelineState`) using shaders from `PreviewShaders.metal`.
-        *   Creates Metal uniform buffers for LUT active flag and BT.709 flag using mutable variables to support inout parameters.
-        *   `updateTexture(with: CMSampleBuffer)`: Creates `MTLTexture`s (`bgraTexture` or `lumaTexture`/`chromaTexture`) from the `CVPixelBuffer` in the `CMSampleBuffer` using the texture cache. Handles `kCVPixelFormatType_32BGRA` and `kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange` ('x422' Apple Log).
-        *   `draw(in: MTKView)`: Renders the appropriate texture (`bgraTexture` or `lumaTexture`/`chromaTexture`) to the `MTKView`'s drawable using the corresponding pipeline state (`rgbPipelineState` or `yuvPipelineState`). Fetches the `currentLUTTexture` from `LUTManager` and passes it to the fragment shader. Uses a `DispatchSemaphore` (`inFlightSemaphore`) for triple buffering.
+        *   Creates Metal render pipelines (`rgbPipelineState`, `yuvPipelineState`) using shaders from `PreviewShaders.metal` (specifically `vertexShaderWithRotation`, `fragmentShaderRGB`, `fragmentShaderYUV`).
+        *   Creates Metal buffers (`isLUTActiveBuffer`, `isBT709Buffer`, `rotationBuffer`) using `device.makeBuffer()` for shader uniforms. Includes `updateRotation(angle:)` method to update `rotationBuffer`.
+        *   `updateTexture(with: CMSampleBuffer)`: Creates `MTLTexture`s from the `CVPixelBuffer` using the texture cache. Handles `kCVPixelFormatType_32BGRA`, `'x422'` (Apple Log YCbCr 10-bit 4:2:2), and `'420v'` (BT.709 YCbCr 8-bit 4:2:0). Creates `bgraTexture` or separate `lumaTexture`/`chromaTexture` depending on the format.
+        *   `draw(in: MTKView)`: Renders the appropriate texture(s) to the `MTKView`'s drawable using the corresponding pipeline state. Fetches the `currentLUTTexture` from `LUTManager` and passes it, along with uniform buffers (e.g., `isLUTActiveBuffer`, `isBT709Buffer`, `rotationBuffer`), to the shaders. Uses a `DispatchSemaphore` (`inFlightSemaphore`) for triple buffering.
+        *   (Note: Although `MetalPreviewView` supports rotation via `updateRotation`, `CameraPreviewView` sets this to a fixed 90 degrees during initialization).
     *   **`MetalFrameProcessor` (`MetalFrameProcessor.swift`)**: 
         *   Handles offline processing of video frames for LUT bake-in.
         *   Initializes Metal device, queue, texture cache, and compute pipelines (`computePipelineStateRGB`, `computePipelineStateYUV`) using kernels from `PreviewShaders.metal` (`applyLUTComputeRGB`, `applyLUTComputeYUV`).
@@ -43,13 +49,15 @@ This document provides a detailed overview of key classes, components, and their
 *   **Orientation (`iPhoneApp/Core/Orientation`)**
     *   **`DeviceOrientationViewModel` (`DeviceOrientationViewModel.swift`)**: 
         *   Shared `ObservableObject` (`DeviceOrientationViewModel.shared`).
-        *   Uses `NotificationCenter` (`UIDevice.orientationDidChangeNotification`) to observe device orientation changes.
-        *   Publishes the current `UIDeviceOrientation` (`orientation`).
-        *   Provides computed `rotationAngle: Angle` based on `orientation` for UI rotation.
+        *   Uses `NotificationCenter` (`UIDevice.orientationDidChangeNotification`, debounced) to observe and publish device orientation changes (`orientation: UIDeviceOrientation`).
+        *   Uses `CMMotionManager` (device motion updates) to calculate and publish a rotation angle (`rotationAngleInDegrees: Double`).
+        *   Provides a computed `rotationAngle: Angle` based on the motion-derived angle for UI rotation.
     *   **`OrientationFixView` (`OrientationFixView.swift`)**: 
         *   `UIViewControllerRepresentable` wrapping `OrientationFixViewController`.
         *   Takes `allowsLandscapeMode: Bool` parameter.
-        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view. Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. Attempts to enforce portrait orientation using `requestGeometryUpdate` if `allowsLandscapeMode` is false. (Simplified: Removed setting `AppDelegate.isVideoLibraryPresented`).
+        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view (via a `UIHostingController`). Sets its own view background to black. 
+            *   Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`.
+            *   If `allowsLandscapeMode` is false, sets `modalPresentationStyle = .fullScreen` and actively attempts to enforce portrait orientation in `viewWillAppear` by calling `requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))` on the window scene.
     *   **`RotatingView` (`RotatingView.swift`)**: 
         *   `UIViewControllerRepresentable` wrapping `RotatingViewController`.
         *   Takes `orientationViewModel` and `invertRotation: Bool`.
@@ -99,10 +107,8 @@ This document provides a detailed overview of key classes, components, and their
         *   (App lifecycle notification handling is delegated to `AppLifecycleObserver`).
     *   **`CameraPreviewView` (`CameraPreviewView.swift`)**: 
         *   `UIViewRepresentable` for `MTKView`.
-        *   `makeUIView`: Creates `MTKView`, sets up `MetalPreviewView` as its delegate (passing `LUTManager`). The `MetalPreviewView` delegate handles receiving frames and rendering.
-        *   The preview rotation is fixed to portrait (90 degrees) within this view's setup.
-        *   `isAppleLogEnabled`: Controls Apple Log colorspace (requires session reconfiguration).
-        *   `isExposureLocked`: Controls whether exposure is locked (`AVCaptureDevice.ExposureMode.locked`).
+        *   `makeUIView`: Creates `MTKView`, sets its background to black. Creates `MetalPreviewView` as its delegate (passing `LUTManager`). Calls `metalDelegate.updateRotation(angle: 90)` to fix the preview rendering rotation to portrait. Assigns the delegate to `CameraViewModel.metalPreviewDelegate`.
+        *   The coordinator is currently unused.
     *   **Services (`iPhoneApp/Features/Camera/Services`)**:
         *   `CameraSetupService`: Configures the `AVCaptureSession`, sets initial device settings (including attempting to set `.continuousAutoExposure` mode early and verifying after start), requests permissions, adds inputs, sets preset, calls `ViewModel` to setup video output, and reports status/device via delegate. Includes logic after `startRunning` to *verify* and potentially *re-apply* the `.continuousAutoExposure` mode, as the session start can sometimes reset it. Notifies `ExposureService` of the final confirmed mode. Communicates session status, errors, and the initialized device back to the delegate (`CameraViewModel`).
         *   `CameraDeviceService`: Switches physical lenses by stopping session, removing/adding `AVCaptureDeviceInput`, finding best format (using `VideoFormatService.findBestFormat`), configuring device (format, focus/exposure modes), re-applying color space (via `VideoFormatService.reapplyColorSpaceSettings`), and restarting session. Handles digital zoom via `setDigitalZoom` (instantaneous) and smooth zoom via `ramp(toVideoZoomFactor:withRate:)` within the same lens.
@@ -112,22 +118,4 @@ This document provides a detailed overview of key classes, components, and their
                 *   `enableShutterPriority(duration:)`: Sets mode to `.custom` with fixed `duration` and current ISO. Activates KVO on `exposureTargetOffset`.
                 *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
                 *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
-                *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true` to pause auto-ISO adjustments.
-                *   `unlockShutterPriorityExposureAfterRecording()`: Sets `isTemporarilyLockedForRecording = false` and restores the exposure mode based on the situation (likely back to the SP custom mode with auto-ISO active, or continuous if SP was disabled). Reverts exposure mode to `.continuousAutoExposure` if supported, otherwise leaves it as is.
-            *   Communicates errors and manual value updates back to the delegate (`CameraViewModel`).
-        *   `RecordingService`: Manages `AVAssetWriter`, `AVAssetWriterInput` (video/audio), and `AVAssetWriterInputPixelBufferAdaptor`. Configures output settings based on codec/resolution/log state. Before recording starts, calculates the recording orientation angle (using `UIDeviceOrientation.videoRotationAngleValue`) and applies the corresponding `CGAffineTransform` to the `AVAssetWriterInput.transform` property. Implements delegates to receive buffers. If LUT bake-in is enabled, passes video pixel buffers to `MetalFrameProcessor.processPixelBuffer`. Appends frames using `AVAssetWriterInputPixelBufferAdaptor.append`. Saves finished video to `PHPhotoLibrary`.
-        *   `VolumeButtonHandler`: Uses `AVCaptureEventInteraction` to trigger recording.
-*   **Settings**:
-    *   `SettingsModel` (`iPhoneApp/Features/Settings/SettingsModel.swift`): 
-        *   `ObservableObject` with `@Published` properties for app settings.
-        *   Persists settings using `UserDefaults` in property `didSet` observers.
-        *   Includes camera format settings (resolution, codec, frame rate, color space/Apple Log), LUT bake-in, flashlight, exposure lock during recording, and debug info display.
-        *   Uses `NotificationCenter` to broadcast changes for some settings.
-        *   Provides computed properties for enum-based settings to simplify type conversion.
-    *   `SettingsView` (`iPhoneApp/Features/Camera/Views/SettingsView.swift`): 
-        *   SwiftUI view presenting UI for all settings.
-        *   Uses `@ObservedObject` to bind to the shared `SettingsModel`.
-        *   Uses `Picker`s and `Toggle`s bound to `SettingsModel` properties.
-        *   Includes `.onChange` modifiers to update `CameraViewModel` when settings change.
-    *   `FlashlightSettingsView` (`iPhoneApp/Features/Settings/FlashlightSettingsView.swift`): 
-        *   Dedicated view for configuring flashlight (intensity, patterns).
+                *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true`

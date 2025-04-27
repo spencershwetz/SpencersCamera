@@ -13,14 +13,18 @@ The core goals are:
 *   **`AppDelegate.swift`**:
     *   Acts as the **global gatekeeper** for *interface* orientation.
     *   Implements `application(_:supportedInterfaceOrientationsFor:)`.
-    *   Checks the `topMostViewController()`. If it's an `OrientationFixViewController`, it respects its `allowsLandscapeMode` property.
-    *   Otherwise, it defaults to locking the interface to `.portrait`.
+    *   Determines the top-most view controller.
+    *   **Checks several conditions**:
+        1.  If the top controller is a `PresentationHostingController` (often used for SwiftUI modals/sheets), it checks if the *child* controller's type name is in a static list (`AppDelegate.landscapeEnabledViewControllers`) to allow landscape.
+        2.  If the top controller is an `OrientationFixViewController`, it respects its `allowsLandscapeMode` property.
+        3.  If the top controller's type name itself is in the static list (`AppDelegate.landscapeEnabledViewControllers`), it allows landscape.
+    *   Defaults to locking the interface to `.portrait` if none of the specific conditions are met or the top controller cannot be determined.
 
 *   **`DeviceOrientationViewModel.swift` (`Core/Orientation`)**:
     *   The **source of truth for physical device orientation**.
-    *   Uses `UIDevice.orientationDidChangeNotification` to monitor the actual hardware orientation (`UIDeviceOrientation`).
-    *   Publishes the current `orientation: UIDeviceOrientation`.
-    *   Provides a computed `rotationAngle: Angle` derived from the physical orientation.
+    *   Uses `UIDevice.orientationDidChangeNotification` (debounced) to monitor the actual hardware orientation (`UIDeviceOrientation`) and publishes `orientation`.
+    *   Uses `CMMotionManager` (device motion updates, specifically gravity) to calculate a rotation angle and publishes `rotationAngleInDegrees`.
+    *   Provides a computed `rotationAngle: Angle` derived from the motion-based calculation.
 
 *   **`RotatingView.swift` (`Core/Orientation`)**:
     *   A `UIViewControllerRepresentable` used to **rotate specific SwiftUI content** based on physical orientation.
@@ -32,12 +36,13 @@ The core goals are:
     *   A `UIViewControllerRepresentable` wrapping `OrientationFixViewController`.
     *   Used to **control the supported *interface* orientations** for a specific SwiftUI view hierarchy it wraps.
     *   Takes an `allowsLandscapeMode: Bool` parameter during initialization.
-    *   `OrientationFixViewController` overrides `supportedInterfaceOrientations` to return `.all` if `allowsLandscapeMode` is `true`, otherwise `.portrait`.
-    *   This is how `VideoLibraryView` is allowed to rotate when presented via `.fullScreenCover(content: { OrientationFixView(allowsLandscapeMode: true) { VideoLibraryView(...) } })`, while `CameraView` remains primarily portrait.
+    *   `OrientationFixViewController` overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`. If landscape is disallowed, it also attempts to actively enforce portrait mode using `requestGeometryUpdate`. The `AppDelegate` queries the `supportedInterfaceOrientations` override.
+    *   This is how `VideoLibraryView` can be allowed to rotate when presented.
 
 *   **`CameraPreviewView.swift` (`Features/Camera/Views`)**: 
     *   Responsible for **rendering the camera preview** using Metal (`MTKView` and `MetalPreviewView` delegate).
-    *   Its rotation is **fixed to portrait (90 degrees)** during its `makeUIView` setup.
+    *   While `MetalPreviewView` has rotation capabilities (via `updateRotation`, `rotationBuffer`), `CameraPreviewView` explicitly calls `updateRotation(angle: 90)` during its `makeUIView` setup.
+    *   This **fixes the preview rendering rotation to portrait**.
     *   It **does not** observe `DeviceOrientationViewModel` for rotation updates.
 
 *   **`RecordingService.swift` (`Features/Camera/Services`)**:
@@ -55,7 +60,7 @@ The core goals are:
 
 1.  **Physical Orientation**: `DeviceOrientationViewModel` tracks the physical device orientation.
 2.  **UI Element Rotation**: `RotatingView` observes the `DeviceOrientationViewModel` and rotates its content accordingly.
-3.  **Interface Lock/Allow**: When a view is presented (especially modally), `OrientationFixView` wraps it if specific orientation rules are needed. `AppDelegate` queries the `OrientationFixViewController`'s `allowsLandscapeMode` property (or defaults to portrait) to tell the system which interface orientations are permitted *at that moment*.
+3.  **Interface Lock/Allow**: When a view is presented (especially modally), `OrientationFixView` can wrap it. `AppDelegate` queries the topmost controller, checking for `PresentationHostingController` children, `OrientationFixViewController` properties, or matches against a static list (`AppDelegate.landscapeEnabledViewControllers`), to tell the system which interface orientations are permitted *at that moment*.
 4.  **Preview Rendering**: `CameraPreviewView` renders the preview frames, fixed in a portrait orientation.
 5.  **Video Metadata**: When recording starts, `RecordingService` calculates the necessary transform based on the current physical orientation (using the angle from `videoRotationAngleValue`) and applies it to the video track, ensuring correct playback later.
 
