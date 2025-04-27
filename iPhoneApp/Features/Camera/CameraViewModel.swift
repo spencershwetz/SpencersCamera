@@ -1332,9 +1332,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let videoOutput = AVCaptureVideoDataOutput()
         videoOutput.setSampleBufferDelegate(self, queue: processingQueue)
         
-        // Set video settings for Metal compatibility
+        // Dynamically choose pixel format to avoid costly in-flight conversions that introduce preview lag.
+        // Apple Log (10-bit YUV) ⇒ request native "x422"; otherwise request standard 8-bit 420v.
+        let appleLogPixelFormat: OSType = 2016686642 // 'x422' 10-bit 4:2:2 Bi-Planar
+        let standardPixelFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+
+        let desiredPixelFormat: OSType = self.isAppleLogEnabled ? appleLogPixelFormat : standardPixelFormat
+
         videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferPixelFormatTypeKey as String: desiredPixelFormat,
             kCVPixelBufferMetalCompatibilityKey as String: true
         ]
         
