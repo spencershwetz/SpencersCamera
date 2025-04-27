@@ -1482,10 +1482,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 }
             }
             
-            // Log frame processing for debugging
-            if self.videoFrameCount % self.frameRateUpdateInterval == 0 {
-                logger.debug("[VideoCapture] Processed \(self.videoFrameCount) frames")
-            }
+            // Update frame count silently
+            self.videoFrameCount += 1
         } else {
             // Audio Frame Processing
             self.audioFrameCount += 1

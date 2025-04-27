@@ -492,9 +492,9 @@ class RecordingService: NSObject {
         
         if let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
            CMFormatDescriptionGetMediaType(formatDescription) == kCMMediaType_Video {
+            // Process video frame silently
             videoFrameCount += 1
             
-            // Process video frame
             if assetWriter?.status == .unknown {
                 let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                 recordingStartTime = startTime
@@ -558,19 +558,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             
             videoFrameCount += 1
             
-            // Log every 30 frames to avoid flooding
-            let shouldLog = videoFrameCount % 30 == 0
-            if shouldLog {
-                
-                // Log sample buffer orientation info
-                if let _ = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) as? Data { // <-- Check existence only
-                    // The presence of this attachment often implies orientation info, though not directly the angle.
-                } else {
-                }
-                
-                // Log connection orientation at this point
-            }
-            
+            // Process frame silently without logging
             if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 var pixelBufferToAppend: CVPixelBuffer? = nil
                 var isProcessed = false
@@ -660,14 +648,6 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
            audioInput.isReadyForMoreMediaData {
             audioFrameCount += 1
             audioInput.append(sampleBuffer)
-            if audioFrameCount % 100 == 0 {
-            }
-        }
-
-        // Redefine shouldLog here for the final log statement
-        let shouldLog = (output == videoDataOutput) && (videoFrameCount % 30 == 0)
-        if shouldLog { // Only log frame end if we logged frame start
-            logger.debug("REC_PERF: captureOutput [Video Frame #\(self.videoFrameCount)] END - Total time: \(String(format: "%.4f", Date.nowTimestamp() - processingStartTime))s") // LOG FRAME END
         }
     }
 } 
