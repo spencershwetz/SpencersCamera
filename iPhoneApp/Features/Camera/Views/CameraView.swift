@@ -178,41 +178,44 @@ struct CameraView: View {
     // Helper function extracted to avoid duplication
     @ViewBuilder
     private func liveCameraPreview(geometry: GeometryProxy) -> some View {
-        if viewModel.isSessionRunning {
-            // Camera is running - show camera preview
-            CameraPreviewView(
-                session: viewModel.session,
-                lutManager: viewModel.lutManager,
-                viewModel: viewModel
-            )
-            .aspectRatio(9.0/16.0, contentMode: .fit)
-            .scaleEffect(0.9)
-            .clipped()
-            .padding(.top, geometry.safeAreaInsets.top + 10)
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .topLeading) {
-                if settings.isDebugEnabled {
-                    debugOverlay
-                        .padding(.top, geometry.safeAreaInsets.top + 70)
-                        .padding(.leading, 20)
-                }
+        // Keep CameraPreviewView always in the hierarchy
+        CameraPreviewView(
+            session: viewModel.session,
+            lutManager: viewModel.lutManager,
+            viewModel: viewModel
+        )
+        .aspectRatio(9.0/16.0, contentMode: .fit)
+        .scaleEffect(0.9)
+        .clipped()
+        .padding(.top, geometry.safeAreaInsets.top + 10)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .topLeading) {
+            if settings.isDebugEnabled {
+                debugOverlay
+                    .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
+                    .padding(.leading, 20)
             }
-        } else {
-            // Show loading or error state
-            VStack {
-                Text("Starting camera...")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                if viewModel.status == .failed, let error = viewModel.error {
-                    Text("Error: \(error.description)")
-                        .font(.subheadline)
-                        .foregroundColor(.red)
-                        .padding()
+        }
+        .overlay {
+            // Overlay a placeholder or loading indicator if the session is not running
+            if !viewModel.isSessionRunning {
+                ZStack {
+                    Color.black // Background for the placeholder text
+                    VStack {
+                        Text("Starting camera...")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        if viewModel.status == .failed, let error = viewModel.error {
+                            Text("Error: \(error.description)")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                                .padding()
+                        }
+                    }
                 }
+                .transition(.opacity) // Optional animation
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black)
         }
     }
     

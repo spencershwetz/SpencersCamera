@@ -823,9 +823,9 @@ class ExposureService: NSObject {
 
     // Observe white balance gains changes
     private func handleWhiteBalanceGainsChange(_: AVCaptureDevice, change: NSKeyValueObservedChange<AVCaptureDevice.WhiteBalanceGains>) {
-        print("[TEMP DEBUG] WB KVO Callback Entered!")
+        // print("[TEMP DEBUG] WB KVO Callback Entered!") // REMOVED
         guard let newGains = change.newValue else {
-            print("[TEMP DEBUG] WB KVO: No new gains value, exiting callback.")
+            // print("[TEMP DEBUG] WB KVO: No new gains value, exiting callback.") // REMOVED
             return
         }
 
@@ -836,7 +836,6 @@ class ExposureService: NSObject {
             if delegate == nil {
                 logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
             } else {
-                logger.debug("[TEMP DEBUG] WB KVO: Calling delegate didUpdateWhiteBalance(\(tempAndTint.temperature), tint: \(tempAndTint.tint)) (Synchronous Call)")
                 // Ensure delegate update happens on the main thread
                  DispatchQueue.main.async { [weak self] in
                      self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass both values
