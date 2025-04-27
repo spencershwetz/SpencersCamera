@@ -85,6 +85,7 @@ This document outlines the technical specifications and requirements for the Spe
         *   Resolution, Codec, and Frame Rate formats
         *   Color Space (Apple Log toggle)
         *   LUT bake-in state 
+        *   Video Stabilization state
         *   Debug overlay visibility
         *   Flashlight settings
         *   Exposure lock during recording setting
@@ -93,6 +94,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Initializes from `UserDefaults` with appropriate defaults if no stored values exist.
     *   `CameraViewModel` reads initial values from `SettingsModel` during initialization and applies them to the camera configuration.
     *   UI in `SettingsView` binds directly to `SettingsModel` properties, with `.onChange` handlers to update the active camera configuration.
+*   **Camera Configuration**: `CameraViewModel` orchestrates service interactions. `CameraSetupService` configures the initial session. `CameraDeviceService` handles lens changes. `VideoFormatService` handles format/frame rate/color space. `ExposureService` handles exposure/WB/tint. `CameraViewModel`'s `setupUnifiedVideoOutput` configures the `AVCaptureVideoDataOutput` connection, including setting `preferredVideoStabilizationMode` (prioritizing `.standard` over `.auto`) based on `SettingsModel`.
 
 ## Technical Requirements & Dependencies
 

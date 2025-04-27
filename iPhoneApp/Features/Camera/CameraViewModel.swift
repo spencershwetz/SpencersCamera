@@ -1334,8 +1334,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // DO NOT restart session here for generic errors
     }
 
-    func setupUnifiedVideoOutput() {
-        logger.info("Setting up unified video output")
+    func updateVideoStabilizationMode(enabled: Bool) { // Updated method
+        logger.info("Updating video stabilization mode setting to: \(enabled)")
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            // Pass the desired state directly
+            self.setupUnifiedVideoOutput(enableStabilization: enabled)
+        }
+    }
+    
+    // Modified to accept optional state parameter
+    func setupUnifiedVideoOutput(enableStabilization: Bool? = nil) {
+        logger.info("Setting up unified video output... Stabilization state passed: \(String(describing: enableStabilization))")
         session.beginConfiguration()
         
         // Remove any existing video outputs
@@ -1399,7 +1409,36 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             if let connection = videoOutput.connection(with: .video) {
                 // Enable video stabilization if available
                 if connection.isVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .off // Disable for lower latency
+                    // Determine desired state: use passed value if available, else read from model
+                    let shouldEnableStabilization = enableStabilization ?? settingsModel.isVideoStabilizationEnabled
+                    logger.info("UNIFIED_VIDEO: Determined stabilization state: \(shouldEnableStabilization) (Passed: \(String(describing: enableStabilization)), Model: \(self.settingsModel.isVideoStabilizationEnabled))")
+
+                    // Check the setting
+                    if shouldEnableStabilization {
+                        // Check format support for specific modes (requires device access)
+                        if let currentDevice = self.device {
+                            // Prioritize .standard for lower latency
+                            if currentDevice.activeFormat.isVideoStabilizationModeSupported(.standard) {
+                                connection.preferredVideoStabilizationMode = .standard
+                                logger.info("UNIFIED_VIDEO: Stabilization set to STANDARD (Format supports)")
+                            } else if currentDevice.activeFormat.isVideoStabilizationModeSupported(.auto) { // Fallback to .auto
+                                connection.preferredVideoStabilizationMode = .auto
+                                logger.info("UNIFIED_VIDEO: Stabilization set to AUTO (Format supports, Standard unavailable)")
+                            } else {
+                                connection.preferredVideoStabilizationMode = .off
+                                logger.warning("UNIFIED_VIDEO: Stabilization requested but format supports neither Standard nor Auto. Setting to OFF.")
+                            }
+                        } else {
+                            // Fallback if device is nil (shouldn't happen here but good practice)
+                            connection.preferredVideoStabilizationMode = .off
+                            logger.warning("UNIFIED_VIDEO: Cannot check format support (device nil). Stabilization set to OFF.")
+                        }
+                    } else {
+                        connection.preferredVideoStabilizationMode = .off
+                        logger.info("UNIFIED_VIDEO: Stabilization set to OFF (User setting)")
+                    }
+                } else {
+                    logger.warning("UNIFIED_VIDEO: Stabilization not supported on this connection.")
                 }
                 
                 // Set video orientation

@@ -15,6 +15,7 @@ extension Notification.Name {
     static let selectedCodecChanged = Notification.Name("selectedCodecChanged")
     static let selectedFrameRateChanged = Notification.Name("selectedFrameRateChanged")
     static let isDebugEnabledChanged = Notification.Name("isDebugEnabledChanged")
+    static let videoStabilizationSettingChanged = Notification.Name("videoStabilizationSettingChanged")
     // Add notifications for function button changes if needed later
 }
 
@@ -100,6 +101,14 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var isVideoStabilizationEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isVideoStabilizationEnabled, forKey: Keys.isVideoStabilizationEnabled)
+            NotificationCenter.default.post(name: .videoStabilizationSettingChanged, object: nil)
+            print("Video Stabilization Enabled: \(isVideoStabilizationEnabled)")
+        }
+    }
+    
     // MARK: - Function Button Assignments
     @Published var functionButton1Ability: FunctionButtonAbility {
         didSet {
@@ -154,6 +163,7 @@ class SettingsModel: ObservableObject {
         let initialCodecRaw = UserDefaults.standard.string(forKey: Keys.selectedCodecRaw)
         let initialFrameRate = UserDefaults.standard.double(forKey: Keys.selectedFrameRate)
         let initialDebugEnabled = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) != nil ? UserDefaults.standard.bool(forKey: Keys.isDebugEnabled) : true
+        let initialStabilizationEnabled = UserDefaults.standard.object(forKey: Keys.isVideoStabilizationEnabled) != nil ? UserDefaults.standard.bool(forKey: Keys.isVideoStabilizationEnabled) : false
 
         // 2. Determine final initial values, applying defaults
         var finalFlashlightIntensity = initialFlashlightIntensity
@@ -188,6 +198,7 @@ class SettingsModel: ObservableObject {
         let shouldWriteCodecDefault = initialCodecRaw == nil
         let shouldWriteFrameRateDefault = initialFrameRate == 0.0
         let shouldWriteDebugDefault = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) == nil
+        let shouldWriteStabilizationDefault = UserDefaults.standard.object(forKey: Keys.isVideoStabilizationEnabled) == nil
 
         // 3. Initialize all @Published properties
         self.isAppleLogEnabled = initialAppleLogEnabled
@@ -204,6 +215,7 @@ class SettingsModel: ObservableObject {
         self.selectedCodecRaw = finalCodecRaw
         self.selectedFrameRate = finalFrameRate
         self.isDebugEnabled = initialDebugEnabled
+        self.isVideoStabilizationEnabled = initialStabilizationEnabled
 
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
@@ -233,6 +245,9 @@ class SettingsModel: ObservableObject {
         if shouldWriteDebugDefault {
             UserDefaults.standard.set(initialDebugEnabled, forKey: Keys.isDebugEnabled)
         }
+        if shouldWriteStabilizationDefault {
+            UserDefaults.standard.set(initialStabilizationEnabled, forKey: Keys.isVideoStabilizationEnabled)
+        }
 
         print("SettingsModel initialized:")
         print("- Apple Log: \(isAppleLogEnabled)")
@@ -246,6 +261,7 @@ class SettingsModel: ObservableObject {
         print("- Codec: \(selectedCodecRaw)")
         print("- Frame Rate: \(selectedFrameRate)")
         print("- Debug Enabled: \(isDebugEnabled)")
+        print("- Video Stabilization: \(isVideoStabilizationEnabled)")
     }
     
     // MARK: - Keys for UserDefaults
@@ -262,5 +278,6 @@ class SettingsModel: ObservableObject {
         static let selectedCodecRaw = "selectedCodecRaw"
         static let selectedFrameRate = "selectedFrameRate"
         static let isDebugEnabled = "isDebugEnabled"
+        static let isVideoStabilizationEnabled = "isVideoStabilizationEnabled"
     }
 }

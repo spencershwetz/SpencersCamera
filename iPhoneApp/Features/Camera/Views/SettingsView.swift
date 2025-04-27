@@ -149,6 +149,27 @@ struct SettingsView: View {
                     Text("Exposure")
                 }
                 
+                // Stabilization Setting
+                Section {
+                    Toggle(isOn: $settingsModel.isVideoStabilizationEnabled) {
+                        HStack {
+                            Text("Video Stabilization")
+                            if settingsModel.isVideoStabilizationEnabled {
+                                Image(systemName: "figure.walk.motion") // Example icon
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                    .tint(.blue)
+                    .onChange(of: settingsModel.isVideoStabilizationEnabled) { _, newValue in
+                        // Optionally trigger immediate update if needed, 
+                        // otherwise it will be applied on next config/start
+                        viewModel.updateVideoStabilizationMode(enabled: newValue)
+                    }
+                } header: {
+                    Text("Stabilization")
+                }
+                
                 // Flashlight Settings
                 FlashlightSettingsView(settingsModel: settingsModel)
                 

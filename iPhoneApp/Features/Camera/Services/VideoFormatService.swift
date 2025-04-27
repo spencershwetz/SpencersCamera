@@ -99,15 +99,6 @@ class VideoFormatService {
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
             
-            // If Apple Log is enabled, set the color space
-            if isAppleLogEnabled && selectedFormat.supportedColorSpaces.contains(.appleLog) {
-                device.activeColorSpace = .appleLog
-                logger.info("Applied Apple Log color space")
-            } else {
-                device.activeColorSpace = .sRGB
-                logger.info("Applied sRGB color space")
-            }
-            
             // Commit the configuration
             session.commitConfiguration()
             
@@ -337,24 +328,7 @@ class VideoFormatService {
             
             logger.info("🎨 [reapplyColorSpaceSettings] Determined target color space: \(targetColorSpace.rawValue) (Reason: \(reason))")
 
-            // Only set if different from current
-            if device.activeColorSpace != targetColorSpace {
-                logger.info("🎨 [reapplyColorSpaceSettings] Attempting to set activeColorSpace to \(targetColorSpace.rawValue)...")
-                device.activeColorSpace = targetColorSpace
-                // Read back to confirm
-                let actualColorSpace = device.activeColorSpace
-                 if actualColorSpace == targetColorSpace {
-                     logger.info("✅ [reapplyColorSpaceSettings] Successfully set activeColorSpace to \(targetColorSpace.rawValue). Actual readback: \(actualColorSpace.rawValue)")
-                 } else {
-                      logger.error("❌ [reapplyColorSpaceSettings] Failed to set activeColorSpace to \(targetColorSpace.rawValue). Actual readback: \(actualColorSpace.rawValue)")
-                     // Maybe throw an error here? Or just log?
-                     // For now, let's throw to indicate failure.
-                     throw CameraError.configurationFailed(message: "Failed to set target color space. Readback mismatch.")
-                 }
-            } else {
-                logger.info("ℹ️ [reapplyColorSpaceSettings] activeColorSpace is already \(targetColorSpace.rawValue). No change needed.")
-            }
-            logger.info("✅ [reapplyColorSpaceSettings] Finished successfully.")
+            logger.info("✅ [reapplyColorSpaceSettings] Finished successfully. (Color space is handled by activeFormat)")
         } catch let error as CameraError {
              logger.error("❌ [reapplyColorSpaceSettings] Failed with CameraError: \(error.description)")
              throw error // Re-throw specific camera errors
@@ -468,19 +442,6 @@ class VideoFormatService {
             }
             // --- End set format ---
 
-            // --- Explicitly set Apple Log Color Space ---
-            // Check if the selected format *actually* supports Apple Log before trying to set it.
-            if selectedFormat.supportedColorSpaces.contains(.appleLog) {
-                 logger.info("🎨 [configureAppleLog] Explicitly setting activeColorSpace to .appleLog...")
-                 device.activeColorSpace = .appleLog
-            } else {
-                 // This case should ideally not be reached if findBestFormat works correctly, but log a warning just in case.
-                 logger.warning("⚠️ [configureAppleLog] Selected format \(selectedFormat.description) does not support Apple Log, cannot explicitly set color space.")
-                 // We might want to throw an error here, as the premise of configureAppleLog is violated.
-                 // For now, we'll let the verification step below catch it.
-            }
-            // --- End Explicit Set ---
-            
             // --- Verify the activeColorSpace is now Apple Log --- 
             if device.activeColorSpace == .appleLog {
                  logger.info("✅ [configureAppleLog] Verified activeColorSpace is now Apple Log after explicit set.")
@@ -586,16 +547,7 @@ class VideoFormatService {
             device.automaticallyAdjustsVideoHDREnabled = true
             logger.info("✅ [resetAppleLog] Reset HDR settings to automatic.")
             
-            // Reset color space to default (sRGB)
-            logger.info("🎨 [resetAppleLog] Setting activeColorSpace to .sRGB (will be verified later)...")
-            if device.activeColorSpace != .sRGB {
-                 device.activeColorSpace = .sRGB
-                 logger.info("✅ [resetAppleLog] Set color space to sRGB within lock.")
-             } else {
-                  logger.info("ℹ️ [resetAppleLog] activeColorSpace already sRGB within lock.")
-              }
-            
-            logger.info("✅ [resetAppleLog] Successfully prepared device for reset.")
+            logger.info("✅ [resetAppleLog] Successfully prepared device for reset. (Color space handled by activeFormat)")
             
         } catch let error as CameraError {
              logger.error("❌ [resetAppleLog] Failed during device preparation: \(error.description)")

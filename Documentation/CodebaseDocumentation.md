@@ -119,3 +119,10 @@ This document provides a detailed overview of key classes, components, and their
                 *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
                 *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
                 *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true`
+*   **Settings (`iPhoneApp/Features/Settings`)**
+    *   **`SettingsModel` (`iPhoneApp/Features/Settings/SettingsModel.swift`)**: 
+        *   `ObservableObject` with `@Published` properties for app settings.
+        *   Persists settings using `UserDefaults` in property `didSet` observers.
+        *   Includes camera format settings (resolution, codec, frame rate, color space/Apple Log), LUT bake-in, flashlight, exposure lock during recording, video stabilization, and debug info display.
+        *   Uses `NotificationCenter` to broadcast changes for some settings.
+        *   Provides computed properties for enum-based settings to simplify type conversion.

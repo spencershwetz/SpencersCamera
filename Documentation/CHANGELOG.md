@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+*   Feature: Added Video Stabilization toggle in Settings. The app now sets the `AVCaptureConnection`'s `preferredVideoStabilizationMode` (prioritizing `.standard` over `.auto`, falling back to `.off`) based on this setting during video output configuration.
 *   Feature: Implemented Shutter Priority mode (Function Button 2). Locks shutter speed (180°) and automatically adjusts ISO based on scene brightness changes (`ExposureService`, `CameraViewModel`). Uses KVO on `exposureTargetOffset`.
 *   Feature: Added temporary exposure lock during recording when Shutter Priority is active and "Lock Exposure During Recording" setting is enabled (`ExposureService`, `CameraViewModel`).
 *   Setting: Added "Lock Exposure During Recording" toggle in Settings.
@@ -67,9 +68,4 @@ All notable changes to this project will be documented in this file.
 *   Reduced excessive logging in `RotatingView` during initialization and orientation changes.
 *   Set default LUT bake-in state in `RecordingService` to `false` to prevent unnecessary processing.
 *   Removed redundant `didBecomeActiveNotification` observer in `CameraView` to simplify session lifecycle management and potentially resolve preview freezes.
-*   Corrected initializer logic in `SettingsModel` to properly default `isBakeInLUTEnabled` to false on first launch, fixing a build error.
-*   Simplified `OrientationFixViewController` by removing aggressive parent background setting logic to potentially resolve black screen issues when presenting the Video Library.
-
-### Removed
-
-*   Obsolete `View+Extensions.swift` file.
+*   Corrected initializer logic in `SettingsModel`
