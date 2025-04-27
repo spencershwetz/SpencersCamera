@@ -467,19 +467,21 @@ class CameraDeviceService {
             session.commitConfiguration()
 
             // *** REMOVE code setting data output orientation here ***
-            /*
-            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
-               let connection = videoDataOutput.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(90) {
-                    connection.videoRotationAngle = 90
-                    logger.info("🔄 [reconfigureSessionForCurrentDevice] Set VideoDataOutput connection angle to 90° after config commit.")
-                } else {
-                    logger.warning("🔄 [reconfigureSessionForCurrentDevice] 90° angle not supported for VideoDataOutput after config commit.")
-                }
+            // We now handle orientation purely based on device/interface orientation during recording
+            // or based on UI orientation for the preview layer.
+
+            // TODO: Evaluate if setting rotation angle here is still needed or causes issues.
+            // If connection supports rotation, set it to 90 degrees (Portrait default).
+            // This might be needed initially before the UI orientation takes over?
+            /* // Removed redundant orientation setting
+            if connection.isVideoRotationAngleSupported(90) {
+                connection.videoRotationAngle = 90
+                logger.info("🔄 Set default video rotation angle to 90 degrees (Portrait).")
             } else {
-                logger.warning("🔄 [reconfigureSessionForCurrentDevice] Could not find VideoDataOutput or connection after config commit.")
+                logger.warning("🔄 Video rotation angle 90 degrees not supported.")
             }
-            */
+            */ // End removed redundant orientation setting
+
             logger.info("🔄 [reconfigureSessionForCurrentDevice] Skipping explicit VideoDataOutput connection angle setting.") // Add log indicating skip
             // *** End removal ***
 

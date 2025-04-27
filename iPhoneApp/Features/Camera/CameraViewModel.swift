@@ -25,6 +25,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Add property to track the view containing the camera preview
     weak var owningView: UIView?
     
+    // Combine cancellables
+    var cancellables = Set<AnyCancellable>()
+    
     // Flashlight manager
     private let flashlightManager = FlashlightManager()
     private var settingsObserver: NSObjectProtocol?
@@ -1052,9 +1055,6 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         // Remove the old logic that directly manipulated isAutoExposureEnabled and updateShutterAngle
     }
-
-    // Add a property to store cancellables if it doesn't exist
-    private var cancellables = Set<AnyCancellable>()
 
     private func handleSessionRunningStateChange(_ isRunning: Bool) {
         if isRunning {

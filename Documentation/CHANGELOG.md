@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+*   Fixed camera preview rotation by locking it to portrait (90 degrees) in `CameraPreviewView`, removing the dependency on `DeviceOrientationViewModel` for the preview layer.
 *   Fixed Metal buffer creation in `MetalPreviewView` by changing `let` constants to `var` for inout parameter compatibility.
 *   Resolved issue where camera preview would not restart after the app returned from the background by using `AppLifecycleObserver` to trigger `startSession`.
 *   Correctly handled `UIApplication.didBecomeActiveNotification` observer lifecycle using `AppLifecycleObserver` to prevent potential issues and ensure proper removal.
@@ -33,6 +34,8 @@ All notable changes to this project will be documented in this file.
 *   Updated debug overlay to show actual camera device color space instead of just the setting value.
 
 ### Removed
+
+*   Redundant setting of `AVCaptureConnection.videoRotationAngle` in `CameraDeviceService`.
 
 ## [2024-08-10]
 

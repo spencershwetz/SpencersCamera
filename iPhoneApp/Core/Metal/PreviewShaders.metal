@@ -7,6 +7,40 @@ struct RasterizerData {
     float2 textureCoordinate;
 };
 
+// Vertex shader with rotation
+vertex RasterizerData vertexShaderWithRotation(uint vertexID [[vertex_id]],
+                                             constant float &rotation [[buffer(1)]]) {
+    const float4 vertices[] = {
+        float4(-1.0, -1.0, 0.0, 1.0),
+        float4( 1.0, -1.0, 0.0, 1.0),
+        float4(-1.0,  1.0, 0.0, 1.0),
+        float4( 1.0,  1.0, 0.0, 1.0)
+    };
+    
+    const float2 texCoords[] = {
+        float2(0.0, 1.0),
+        float2(1.0, 1.0),
+        float2(0.0, 0.0),
+        float2(1.0, 0.0)
+    };
+    
+    // Create rotation matrix
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    float2x2 rotationMatrix = float2x2(cosR, -sinR,
+                                      sinR, cosR);
+    
+    // Get the vertex position and rotate it
+    float4 position = vertices[vertexID];
+    float2 rotatedPosition = rotationMatrix * position.xy;
+    
+    RasterizerData out;
+    out.position = float4(rotatedPosition, 0.0, 1.0);
+    out.textureCoordinate = texCoords[vertexID];
+    
+    return out;
+}
+
 // Vertex shader
 vertex RasterizerData vertexShader(uint vertexID [[vertex_id]]) {
     const float4 vertices[] = {

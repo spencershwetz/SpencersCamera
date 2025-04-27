@@ -1,14 +1,21 @@
 import SwiftUI
 import Combine
 import os.log
+import CoreMotion
 
 /// A shared observable object that tracks the device's physical orientation.
 final class DeviceOrientationViewModel: ObservableObject {
     static let shared = DeviceOrientationViewModel()
 
     @Published var orientation: UIDeviceOrientation = .portrait
+    @Published var rotationAngleInDegrees: Double = 0
+    
     private var cancellables = Set<AnyCancellable>()
     private var orientationObserver: Any?
+    private let motionManager = CMMotionManager()
+    private let orientationUpdateThreshold: Double = 15.0 // degrees
+    private var lastUpdateTime: Date = Date()
+    private let updateInterval: TimeInterval = 0.2 // seconds
     
     // Logger for Orientation ViewModel
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "DeviceOrientationVM")
@@ -18,23 +25,49 @@ final class DeviceOrientationViewModel: ObservableObject {
         orientation = UIDevice.current.orientation
         logger.info("Initial device orientation: \\(orientation.rawValue) - \\(String(describing: orientation))")
         
+        setupMotionUpdates()
+        setupOrientationNotifications()
+    }
+    
+    private func setupMotionUpdates() {
+        guard motionManager.isDeviceMotionAvailable else {
+            logger.warning("Device motion is not available")
+            return
+        }
+        
+        motionManager.deviceMotionUpdateInterval = updateInterval
+        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+            guard let self = self,
+                  let motion = motion,
+                  Date().timeIntervalSince(self.lastUpdateTime) >= self.updateInterval else { return }
+            
+            let gravity = motion.gravity
+            let angle = atan2(gravity.x, gravity.y) * (180.0 / .pi)
+            
+            // Only update if the change is significant
+            if abs(angle - self.rotationAngleInDegrees) >= self.orientationUpdateThreshold {
+                self.rotationAngleInDegrees = angle
+                self.lastUpdateTime = Date()
+                self.logger.debug("Updated rotation angle: \\(angle)")
+            }
+        }
+    }
+    
+    private func setupOrientationNotifications() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         
         NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)
             .compactMap { _ in UIDevice.current.orientation }
             .filter { orientation in
-                // Only handle valid interface orientations
                 switch orientation {
                 case .portrait, .portraitUpsideDown, .landscapeLeft, .landscapeRight:
-                    print("DEBUG: [OrientationVM] Valid orientation detected: \(orientation.rawValue)")
                     return true
                 default:
-                    print("DEBUG: [OrientationVM] Ignoring invalid orientation: \(orientation.rawValue)")
                     return false
                 }
             }
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] newOrientation in
-                print("DEBUG: [OrientationVM] Updating orientation to: \(newOrientation.rawValue)")
                 withAnimation(.easeInOut(duration: 0.3)) {
                     self?.orientation = newOrientation
                 }
@@ -43,45 +76,18 @@ final class DeviceOrientationViewModel: ObservableObject {
     }
     
     deinit {
-        print("DEBUG: [OrientationVM] Deinitializing DeviceOrientationViewModel")
+        motionManager.stopDeviceMotionUpdates()
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
-        logger.info("Stopping device orientation observation.")
         if let observer = orientationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }
     
     var rotationAngle: Angle {
-        logger.debug("Calculating UI rotationAngle for device orientation: \\(orientation.rawValue)")
-        let angle: Angle
-        switch orientation {
-        case .landscapeLeft:
-            logger.debug("UI Rotation: Landscape Left -> -90 degrees")
-            angle = .degrees(-90)
-        case .landscapeRight:
-            logger.debug("UI Rotation: Landscape Right -> 90 degrees")
-            angle = .degrees(90)
-        case .portraitUpsideDown:
-            logger.debug("UI Rotation: Portrait Upside Down -> 180 degrees")
-            angle = .degrees(180)
-        default: // .portrait, .unknown, .faceUp, .faceDown
-            logger.debug("UI Rotation: Portrait/Other -> 0 degrees")
-            angle = .degrees(0)
-        }
-        return angle
+        .degrees(rotationAngleInDegrees)
     }
     
     var rotationOffset: CGSize {
-        logger.debug("Calculating UI rotationOffset for device orientation: \\(orientation.rawValue)")
-        let offset: CGSize
-        switch orientation {
-        case .landscapeLeft, .landscapeRight:
-            logger.debug("UI Offset: Landscape -> Zero")
-            offset = CGSize(width: 0, height: 0) // No offset needed in landscape for simple rotations
-        default:
-            logger.debug("UI Offset: Portrait/Other -> Zero")
-            offset = .zero
-        }
-        return offset
+        .zero // Dynamic offset based on rotation is handled by the rotation angle
     }
 } 

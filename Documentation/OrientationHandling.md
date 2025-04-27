@@ -35,6 +35,11 @@ The core goals are:
     *   `OrientationFixViewController` overrides `supportedInterfaceOrientations` to return `.all` if `allowsLandscapeMode` is `true`, otherwise `.portrait`.
     *   This is how `VideoLibraryView` is allowed to rotate when presented via `.fullScreenCover(content: { OrientationFixView(allowsLandscapeMode: true) { VideoLibraryView(...) } })`, while `CameraView` remains primarily portrait.
 
+*   **`CameraPreviewView.swift` (`Features/Camera/Views`)**: 
+    *   Responsible for **rendering the camera preview** using Metal (`MTKView` and `MetalPreviewView` delegate).
+    *   Its rotation is **fixed to portrait (90 degrees)** during its `makeUIView` setup.
+    *   It **does not** observe `DeviceOrientationViewModel` for rotation updates.
+
 *   **`RecordingService.swift` (`Features/Camera/Services`)**:
     *   Responsible for **embedding correct video metadata orientation**.
     *   Before starting recording, it determines the appropriate rotation angle (0, 90, 180, 270 degrees) based on the current device and interface orientation, using the value from `UIDeviceOrientation.videoRotationAngleValue`.
@@ -51,6 +56,7 @@ The core goals are:
 1.  **Physical Orientation**: `DeviceOrientationViewModel` tracks the physical device orientation.
 2.  **UI Element Rotation**: `RotatingView` observes the `DeviceOrientationViewModel` and rotates its content accordingly.
 3.  **Interface Lock/Allow**: When a view is presented (especially modally), `OrientationFixView` wraps it if specific orientation rules are needed. `AppDelegate` queries the `OrientationFixViewController`'s `allowsLandscapeMode` property (or defaults to portrait) to tell the system which interface orientations are permitted *at that moment*.
-4.  **Video Metadata**: When recording starts, `RecordingService` calculates the necessary transform based on the current orientation (using the angle from `videoRotationAngleValue`) and applies it to the video track, ensuring correct playback later.
+4.  **Preview Rendering**: `CameraPreviewView` renders the preview frames, fixed in a portrait orientation.
+5.  **Video Metadata**: When recording starts, `RecordingService` calculates the necessary transform based on the current physical orientation (using the angle from `videoRotationAngleValue`) and applies it to the video track, ensuring correct playback later.
 
-This approach separates concerns: physical orientation tracking, UI element rotation, interface orientation locking, and video metadata are handled by distinct, specialized components. 
+This approach separates concerns: physical orientation tracking, UI element rotation, interface orientation locking, preview rendering orientation, and video metadata are handled by distinct, specialized components. 

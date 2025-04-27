@@ -17,6 +17,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private var textureCache: CVMetalTextureCache!
     private var inFlightSemaphore = DispatchSemaphore(value: 1) // Single buffer for lower latency
     private let lutManager: LUTManager
+    private var rotationAngle: Double = 0.0
+    private var rotationBuffer: MTLBuffer!
     
     // Texture properties for different formats
     private var bgraTexture: MTLTexture?
@@ -64,6 +66,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         }
         self.textureCache = unwrappedTextureCache
         
+        // Create rotation buffer
+        var initialRotation: Float = 0.0
+        rotationBuffer = device.makeBuffer(bytes: &initialRotation,
+                                         length: MemoryLayout<Float>.size,
+                                         options: [.storageModeShared])
+        
         // Setup render pipelines
         setupRenderPipelines()
         
@@ -99,8 +107,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // --- RGB Pipeline --- 
         let rgbPipelineDescriptor = MTLRenderPipelineDescriptor()
-        rgbPipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexShader")
-        rgbPipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentShaderRGB") // New shader name
+        rgbPipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexShaderWithRotation")
+        rgbPipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentShaderRGB")
         rgbPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         
         do {
@@ -112,9 +120,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // --- YUV Pipeline --- 
         let yuvPipelineDescriptor = MTLRenderPipelineDescriptor()
-        yuvPipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexShader")
-        yuvPipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentShaderYUV") // New shader name
-        yuvPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm // Output is still BGRA
+        yuvPipelineDescriptor.vertexFunction = library.makeFunction(name: "vertexShaderWithRotation")
+        yuvPipelineDescriptor.fragmentFunction = library.makeFunction(name: "fragmentShaderYUV")
+        yuvPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         
         do {
             yuvPipelineState = try device.makeRenderPipelineState(descriptor: yuvPipelineDescriptor)
@@ -288,6 +296,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         // The draw method will use the specific textures based on currentPixelFormat
     }
     
+    func updateRotation(angle: Double) {
+        rotationAngle = angle
+        var rotation = Float(angle * Double.pi / 180.0)
+        memcpy(rotationBuffer.contents(), &rotation, MemoryLayout<Float>.size)
+        mtkView?.draw()
+    }
+    
     // MARK: - MTKViewDelegate
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
@@ -297,7 +312,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
-        _ = inFlightSemaphore.wait(timeout: .now()) // Non-blocking wait
+        _ = inFlightSemaphore.wait(timeout: .distantFuture)
         
         guard let commandBuffer = commandQueue.makeCommandBuffer(),
               let renderPassDescriptor = view.currentRenderPassDescriptor,
@@ -305,6 +320,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             inFlightSemaphore.signal()
             return
         }
+        
+        // Set the rotation buffer
+        renderEncoder.setVertexBuffer(rotationBuffer, offset: 0, index: 1)
         
         // Set the pipeline state based on available textures
         if bgraTexture != nil {

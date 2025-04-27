@@ -8,6 +8,7 @@ import os.log
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
+    @ObservedObject var orientationVM = DeviceOrientationViewModel.shared
     let viewModel: CameraViewModel
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
@@ -18,21 +19,22 @@ struct CameraPreviewView: UIViewRepresentable {
         self.session = session
         self.lutManager = lutManager
         self.viewModel = viewModel
-        logger.info("[LIFECYCLE] CameraPreviewView (Representable) INIT")
+        logger.debug("[LIFECYCLE] CameraPreviewView (Representable) INIT")
     }
     // ---> END INIT LOG <---
 
     func makeUIView(context: Context) -> MTKView {
-        logger.info("makeUIView: Creating MTKView")
+        logger.debug("makeUIView: Creating MTKView")
         
         let mtkView = MTKView()
         mtkView.backgroundColor = .black // Set background
         mtkView.translatesAutoresizingMaskIntoConstraints = false
 
-        // Create and assign the delegate, passing the lutManager
+        // Create and assign the delegate with rotation support
         let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager)
+        // Force initial rotation to Portrait (90 degrees)
+        metalDelegate.updateRotation(angle: 90)
         viewModel.metalPreviewDelegate = metalDelegate
-        let _ = print("DEBUG_DEVICE: Assigned metalPreviewDelegate in makeUIView. Delegate: \(metalDelegate)")
         
         // Ensure initial layout
         mtkView.setNeedsLayout()
@@ -43,7 +45,7 @@ struct CameraPreviewView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: MTKView, context: Context) {
-        logger.trace("updateUIView called.")
+        // Only update if needed
     }
     
     func makeCoordinator() -> Coordinator {

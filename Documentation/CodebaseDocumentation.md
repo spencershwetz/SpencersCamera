@@ -99,8 +99,8 @@ This document provides a detailed overview of key classes, components, and their
         *   (App lifecycle notification handling is delegated to `AppLifecycleObserver`).
     *   **`CameraPreviewView` (`CameraPreviewView.swift`)**: 
         *   `UIViewRepresentable` for `MTKView`.
-        *   `makeUIView`: Creates `MTKView`, sets up `MetalPreviewView` as its delegate (passing `LUTManager`), creates and adds `AVCaptureVideoDataOutput` to the session, sets the delegate to its `Coordinator`.
-        *   `Coordinator`: `AVCaptureVideoDataOutputSampleBufferDelegate`. Receives frames and passes them to `metalDelegate.updateTexture(with:)`.
+        *   `makeUIView`: Creates `MTKView`, sets up `MetalPreviewView` as its delegate (passing `LUTManager`). The `MetalPreviewView` delegate handles receiving frames and rendering.
+        *   The preview rotation is fixed to portrait (90 degrees) within this view's setup.
         *   `isAppleLogEnabled`: Controls Apple Log colorspace (requires session reconfiguration).
         *   `isExposureLocked`: Controls whether exposure is locked (`AVCaptureDevice.ExposureMode.locked`).
         *   Coordinates service interactions for setup, lens/zoom changes, format changes (resolution, FPS, Apple Log), exposure/WB changes, recording start/stop, exposure lock.
