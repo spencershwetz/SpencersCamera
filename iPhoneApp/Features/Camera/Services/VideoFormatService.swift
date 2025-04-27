@@ -442,6 +442,10 @@ class VideoFormatService {
             }
             // --- End set format ---
 
+            // Explicitly set the color space to Apple Log
+            logger.info("🎨 [configureAppleLog] Setting activeColorSpace to Apple Log...")
+            device.activeColorSpace = .appleLog
+
             // --- Verify the activeColorSpace is now Apple Log --- 
             if device.activeColorSpace == .appleLog {
                  logger.info("✅ [configureAppleLog] Verified activeColorSpace is now Apple Log after explicit set.")
@@ -533,6 +537,18 @@ class VideoFormatService {
              } else {
                  logger.info("ℹ️ [resetAppleLog] Active format is already the target format.")
              }
+            
+            // Explicitly set the color space to standard
+            logger.info("🎨 [resetAppleLog] Setting activeColorSpace to standard...")
+            device.activeColorSpace = .sRGB
+            
+            // Verify the color space was reset
+            if device.activeColorSpace == .sRGB {
+                logger.info("✅ [resetAppleLog] Verified activeColorSpace is now standard.")
+            } else {
+                logger.error("❌ [resetAppleLog] FAILED verification: activeColorSpace is \(device.activeColorSpace.rawValue), not standard, after explicit set.")
+                throw CameraError.configurationFailed(message: "Failed to verify standard color space after explicit set.")
+            }
             
             // Set frame duration
             logger.info("⏱️ [resetAppleLog] Calling updateFrameRateForCurrentFormat for FPS \(currentFPS)...")
