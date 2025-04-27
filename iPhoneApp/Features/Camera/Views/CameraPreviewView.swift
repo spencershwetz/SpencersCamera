@@ -8,7 +8,6 @@ import os.log
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
-    @ObservedObject var orientationVM = DeviceOrientationViewModel.shared
     let viewModel: CameraViewModel
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
@@ -19,7 +18,6 @@ struct CameraPreviewView: UIViewRepresentable {
         self.session = session
         self.lutManager = lutManager
         self.viewModel = viewModel
-        logger.debug("[LIFECYCLE] CameraPreviewView (Representable) INIT")
     }
     // ---> END INIT LOG <---
 
