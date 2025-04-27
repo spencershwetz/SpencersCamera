@@ -22,6 +22,9 @@ class LUTManager: ObservableObject {
     private var cubeDimension: Int = 0
     private var cubeData: Data?
     
+    // Callback for when LUT state changes
+    var onLUTChanged: ((Bool) -> Void)?
+    
     // Computed property for the current LUT name
     var currentLUTName: String {
         selectedLUTURL?.deletingPathExtension().lastPathComponent ?? "None"
@@ -122,6 +125,8 @@ class LUTManager: ObservableObject {
         self.currentLUTFilter = nil
         self.selectedLUTURL = nil
         self.dimension = 0
+        // Notify observers that LUT is inactive (identity)
+        self.onLUTChanged?(false)
     }
     
     private func setupLUTTexture(lutInfo: (dimension: Int, data: [Float])) {
@@ -174,6 +179,8 @@ class LUTManager: ObservableObject {
         DispatchQueue.main.async {
             self.currentLUTTexture = texture
             self.dimension = dimension
+            // Notify observers that LUT is active
+            self.onLUTChanged?(true)
         }
     }
     
