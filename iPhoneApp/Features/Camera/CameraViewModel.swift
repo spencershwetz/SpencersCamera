@@ -1330,39 +1330,72 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Create and configure the unified video output
         let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.setSampleBufferDelegate(self, queue: processingQueue)
         
-        // Dynamically choose pixel format to avoid costly in-flight conversions that introduce preview lag.
-        // Apple Log (10-bit YUV) ⇒ request native "x422"; otherwise request standard 8-bit 420v.
+        // Use high priority queue for preview frames
+        let highPriorityQueue = DispatchQueue(label: "com.camera.preview", qos: .userInteractive, attributes: .concurrent)
+        videoOutput.setSampleBufferDelegate(self, queue: highPriorityQueue)
+        
+        // Get available pixel formats
+        let availableFormats = videoOutput.availableVideoPixelFormatTypes
+        
+        // Define our preferred formats
         let appleLogPixelFormat: OSType = 2016686642 // 'x422' 10-bit 4:2:2 Bi-Planar
         let standardPixelFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-
-        let desiredPixelFormat: OSType = self.isAppleLogEnabled ? appleLogPixelFormat : standardPixelFormat
-
+        let fallbackPixelFormat: OSType = kCVPixelFormatType_32BGRA
+        
+        // Log available formats for debugging
+        logger.debug("Available pixel formats: \(availableFormats.map { String(format: "%08x", $0) })")
+        
+        // Choose pixel format based on availability and Apple Log setting
+        var selectedFormat: OSType
+        
+        if self.isAppleLogEnabled && availableFormats.contains(appleLogPixelFormat) {
+            selectedFormat = appleLogPixelFormat
+            logger.info("Using Apple Log pixel format (x422)")
+        } else if availableFormats.contains(standardPixelFormat) {
+            selectedFormat = standardPixelFormat
+            logger.info("Using standard YUV pixel format (420v)")
+        } else if availableFormats.contains(fallbackPixelFormat) {
+            selectedFormat = fallbackPixelFormat
+            logger.info("Using fallback BGRA pixel format")
+        } else {
+            logger.error("No supported pixel formats available")
+            session.commitConfiguration()
+            return
+        }
+        
+        // Configure video settings
         videoOutput.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: desiredPixelFormat,
-            kCVPixelBufferMetalCompatibilityKey as String: true
+            kCVPixelBufferPixelFormatTypeKey as String: selectedFormat,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
         ]
         
-        // Ensure we drop frames
+        // Ensure we drop frames to maintain real-time preview
         videoOutput.alwaysDiscardsLateVideoFrames = true
         
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
             unifiedVideoOutput = videoOutput
             
-            // Configure video connection
+            // Configure video connection for minimal latency
             if let connection = videoOutput.connection(with: .video) {
                 // Enable video stabilization if available
                 if connection.isVideoStabilizationSupported {
-                    connection.preferredVideoStabilizationMode = .auto
+                    connection.preferredVideoStabilizationMode = .off // Disable for lower latency
                 }
                 
                 // Set video orientation
                 connection.videoRotationAngle = 0  // 0 degrees for portrait
                 
-                logger.info("UNIFIED_VIDEO: Connection configured - rotation: \(connection.videoRotationAngle)°, stabilization: \((connection.activeVideoStabilizationMode != .off))")
+                // Minimize latency
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+                
+                logger.info("UNIFIED_VIDEO: Connection configured - rotation: \(connection.videoRotationAngle)°")
             }
+            
+            logger.info("Successfully added video output to session")
         } else {
             logger.error("Failed to add unified video output to session")
         }
@@ -1372,62 +1405,35 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     // Update the AVCaptureVideoDataOutputSampleBufferDelegate method
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // Process the frame if needed, or handle any frame-level logic
-        // For now, just returning the pixel buffer from the sample buffer
-        // processingQueue.async { [weak self] in 
-            // Use direct self reference now
-            // guard let self = self else { return }
-            
-            // Determine if the buffer is video or audio
-            if output == self.unifiedVideoOutput {
-                // ---> REMOVE PRINT 1 <--- 
-                // let _ = print("DEBUG_DEVICE: CameraViewModel.captureOutput received VIDEO frame")
-                // Video Frame Processing
-                self.videoFrameCount += 1
-                // logger.trace("VID FRAME #\\(self.videoFrameCount)") // Removed excessive log
+        if output == self.unifiedVideoOutput {
+            self.videoFrameCount += 1
 
-                guard CMSampleBufferIsValid(sampleBuffer) else {
-                    logger.error("[VideoCapture] Invalid sample buffer received")
-                    return
-                }
-                
-                // Create a copy of the sample buffer for processing
+            guard CMSampleBufferIsValid(sampleBuffer) else {
+                logger.error("[VideoCapture] Invalid sample buffer received")
+                return
+            }
+            
+            // Skip buffer copying for preview frames to reduce latency
+            self.metalPreviewDelegate?.updateTexture(with: sampleBuffer)
+            
+            // Only copy buffer if we're recording
+            if self.isRecording {
                 var copiedBuffer: CMSampleBuffer?
                 let copyStatus = CMSampleBufferCreateCopy(allocator: kCFAllocatorDefault, sampleBuffer: sampleBuffer, sampleBufferOut: &copiedBuffer)
                 
-                guard copyStatus == noErr, let copiedBuffer = copiedBuffer else {
-                    logger.error("[VideoCapture] Failed to copy sample buffer: \(copyStatus)")
-                    return
-                }
-
-                // ---> ADD CHECK FOR NIL DELEGATE <--- 
-                if self.metalPreviewDelegate == nil {
-                    // Only print this periodically to avoid flooding console if it's always nil
-                    if self.videoFrameCount % 60 == 0 { // Print once every ~2 seconds at 30fps
-                        print("DEBUG_DEVICE: metalPreviewDelegate is NIL in captureOutput (frame #\(self.videoFrameCount))")
-                    }
-                }
-                // ---> END CHECK <--- 
-                
-                // Call directly on processingQueue
-                self.metalPreviewDelegate?.updateTexture(with: copiedBuffer)
-                
-                // Forward to recording service if recording
-                if self.isRecording {
+                if copyStatus == noErr, let copiedBuffer = copiedBuffer {
                     self.recordingService?.process(sampleBuffer: copiedBuffer)
                 }
-                
-                // Log frame processing for debugging
-                if self.videoFrameCount % self.frameRateUpdateInterval == 0 {
-                    logger.debug("[VideoCapture] Processed \(self.videoFrameCount) frames")
-                }
-            } else {
-                // Audio Frame Processing
-                self.audioFrameCount += 1
-                // logger.trace("AUD FRAME #\(self.audioFrameCount)") // Removed excessive log
             }
-        // } // End removed async dispatch
-        // ---> END REMOVAL <--- 
+            
+            // Log frame processing for debugging
+            if self.videoFrameCount % self.frameRateUpdateInterval == 0 {
+                logger.debug("[VideoCapture] Processed \(self.videoFrameCount) frames")
+            }
+        } else {
+            // Audio Frame Processing
+            self.audioFrameCount += 1
+        }
     }
 
     // Add method to set recording service
