@@ -31,6 +31,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     // Keep track of the owning MTKView
     private weak var mtkView: MTKView?
     
+    private var isLUTActiveBuffer: MTLBuffer! // Add buffer for LUT active flag
+    private var isBT709Buffer: MTLBuffer! // Add buffer for BT.709 flag
+    
     init(mtkView: MTKView, lutManager: LUTManager) {
         self.lutManager = lutManager
         super.init()
@@ -68,6 +71,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         mtkView.preferredFramesPerSecond = 30
         mtkView.enableSetNeedsDisplay = false // Use continuous rendering
         mtkView.isPaused = false
+        
+        // Create uniform buffers
+        var isLUTActiveValue: Bool = false
+        isLUTActiveBuffer = device.makeBuffer(bytes: &isLUTActiveValue, length: MemoryLayout<Bool>.size, options: [])
+        
+        var isBT709Value: Bool = false
+        isBT709Buffer = device.makeBuffer(bytes: &isBT709Value, length: MemoryLayout<Bool>.size, options: [])
         
         logger.info("MetalPreviewView initialized with device: \(self.device.name)")
     }
@@ -207,6 +217,82 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
             bgraTexture = nil // Ensure BGRA texture is nil
             
+        } else if pixelFormat == 875704438 { // '420v' - BT.709 video range
+            // Create Luma (Y) texture (Plane 0)
+            var lumaTextureRef: CVMetalTexture?
+            let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
+                kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+                .r8Unorm,
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+                0,
+                &lumaTextureRef
+            )
+            
+            // Create Chroma (CbCr) texture (Plane 1)
+            var chromaTextureRef: CVMetalTexture?
+            let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
+                kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+                .rg8Unorm,
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+                1,
+                &chromaTextureRef
+            )
+            
+            guard lumaResult == kCVReturnSuccess, let unwrappedLumaRef = lumaTextureRef,
+                  chromaResult == kCVReturnSuccess, let unwrappedChromaRef = chromaTextureRef else {
+                logger.warning("Failed to create 420v Metal textures from pixel buffer")
+                return
+            }
+            
+            // Update textures
+            bgraTexture = nil
+            lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef)
+            chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
+            
+            // Set BT.709 flag for shader
+            var isBT709Value = true
+            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
+            
+        } else if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange { // '420v' format
+            // Create Luma (Y) texture (Plane 0)
+            var lumaTextureRef: CVMetalTexture?
+            let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
+                kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+                .r8Unorm, // Use 8-bit single channel for luma
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+                0, // Plane index 0
+                &lumaTextureRef
+            )
+            
+            // Create Chroma (CbCr) texture (Plane 1)
+            var chromaTextureRef: CVMetalTexture?
+            let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
+                kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+                .rg8Unorm, // Use 8-bit 2-channel for chroma
+                CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
+                CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+                1, // Plane index 1 for Chroma
+                &chromaTextureRef
+            )
+            
+            guard lumaResult == kCVReturnSuccess, let unwrappedLumaRef = lumaTextureRef,
+                  chromaResult == kCVReturnSuccess, let unwrappedChromaRef = chromaTextureRef else {
+                logger.warning("Failed to create YUV Metal textures from pixel buffer")
+                return
+            }
+            
+            bgraTexture = nil // Ensure BGRA texture is nil
+            lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef)
+            chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
+            
+            if lumaTexture == nil || chromaTexture == nil {
+                logger.warning("Failed to get Metal textures from CVMetalTexture")
+                return
+            }
+            
         } else {
             logger.warning("Ignoring unsupported pixel format: \(formatStr)")
             // Optionally clear textures if needed
@@ -253,24 +339,23 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
              return
          }
         
-        // Select pipeline and bind textures based on the current format
-        if currentPixelFormat == kCVPixelFormatType_32BGRA, let texture = bgraTexture {
-            // Render BGRA Texture
+        // Determine which pipeline to use
+        if bgraTexture != nil {
             renderEncoder.setRenderPipelineState(rgbPipelineState)
-            renderEncoder.setFragmentTexture(texture, index: 0)
-            renderEncoder.setFragmentTexture(lutTexture, index: 1)
-        } else if currentPixelFormat == 2016686642,
-                  let yTexture = lumaTexture, let cbcrTexture = chromaTexture {
-            // Render YUV Texture
+            renderEncoder.setFragmentTexture(bgraTexture, index: 0)
+        } else if lumaTexture != nil && chromaTexture != nil {
             renderEncoder.setRenderPipelineState(yuvPipelineState)
-            renderEncoder.setFragmentTexture(yTexture, index: 0)
-            renderEncoder.setFragmentTexture(cbcrTexture, index: 1)
-            renderEncoder.setFragmentTexture(lutTexture, index: 2)
+            renderEncoder.setFragmentTexture(lumaTexture, index: 0)
+            renderEncoder.setFragmentTexture(chromaTexture, index: 1)
             
-            // --- Pass isLUTActive uniform ---
-            var isLUTActive = lutManager.selectedLUTURL != nil // Check if a custom LUT is loaded
-            renderEncoder.setFragmentBytes(&isLUTActive, length: MemoryLayout<Bool>.size, index: 0) // Pass boolean to shader buffer 0
-            // --- End Pass isLUTActive ---
+            // Set LUT texture if available
+            if let lutTexture = lutManager.currentLUTTexture {
+                renderEncoder.setFragmentTexture(lutTexture, index: 2)
+            }
+            
+            // Set uniform buffers
+            renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
+            renderEncoder.setFragmentBuffer(isBT709Buffer, offset: 0, index: 1)
         } else {
             renderEncoder.endEncoding()
             commandBuffer.commit() // Commit empty command buffer

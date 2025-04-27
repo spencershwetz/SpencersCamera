@@ -28,7 +28,7 @@ The project is organized into the following main components:
 │   │   │   └── UIDeviceOrientation+Extensions.swift
 │   │   ├── Metal/
 │   │   │   ├── MetalFrameProcessor.swift
-│   │   │   ├── MetalPreviewView.swift
+│   │   │   ├── MetalPreviewView.swift      # Metal-based preview with uniform buffer support
 │   │   │   └── PreviewShaders.metal
 │   │   ├── Orientation/
 │   │   │   ├── DeviceOrientationViewModel.swift

@@ -94,7 +94,8 @@ fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
                                 texture2d<float, access::sample> yTexture [[texture(0)]],      // Luma (Y) plane
                                 texture2d<float, access::sample> cbcrTexture [[texture(1)]],   // Chroma (CbCr) plane
                                 texture3d<float> lutTexture [[texture(2)]],                   // LUT
-                                constant bool &isLUTActive [[buffer(0)]]) {                    // Uniform to check if LUT is active
+                                constant bool &isLUTActive [[buffer(0)]],                    // Uniform to check if LUT is active
+                                constant bool &isBT709 [[buffer(1)]]) {                      // Uniform to check color space
 
     constexpr sampler textureSampler(mag_filter::linear, min_filter::linear);
     constexpr sampler lutSampler(coord::normalized, filter::linear, address::clamp_to_edge);
@@ -103,32 +104,36 @@ fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
     float y = yTexture.sample(textureSampler, in.textureCoordinate).r;
     float2 cbcr = cbcrTexture.sample(textureSampler, in.textureCoordinate).rg;
     
-    // YUV to RGB (BT.2020) -> Results are Log encoded RGB
-    float Y = y;
+    // Convert to video range [16/255, 235/255] for Y and [16/255, 240/255] for CbCr
+    float Y = y * (219.0/255.0) + (16.0/255.0);
     float Cb = cbcr.r - 0.5;
     float Cr = cbcr.g - 0.5;
-    float R = Y + 1.4746 * Cr;
-    float G = Y - 0.1646 * Cb - 0.5714 * Cr;
-    float B = Y + 1.8814 * Cb;
     
-    // Ensure valid RGB values (Log encoded)
-    float3 log_rgb = clamp(float3(R, G, B), 0.0, 1.0);
+    float3 rgb;
+    if (isBT709) {
+        // BT.709 coefficients for video range
+        rgb = float3(
+            Y + 1.5748 * Cr,
+            Y - 0.1873 * Cb - 0.4681 * Cr,
+            Y + 1.8556 * Cb
+        );
+    } else {
+        // BT.2020 coefficients (existing code)
+        rgb = float3(
+            Y + 1.4746 * Cr,
+            Y - 0.1646 * Cb - 0.5714 * Cr,
+            Y + 1.8814 * Cb
+        );
+    }
+    
+    // Ensure valid RGB values
+    float3 clampedRGB = clamp(rgb, 0.0, 1.0);
     
     if (isLUTActive) {
-        // --- APPLY LUT DIRECTLY TO LOG SIGNAL ---
-        float4 lutColor = lutTexture.sample(lutSampler, log_rgb); // Use log_rgb for lookup
-        // Return the color from the LUT
+        float4 lutColor = lutTexture.sample(lutSampler, clampedRGB);
         return float4(lutColor.rgb, 1.0);
-        
-        // --- DEBUG OUTPUT: Return RED if LUT is active ---
-        // return float4(1.0, 0.0, 0.0, 1.0); // Red
     } else {
-        // --- RETURN RAW LOG SIGNAL ---
-        // MTKView's pixel format (likely sRGB) will handle display transformation.
-        return float4(log_rgb, 1.0);
-        
-        // --- DEBUG OUTPUT: Return GREEN if LUT is NOT active ---
-        // return float4(0.0, 1.0, 0.0, 1.0); // Green
+        return float4(clampedRGB, 1.0);
     }
 }
 

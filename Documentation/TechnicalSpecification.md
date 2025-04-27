@@ -70,6 +70,7 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Real-time Preview**: 
     *   Uses `MetalKit` (`MTKView`) and `MetalPreviewView` delegate.
     *   Rendering Path: `AVCaptureVideoDataOutput` -> `CameraPreviewView.Coordinator` -> `MetalPreviewView.updateTexture` -> `MetalPreviewView.draw` -> Metal Shaders (`PreviewShaders.metal`) -> `MTKView` Drawable.
+    *   Metal Buffer Creation: Uses mutable variables for buffer creation to support inout parameters when creating Metal buffers for LUT active flag and BT.709 flag.
     *   Visual adjustments (`.scaleEffect(0.9)`, padding) are applied to the `CameraPreviewView` within `CameraView.swift` for positioning.
     *   Triple buffering managed via `DispatchSemaphore` in `MetalPreviewView`.
 *   **Recording Light**: 

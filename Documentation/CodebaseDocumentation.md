@@ -26,6 +26,7 @@ This document provides a detailed overview of key classes, components, and their
         *   `NSObject`, `MTKViewDelegate`. Initialized with an `MTKView` and `LUTManager`.
         *   Creates and manages `MTLDevice`, `MTLCommandQueue`, `CVMetalTextureCache`.
         *   Creates Metal render pipelines (`rgbPipelineState`, `yuvPipelineState`) using shaders from `PreviewShaders.metal`.
+        *   Creates Metal uniform buffers for LUT active flag and BT.709 flag using mutable variables to support inout parameters.
         *   `updateTexture(with: CMSampleBuffer)`: Creates `MTLTexture`s (`bgraTexture` or `lumaTexture`/`chromaTexture`) from the `CVPixelBuffer` in the `CMSampleBuffer` using the texture cache. Handles `kCVPixelFormatType_32BGRA` and `kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange` ('x422' Apple Log).
         *   `draw(in: MTKView)`: Renders the appropriate texture (`bgraTexture` or `lumaTexture`/`chromaTexture`) to the `MTKView`'s drawable using the corresponding pipeline state (`rgbPipelineState` or `yuvPipelineState`). Fetches the `currentLUTTexture` from `LUTManager` and passes it to the fragment shader. Uses a `DispatchSemaphore` (`inFlightSemaphore`) for triple buffering.
     *   **`MetalFrameProcessor` (`MetalFrameProcessor.swift`)**: 
