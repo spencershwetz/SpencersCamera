@@ -139,7 +139,7 @@ class VideoFormatService {
         do {
             guard let compatibleFormat = findCompatibleFormat(for: fps) else {
                 logger.error("No compatible format found for \(fps) fps")
-                throw CameraError.configurationFailed(message: "This device doesn't support \(fps) fps recording")
+                throw CameraError.configurationFailed(message: "Failed to configure device for \(fps) fps recording.")
             }
             
             try device.lockForConfiguration()
