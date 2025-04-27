@@ -7,10 +7,10 @@ import AVFoundation
 struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
     @EnvironmentObject var settings: SettingsModel
+    @Environment(\.scenePhase) private var scenePhase
 
     // Use the shared instance with @ObservedObject
     @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
-    @StateObject private var appLifecycleObserver = AppLifecycleObserver() // Add the new observer manager
 
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false
@@ -82,19 +82,26 @@ struct CameraView: View {
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
-                viewModel.startSession()
             }
             .onDisappear {
                 viewModel.stopSession()
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                // When app is moved to background
-                viewModel.stopSession()
-            }
-            // REINSTATE: Restart session when app becomes active again
-            .onReceive(appLifecycleObserver.didBecomeActivePublisher) { _ in
-                print("DEBUG: Received didBecomeActivePublisher event, calling viewModel.startSession()")
-                viewModel.startSession()
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                switch newPhase {
+                case .active:
+                    print("DEBUG: ScenePhase changed to active, calling viewModel.startSession()")
+                    viewModel.startSession()
+                case .inactive:
+                    print("DEBUG: ScenePhase changed to inactive, calling viewModel.stopSession()")
+                    viewModel.stopSession()
+                case .background:
+                    print("DEBUG: ScenePhase changed to background, calling viewModel.stopSession()")
+                    viewModel.stopSession()
+                @unknown default:
+                    // Handle future cases if necessary
+                    print("DEBUG: ScenePhase changed to unknown state.")
+                    viewModel.stopSession() // Stop session as a safe default
+                }
             }
             .onChange(of: viewModel.lutManager.currentLUTFilter) { oldValue, newValue in
                 // When LUT changes, update preview indicator

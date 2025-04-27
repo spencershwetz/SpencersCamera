@@ -50,16 +50,30 @@ class ExposureService: NSObject {
     }
     
     func setDevice(_ device: AVCaptureDevice?) {
-        logger.info("ExposureService setDevice called with: \(device?.localizedName ?? "nil")")
-        removeDeviceObservers()
-        self.device = device
-        if let device = device {
-            logger.info("ExposureService setupDeviceObservers called for device: \(device.localizedName)")
-            setupDeviceObservers(for: device)
-            self.isAutoExposureEnabled = (device.exposureMode == .continuousAutoExposure)
-            logger.info("Initial auto exposure state set to: \(self.isAutoExposureEnabled)")
+        // ADD GUARD: Check if the new device is the same as the current one
+        guard device != self.device else {
+            logger.debug("ExposureService setDevice called with the same device (\(device?.localizedName ?? "nil")), skipping observer setup.")
+            // Ensure observers are still attached if the device is not nil
+            if self.device != nil && isoObservation == nil { // Check if observers might be missing
+                logger.warning("Device is the same, but observers seem missing. Re-attaching for \(self.device!.localizedName).")
+                removeDeviceObservers() // Clean up just in case
+                setupDeviceObservers(for: self.device!)
+            } else if self.device == nil {
+                logger.debug("Current device is nil, no observers to ensure.")
+            }
+            return
+        }
+        
+        logger.info("ExposureService setDevice called with NEW device: \(device?.localizedName ?? "nil")")
+        removeDeviceObservers() // Remove observers for the OLD device
+        self.device = device // Set the NEW device
+        if let newDevice = device {
+            logger.info("ExposureService setupDeviceObservers called for NEW device: \(newDevice.localizedName)")
+            setupDeviceObservers(for: newDevice) // Setup observers for the NEW device
+            self.isAutoExposureEnabled = (newDevice.exposureMode == .continuousAutoExposure)
+            logger.info("Initial auto exposure state set to: \(self.isAutoExposureEnabled) for new device")
         } else {
-             logger.info("ExposureService setDevice called with nil, observers removed.")
+             logger.info("ExposureService setDevice called with nil, observers removed, device set to nil.")
         }
     }
     

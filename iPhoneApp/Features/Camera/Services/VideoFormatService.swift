@@ -458,16 +458,40 @@ class VideoFormatService {
             logger.info("✅ [configureAppleLog] Found suitable Apple Log format: \(selectedFormat.description)")
             // --- End findBestFormat usage ---
             
-            // Set the format first
+            // --- Set the format first --- 
             if device.activeFormat != selectedFormat {
                 logger.info("🎞️ [configureAppleLog] Setting activeFormat...")
                 device.activeFormat = selectedFormat
-                logger.info("✅ [configureAppleLog] Applied best format for Apple Log.")
+                logger.info("✅ [configureAppleLog] Set activeFormat to Apple Log compatible format.")
             } else {
-                logger.info("ℹ️ [configureAppleLog] Active format is already the target format.")
+                logger.info("ℹ️ [configureAppleLog] Active format is already the target Apple Log compatible format.")
             }
+            // --- End set format ---
+
+            // --- Explicitly set Apple Log Color Space ---
+            // Check if the selected format *actually* supports Apple Log before trying to set it.
+            if selectedFormat.supportedColorSpaces.contains(.appleLog) {
+                 logger.info("🎨 [configureAppleLog] Explicitly setting activeColorSpace to .appleLog...")
+                 device.activeColorSpace = .appleLog
+            } else {
+                 // This case should ideally not be reached if findBestFormat works correctly, but log a warning just in case.
+                 logger.warning("⚠️ [configureAppleLog] Selected format \(selectedFormat.description) does not support Apple Log, cannot explicitly set color space.")
+                 // We might want to throw an error here, as the premise of configureAppleLog is violated.
+                 // For now, we'll let the verification step below catch it.
+            }
+            // --- End Explicit Set ---
             
-            // Verify the format supports Apple Log
+            // --- Verify the activeColorSpace is now Apple Log --- 
+            if device.activeColorSpace == .appleLog {
+                 logger.info("✅ [configureAppleLog] Verified activeColorSpace is now Apple Log after explicit set.")
+             } else {
+                  logger.error("❌ [configureAppleLog] FAILED verification: activeColorSpace is \(device.activeColorSpace.rawValue), not Apple Log, after explicit set for format \(selectedFormat.description).")
+                  // Throw error if verification fails after explicit attempt
+                 throw CameraError.configurationFailed(message: "Failed to verify Apple Log color space after explicit set.")
+             }
+            // --- End verification ---
+             
+            // Verify the format supports Apple Log (redundant check, but safe)
             logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
             guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
                 logger.error("❌ [configureAppleLog] Failed: Selected format \(selectedFormat.description) does not support Apple Log despite findBestFormat.")
@@ -492,15 +516,6 @@ class VideoFormatService {
                 device.automaticallyAdjustsVideoHDREnabled = true
                 device.isVideoHDREnabled = false
                  logger.info("ℹ️ [configureAppleLog] Selected Apple Log format does not support HDR video.")
-            }
-            
-            // Set color space - This might be overwritten by reapplyColorSpaceSettings later, but good to set
-            logger.info("🎨 [configureAppleLog] Setting activeColorSpace to .appleLog (will be verified later)...")
-            if device.activeColorSpace != .appleLog { 
-                device.activeColorSpace = .appleLog
-                logger.info("✅ [configureAppleLog] Set activeColorSpace to Apple Log within lock.")
-            } else {
-                 logger.info("ℹ️ [configureAppleLog] activeColorSpace already set to Apple Log within lock.")
             }
             
             logger.info("✅ [configureAppleLog] Successfully prepared device for Apple Log format.")
