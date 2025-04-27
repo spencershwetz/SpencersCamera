@@ -97,8 +97,13 @@ class CameraManager: NSObject {
             
             // Configure video orientation
             if let connection = videoOutput.connection(with: .video) {
-                if connection.isVideoOrientationSupported {
-                    connection.videoOrientation = .portrait
+                // iOS 17+: Use videoRotationAngle instead of deprecated videoOrientation
+                let desiredAngle: CGFloat = UIDevice.current.orientation.videoRotationAngleValue
+                if connection.isVideoRotationAngleSupported(desiredAngle) {
+                    connection.videoRotationAngle = desiredAngle
+                    logger.debug("Configured videoRotationAngle to: \(desiredAngle)°")
+                } else {
+                    logger.warning("Desired video rotation angle (\(desiredAngle)°) not supported; leaving default orientation.")
                 }
                 if connection.isVideoMirroringSupported {
                     connection.isVideoMirrored = false
@@ -148,24 +153,18 @@ class CameraManager: NSObject {
         guard let connection = previewLayer?.connection else { return }
         
         let orientation = UIDevice.current.orientation
-        let videoOrientation: AVCaptureVideoOrientation
         
-        switch orientation {
-        case .portrait:
-            videoOrientation = .portrait
-        case .portraitUpsideDown:
-            videoOrientation = .portraitUpsideDown
-        case .landscapeLeft:
-            videoOrientation = .landscapeRight
-        case .landscapeRight:
-            videoOrientation = .landscapeLeft
-        default:
-            videoOrientation = .portrait
+        // Map device orientation to rotation angle and update connection
+        let angle = orientation.videoRotationAngleValue
+        if connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+            logger.info("Updated videoRotationAngle to: \(angle)° for orientation: \(orientation.rawValue)")
+        } else {
+            logger.warning("videoRotationAngle \(angle)° not supported by connection; keeping existing value: \(connection.videoRotationAngle)°")
         }
         
-        if connection.isVideoOrientationSupported {
-            connection.videoOrientation = videoOrientation
-            logger.info("Updated video orientation to: \(videoOrientation)")
+        if connection.isVideoMirroringSupported {
+            connection.isVideoMirrored = false
         }
     }
 }

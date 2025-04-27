@@ -2,8 +2,14 @@
   "images" : [
     {
       "filename" : "spencers camera.png",
-      "idiom" : "universal",
-      "platform" : "watchos",
+      "idiom" : "ios-marketing",
+      "scale" : "1x",
+      "size" : "1024x1024"
+    },
+    {
+      "filename" : "spencers camera.png",
+      "idiom" : "watch-marketing",
+      "scale" : "1x",
       "size" : "1024x1024"
     }
   ],
