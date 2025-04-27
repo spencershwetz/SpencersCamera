@@ -543,7 +543,7 @@ extension RecordingService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
         }
         // --- END CHECK --- 
 
-        let processingStartTime = Date.nowTimestamp() // START FRAME TIMER
+        _ = Date.nowTimestamp() // START FRAME TIMER
         guard let assetWriter = assetWriter,
               assetWriter.status == .writing else {
             // Added isRecording check above, so this path might be less likely,
