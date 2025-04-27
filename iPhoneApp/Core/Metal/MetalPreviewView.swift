@@ -148,6 +148,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         var textureRef: CVMetalTexture? // Temporary ref for cache function
         
         if pixelFormat == kCVPixelFormatType_32BGRA {
+            // Reset BT.709 flag for non-BT.709 formats
+            var isBT709Value = false
+            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
             // --- Handle BGRA --- 
             let result = CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault, textureCache, pixelBuffer, nil,
@@ -171,6 +174,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             chromaTexture = nil
             
         } else if pixelFormat == 2016686642 { // 'x422' 10-bit Biplanar Apple Log format
+            // Reset BT.709 flag for Apple Log format
+            var isBT709Value = false
+            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
             // --- Handle YUV 422 10-bit Bi-Planar (Apple Log 'x422') ---
             
             // Create Luma (Y) texture (Plane 0)
@@ -219,6 +225,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             bgraTexture = nil // Ensure BGRA texture is nil
             
         } else if pixelFormat == 875704438 { // '420v' - BT.709 video range
+            // Set BT.709 flag for shader
+            var isBT709Value = true
+            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
             // Create Luma (Y) texture (Plane 0)
             var lumaTextureRef: CVMetalTexture?
             let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
@@ -252,11 +261,10 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             lumaTexture = CVMetalTextureGetTexture(unwrappedLumaRef)
             chromaTexture = CVMetalTextureGetTexture(unwrappedChromaRef)
             
-            // Set BT.709 flag for shader
-            var isBT709Value = true
-            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
-            
         } else if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange { // '420v' format
+            // Reset BT.709 flag when not BT.709
+            var isBT709Value = false
+            memcpy(isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
             // Create Luma (Y) texture (Plane 0)
             var lumaTextureRef: CVMetalTexture?
             let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
@@ -319,6 +327,10 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             return
         }
         
+        // Update LUT active flag before each frame
+        var isLUTActiveFlag: Bool = (lutManager.currentLUTTexture != nil)
+        memcpy(isLUTActiveBuffer.contents(), &isLUTActiveFlag, MemoryLayout<Bool>.size)
+        
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
             return
         }
@@ -328,27 +340,23 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             return
         }
         
-        guard let lutTexture = lutManager.currentLUTTexture else {
-             logger.warning("LUT Texture is nil, cannot draw.")
-             renderEncoder.endEncoding()
-             commandBuffer.commit() // Commit empty command buffer
-             return
-         }
+        let lutTexture = lutManager.currentLUTTexture // May be nil
         
         // Determine which pipeline to use
-        if bgraTexture != nil {
+        if let bgraTex = bgraTexture {
             renderEncoder.setRenderPipelineState(rgbPipelineState)
-            renderEncoder.setFragmentTexture(bgraTexture, index: 0)
-        } else if lumaTexture != nil && chromaTexture != nil {
-            renderEncoder.setRenderPipelineState(yuvPipelineState)
-            renderEncoder.setFragmentTexture(lumaTexture, index: 0)
-            renderEncoder.setFragmentTexture(chromaTexture, index: 1)
-            
-            // Set LUT texture if available
-            if let lutTexture = lutManager.currentLUTTexture {
-                renderEncoder.setFragmentTexture(lutTexture, index: 2)
+            renderEncoder.setFragmentTexture(bgraTex, index: 0)
+            if let lutTex = lutTexture {
+                renderEncoder.setFragmentTexture(lutTex, index: 1)
             }
-            
+            // No uniform buffers needed for RGB shader
+        } else if let lumaTex = lumaTexture, let chromaTex = chromaTexture {
+            renderEncoder.setRenderPipelineState(yuvPipelineState)
+            renderEncoder.setFragmentTexture(lumaTex, index: 0)
+            renderEncoder.setFragmentTexture(chromaTex, index: 1)
+            if let lutTex = lutTexture {
+                renderEncoder.setFragmentTexture(lutTex, index: 2)
+            }
             // Set uniform buffers
             renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
             renderEncoder.setFragmentBuffer(isBT709Buffer, offset: 0, index: 1)
