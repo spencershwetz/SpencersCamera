@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 *   Resolved issue where camera preview would not restart after the app returned from the background by using `AppLifecycleObserver` to trigger `startSession`.
 *   Correctly handled `UIApplication.didBecomeActiveNotification` observer lifecycle using `AppLifecycleObserver` to prevent potential issues and ensure proper removal.
 *   Resolved issue where ISO would incorrectly continue to adjust during recording when Shutter Priority and "Lock Exposure During Recording" were both enabled. Decoupled UI lock state (`isExposureLocked`) from internal SP recording lock logic in `CameraViewModel` and `ExposureService`.
+*   Fixed: Exposure lock (ISO) is now correctly restored after lens changes when both "Lock Exposure During Recording" and "Shutter Priority" are enabled. CameraViewModel now re-applies the lock with a short delay after lens switch to ensure the camera device is ready, preventing ISO drift.
 *   Prevented manual exposure lock (`toggleExposureLock`) from being activated while Shutter Priority is enabled (`CameraViewModel`).
 *   Ensured manual exposure lock UI state (`isExposureLocked`) is correctly turned off when Shutter Priority is enabled (`CameraViewModel`).
 *   Corrected KVO KeyPath syntax and usage in `ExposureService`.

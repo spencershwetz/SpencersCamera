@@ -96,7 +96,8 @@ This document provides a detailed overview of key classes, components, and their
 ### Features (`iPhoneApp/Features`)
 
 *   **Camera (`iPhoneApp/Features/Camera`)**
-    *   **`CameraViewModel` (`CameraViewModel.swift`)**: 
+    *   **`CameraViewModel` (`CameraViewModel.swift`)**:
+    *   Handles restoration of exposure lock after lens changes when both "Lock Exposure During Recording" and "Shutter Priority" are enabled. After a lens switch, it re-enables shutter priority and, after a short delay, re-applies the shutter priority exposure lock to ensure ISO remains fixed. 
         *   Acts as central coordinator, holding references to all camera-related services and the `LUTManager`.
         *   Manages `AVCaptureSession` state (`session`, `isSessionRunning`, `status`, `error`).
         *   Handles user settings (`selectedResolution`, `selectedCodec`, `selectedFrameRate`, `isAppleLogEnabled`, `currentLens`, `currentZoomFactor`, `whiteBalance`, `iso`, `shutterSpeed`, `currentTint`, `isAutoExposureEnabled`, `isExposureLocked`, `isShutterPriorityEnabled`).

@@ -30,6 +30,7 @@ This document outlines the technical specifications and requirements for the Spe
         *   Uses KVO on `exposureTargetOffset` to detect deviations from the ideal exposure.
         *   Automatically adjusts ISO using `setExposureModeCustom(duration:iso:)` to compensate for brightness changes, subject to rate limits and thresholds (`handleExposureTargetOffsetUpdate`).
         *   Includes logic (`isTemporarilyLockedForRecording`, `lock/unlockShutterPriorityExposureForRecording`) to temporarily pause auto-ISO adjustments during recording when the "Lock Exposure During Recording" setting is enabled, preventing conflicts with the intended lock.
+    *   **Lens Switch Exposure Lock Handling**: When both "Lock Exposure During Recording" and "Shutter Priority" are enabled, `CameraViewModel` restores the exposure lock after a lens change by re-enabling shutter priority and, after a short delay, re-locking ISO. This prevents ISO drift and ensures consistent exposure during recording across lens switches.
     *   **Exposure Lock**: Standard AE lock (`.locked` mode) is managed by `ExposureService` via `setExposureLock`. `CameraViewModel` handles the UI state (`isExposureLocked`) and ensures standard AE lock cannot be toggled while Shutter Priority is active.
 *   **Video Recording**: 
     *   Handled by `RecordingService` using `AVAssetWriter`.
