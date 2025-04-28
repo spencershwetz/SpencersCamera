@@ -26,5 +26,7 @@
 		<key>UIImageName</key>
 		<string>launchScreenImage</string>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Spencer's Camera needs your location to store where your videos were taken and show them in Photos.</string>
 </dict>
 </plist>

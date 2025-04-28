@@ -5,6 +5,7 @@ import UIKit
 import CoreMedia
 import CoreImage
 import Metal
+import CoreLocation
 
 // Add performance logging helper
 extension Date {
@@ -50,6 +51,9 @@ class RecordingService: NSObject {
     private var audioFrameCount = 0
     private var successfulVideoFrames = 0
     private var failedVideoFrames = 0
+    
+    private var locationService = LocationService.shared
+    private var recordingLocation: CLLocation?
     
     init(session: AVCaptureSession, delegate: RecordingServiceDelegate) {
         self.session = session
@@ -325,6 +329,10 @@ class RecordingService: NSObject {
             isRecording = true
             delegate?.didStartRecording()
             
+            // Start location updates
+            locationService.startUpdating()
+            recordingLocation = locationService.currentLocation
+            
         } catch {
             delegate?.didEncounterError(.recordingFailed)
             logger.error("Failed to start recording: \(error.localizedDescription)")
@@ -389,13 +397,13 @@ class RecordingService: NSObject {
         if let outputURL = currentRecordingURL {
             logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] Before thumbnail generation") // LOG TIME
             logger.info("Saving video to photo library: \(outputURL.path)")
-            
+            // Snapshot current location once more before saving
+            recordingLocation = locationService.currentLocation
             // Generate thumbnail before saving
             let thumbnail = await generateThumbnail(from: outputURL)
             logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After thumbnail generation") // LOG TIME
-            
-            // Save the video
-            await saveToPhotoLibrary(outputURL, thumbnail: thumbnail)
+            // Save the video with location
+            await saveToPhotoLibrary(outputURL, thumbnail: thumbnail, location: recordingLocation)
             logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After saveToPhotoLibrary") // LOG TIME
         }
         
@@ -409,11 +417,14 @@ class RecordingService: NSObject {
             delegate?.didUpdateProcessingState(false)
         }
         
+        // Stop location updates
+        locationService.stopUpdating()
+        
         logger.info("Recording session completed")
         logger.info("REC_PERF: stopRecording END [Total: \(String(format: "%.3f", Date.nowTimestamp() - startTime))s]") // LOG TOTAL TIME
     }
     
-    private func saveToPhotoLibrary(_ outputURL: URL, thumbnail: UIImage?) async {
+    private func saveToPhotoLibrary(_ outputURL: URL, thumbnail: UIImage?, location: CLLocation?) async {
         do {
             let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
             guard status == .authorized else {
@@ -428,6 +439,9 @@ class RecordingService: NSObject {
                 let options = PHAssetResourceCreationOptions()
                 let creationRequest = PHAssetCreationRequest.forAsset()
                 creationRequest.addResource(with: .video, fileURL: outputURL, options: options)
+                if let location = location {
+                    creationRequest.location = location
+                }
             }
             
             await MainActor.run {

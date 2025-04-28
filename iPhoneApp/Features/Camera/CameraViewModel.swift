@@ -388,6 +388,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var unifiedVideoOutput: AVCaptureVideoDataOutput?
     var metalPreviewDelegate: MetalPreviewView?
     
+    let locationService = LocationService.shared
+    
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
         
@@ -703,6 +705,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Explicitly set the Bake-in LUT state *before* starting recording
         recordingService?.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
         
+        // Begin location updates for GPS tagging
+        locationService.startUpdating()
+        
         // START RECORDING
         await recordingService?.startRecording(orientation: connectionAngle) // Pass angle, though it's recalculated inside
 
@@ -788,6 +793,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Update watch state
         sendStateToWatch()
+
+        // Stop location updates for GPS tagging
+        locationService.stopUpdating()
     }
     
     private func updateVideoConfiguration() {
