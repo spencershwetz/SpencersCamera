@@ -9,15 +9,17 @@ struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
     let viewModel: CameraViewModel
+    var onTap: ((CGPoint) -> Void)? = nil
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewRepresentable")
 
     // ---> ADD INIT LOG <---
-    init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel) {
+    init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel, onTap: ((CGPoint) -> Void)? = nil) {
         self.session = session
         self.lutManager = lutManager
         self.viewModel = viewModel
+        self.onTap = onTap
     }
     // ---> END INIT LOG <---
 
@@ -39,9 +41,17 @@ struct CameraPreviewView: UIViewRepresentable {
         mtkView.layoutIfNeeded()
         
         logger.info("makeUIView: MTKView and MetalPreviewView delegate created.")
+        
+        // Attach native tap gesture recognizer
+        let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        mtkView.addGestureRecognizer(tapRecognizer)
+        
+        // Store reference to parent for callback
+        context.coordinator.onTap = onTap
+        
         return mtkView
     }
-    
+
     func updateUIView(_ uiView: MTKView, context: Context) {
         // Only update if needed
     }
@@ -53,11 +63,17 @@ struct CameraPreviewView: UIViewRepresentable {
     
     class Coordinator: NSObject {
         var parent: CameraPreviewView
+        var onTap: ((CGPoint) -> Void)?
         
         init(parent: CameraPreviewView) {
             self.parent = parent
             super.init()
             parent.logger.info("Coordinator initialized.")
+        }
+        
+        @objc func handleTap(_ sender: UITapGestureRecognizer) {
+            let location = sender.location(in: sender.view)
+            onTap?(location)
         }
     }
 }
