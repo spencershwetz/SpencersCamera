@@ -124,6 +124,57 @@ class CameraDeviceService {
         }
         // ---> END Added Code <---
         
+        // ---> ADDED: Configure Color Space and HDR based on format and Log setting <---
+        logger.info("🎨 [configureSession] Configuring color space and HDR...")
+        let targetColorSpace: AVCaptureColorSpace
+        if requireLog {
+            if selectedFormat.supportedColorSpaces.contains(.appleLog) {
+                targetColorSpace = .appleLog
+                logger.info("🎨 [configureSession] Target color space: Apple Log (requested and supported).")
+            } else {
+                logger.warning("⚠️ [configureSession] Apple Log requested but NOT supported by format \(selectedFormat.description). Falling back.")
+                // Fallback logic - P3 or sRGB? Let's prefer P3 if available.
+                targetColorSpace = selectedFormat.supportedColorSpaces.contains(.P3_D65) ? .P3_D65 : .sRGB
+            }
+        } else {
+            // Default to P3 if supported, otherwise sRGB when Log is not requested
+            targetColorSpace = selectedFormat.supportedColorSpaces.contains(.P3_D65) ? .P3_D65 : .sRGB
+            logger.info("🎨 [configureSession] Target color space: \(targetColorSpace == .P3_D65 ? "P3_D65" : "sRGB") (Log not requested).")
+        }
+
+        if newDevice.activeColorSpace != targetColorSpace {
+            newDevice.activeColorSpace = targetColorSpace
+            logger.info("✅ [configureSession] Set activeColorSpace to \(targetColorSpace.rawValue).")
+        } else {
+             logger.info("ℹ️ [configureSession] activeColorSpace already set to \(targetColorSpace.rawValue).")
+        }
+
+        // Configure HDR based on whether Apple Log is active AND supported
+        let shouldEnableHDR = (targetColorSpace == .appleLog) && selectedFormat.isVideoHDRSupported
+        if shouldEnableHDR {
+            // Enable HDR for Apple Log if supported
+            // Check if we need to change state (either HDR is off or auto-adjust is on)
+            if !newDevice.isVideoHDREnabled || newDevice.automaticallyAdjustsVideoHDREnabled {
+                logger.info("☀️ [configureSession] Enabling HDR for Apple Log...")
+                newDevice.automaticallyAdjustsVideoHDREnabled = false // MUST set this first to allow manual control
+                newDevice.isVideoHDREnabled = true
+                logger.info("✅ [configureSession] Enabled HDR video mode for Apple Log.")
+            } else {
+                logger.info("ℹ️ [configureSession] HDR video mode already enabled for Apple Log.")
+            }
+        } else {
+            // Ensure Automatic HDR is enabled for non-Apple Log modes
+            if !newDevice.automaticallyAdjustsVideoHDREnabled {
+                 logger.info("☀️ [configureSession] Enabling automatic HDR adjustment for non-Log mode...")
+                newDevice.automaticallyAdjustsVideoHDREnabled = true
+                logger.info("✅ [configureSession] Enabled automatic HDR adjustment.")
+            } else {
+                logger.info("ℹ️ [configureSession] Automatic HDR adjustment already enabled.")
+            }
+            // IMPORTANT: Do NOT manually set isVideoHDREnabled when automaticallyAdjustsVideoHDREnabled is true
+        }
+        // ---> END Color Space / HDR Configuration <---
+
         // Set other default configurations like exposure/focus (if needed here)
         if newDevice.isExposureModeSupported(.continuousAutoExposure) {
             newDevice.exposureMode = .continuousAutoExposure
@@ -131,8 +182,7 @@ class CameraDeviceService {
         if newDevice.isFocusModeSupported(.continuousAutoFocus) {
             newDevice.focusMode = .continuousAutoFocus
         }
-        // Note: Frame rate and color space are handled by VideoFormatService during its calls
-        // or by the reapplyColorSpaceSettings call after this.
+        // Note: Frame rate lock, color space, and HDR are now handled within this method.
         
         logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
     }
@@ -217,10 +267,6 @@ class CameraDeviceService {
             // Update the internal device reference in VideoFormatService
             videoFormatService.setDevice(newDevice)
             
-            // Re-apply color space settings after switching format
-            try videoFormatService.reapplyColorSpaceSettings()
-            logger.info("🔄 Lens switch: Re-applied color space settings.")
-            
             logger.debug("🔄 Lens switch: Committing configuration...")
             session.commitConfiguration()
             logger.debug("🔄 Lens switch: Configuration committed.")
@@ -232,7 +278,7 @@ class CameraDeviceService {
                 // Read setting from delegate
                 let isStabilizationEnabled = delegate?.isVideoStabilizationCurrentlyEnabled ?? false
 
-                var targetMode: AVCaptureVideoStabilizationMode = isStabilizationEnabled ? .standard : .off
+                let targetMode: AVCaptureVideoStabilizationMode = isStabilizationEnabled ? .standard : .off
                 
                 // Check if the *current device's active format* supports the *target* mode
                 if let currentDevice = self.device { // Use the current device

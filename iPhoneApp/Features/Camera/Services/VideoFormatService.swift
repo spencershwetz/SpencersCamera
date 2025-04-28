@@ -570,15 +570,8 @@ class VideoFormatService {
             try updateFrameRateForCurrentFormat(fps: currentFPS)
             logger.info("✅ [resetAppleLog] Frame rate updated.")
             
-            // Reset HDR settings to automatic
-            logger.info("☀️ [resetAppleLog] Resetting HDR settings...")
-            // Regardless of whether the format supports HDR, 
-            // when resetting Log, we want HDR to be automatically managed.
-            logger.debug("Setting automaticallyAdjustsVideoHDREnabled=true")
-            device.automaticallyAdjustsVideoHDREnabled = true
-            logger.info("✅ [resetAppleLog] Reset HDR settings to automatic.")
-            
-            logger.info("✅ [resetAppleLog] Successfully prepared device for reset. (Color space handled by activeFormat)")
+            // Updated log message slightly to reflect HDR is no longer handled here
+            logger.info("✅ [resetAppleLog] Successfully prepared device format/colorspace/framerate for reset.") 
             
         } catch let error as CameraError {
              logger.error("❌ [resetAppleLog] Failed during device preparation: \(error.description)")

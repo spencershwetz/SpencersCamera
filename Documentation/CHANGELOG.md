@@ -33,6 +33,8 @@ All notable changes to this project will be documented in this file.
 *   Corrected KVO KeyPath syntax and usage in `ExposureService`.
 *   Fixed issue where Apple Log setting was not properly applied at startup or after lens changes, ensuring `VideoFormatService` reapplies the correct color space.
 *   Updated debug overlay to show actual camera device color space instead of just the setting value.
+*   Refined HDR video configuration logic in `CameraDeviceService.configureSession` to correctly use `automaticallyAdjustsVideoHDREnabled` for non-Log modes, preventing potential crashes.
+*   Changed `var targetMode` to `let targetMode` in `CameraDeviceService` during stabilization setup to resolve a compiler warning.
 
 ### Removed
 
