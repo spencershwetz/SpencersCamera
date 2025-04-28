@@ -202,29 +202,23 @@ struct CameraView: View {
         .frame(maxWidth: .infinity)
         // Gesture layer
         .contentShape(Rectangle())
-        // Capture touch location continuously
-        .highPriorityGesture(
+        .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
+                    // track tap location for later focus use
                     lastTapLocation = value.location
                 }
         )
-        // Single tap to focus
-        .gesture(
-            TapGesture(count: 1)
-                .onEnded {
-                    let point = locationInPreview(lastTapLocation, geometry: geometry)
-                    focus(at: point, lock: false)
-                }
-        )
-        // Long press to lock focus & exposure
-        .gesture(
-            LongPressGesture(minimumDuration: 0.8)
-                .onEnded { _ in
-                    let point = locationInPreview(lastTapLocation, geometry: geometry)
-                    focus(at: point, lock: true)
-                }
-        )
+        .onTapGesture {
+            // simple tap to focus
+            let point = locationInPreview(lastTapLocation, geometry: geometry)
+            focus(at: point, lock: false)
+        }
+        .onLongPressGesture(minimumDuration: 0.8) {
+            // long press to lock focus & exposure
+            let point = locationInPreview(lastTapLocation, geometry: geometry)
+            focus(at: point, lock: true)
+        }
         .overlay(
             focusSquare
         )

@@ -51,6 +51,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private var lastRotationUpdate: CFTimeInterval = 0
     private let rotationUpdateThreshold: CFTimeInterval = 1.0 / 30.0 // 30fps max for rotation updates
     
+    // Track previously bound LUT texture to reduce logging
+    private var previouslyBoundLUTTexture: MTLTexture?
+    
     init(mtkView: MTKView, lutManager: LUTManager) {
         self.lutManager = lutManager
         super.init()
@@ -382,7 +385,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setRenderPipelineState(rgbPipelineState)
             renderEncoder.setFragmentTexture(bgraTexture, index: 0)
             if let lutTexture = lutManager.currentLUTTexture {
+                // Only log if the texture actually changed
+                if lutTexture !== previouslyBoundLUTTexture {
+                    logger.debug("Binding LUT texture (RGB path): \\(lutTexture.width, privacy: .public)x\\(lutTexture.height, privacy: .public)x\\(lutTexture.depth, privacy: .public)")
+                    previouslyBoundLUTTexture = lutTexture
+                }
                 renderEncoder.setFragmentTexture(lutTexture, index: 1)
+            } else {
+                // Log if a LUT was previously bound but is now nil
+                if previouslyBoundLUTTexture != nil {
+                     logger.debug("Unbinding LUT texture (RGB path)")
+                     previouslyBoundLUTTexture = nil
+                }
+               // logger.debug("No LUT texture available (RGB path)") // Reduced noise
             }
             renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
         } else if let lumaTexture = self.lumaTexture, let chromaTexture = self.chromaTexture {
@@ -390,7 +405,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             renderEncoder.setFragmentTexture(lumaTexture, index: 0)
             renderEncoder.setFragmentTexture(chromaTexture, index: 1)
             if let lutTexture = lutManager.currentLUTTexture {
+                // Only log if the texture actually changed
+                if lutTexture !== previouslyBoundLUTTexture {
+                    logger.debug("Binding LUT texture (YUV path): \\(lutTexture.width, privacy: .public)x\\(lutTexture.height, privacy: .public)x\\(lutTexture.depth, privacy: .public)")
+                    previouslyBoundLUTTexture = lutTexture
+                }
                 renderEncoder.setFragmentTexture(lutTexture, index: 2)
+            } else {
+                 // Log if a LUT was previously bound but is now nil
+                if previouslyBoundLUTTexture != nil {
+                     logger.debug("Unbinding LUT texture (YUV path)")
+                     previouslyBoundLUTTexture = nil
+                }
+                // logger.debug("No LUT texture available (YUV path)") // Reduced noise
             }
             renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
             renderEncoder.setFragmentBuffer(isBT709Buffer, offset: 0, index: 1)

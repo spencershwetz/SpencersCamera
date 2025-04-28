@@ -132,7 +132,15 @@ class CubeLUTLoader {
                 // Parse RGB values on this line
                 let components = trimmed.components(separatedBy: CharacterSet.whitespaces)
                     .filter { !$0.isEmpty }
-                    .compactMap { Float($0) }
+                    .compactMap { componentString -> Float? in
+                        guard let value = Float(componentString) else { return nil } // Basic conversion
+                        // Explicitly check for NaN and Infinity
+                        if value.isNaN || value.isInfinite {
+                            print("⚠️ Line \(linesProcessed): Invalid float value (NaN or Inf) found in component: \(componentString)")
+                            return nil // Treat as invalid
+                        }
+                        return value
+                    }
                 
                 if components.count == 3 {
                     cubeData.append(contentsOf: components)
@@ -171,23 +179,11 @@ class CubeLUTLoader {
         
         // If we have at least some data but not the complete amount, warn but continue
         let expectedDataCount = dimension * dimension * dimension * 3
-        if cubeData.count < expectedDataCount {
-            print("⚠️ Incomplete LUT data: Found \(cubeData.count) values, expected \(expectedDataCount)")
-            
-            // If we're significantly short, throw an error
-            if cubeData.count < expectedDataCount / 2 {
-                print("❌ Insufficient LUT data: Found \(cubeData.count) values, expected \(expectedDataCount)")
-                throw NSError(domain: "CubeLUTLoader", code: 4, userInfo: [
-                    NSLocalizedDescriptionKey: "Incomplete LUT data: Only \(cubeData.count)/\(expectedDataCount) values found"
-                ])
-            }
-            
-            // For minor shortfalls, pad with zeros to maintain expected dimensions
-            let shortfall = expectedDataCount - cubeData.count
-            if shortfall > 0 && shortfall < expectedDataCount / 10 {  // Less than 10% missing
-                print("⚠️ Padding \(shortfall) missing values with zeros")
-                cubeData.append(contentsOf: Array(repeating: 0.0, count: shortfall))
-            }
+        if cubeData.count != expectedDataCount {
+             print("❌ Incorrect LUT data count: Found \(cubeData.count) values, strictly expected \(expectedDataCount)")
+             throw NSError(domain: "CubeLUTLoader", code: 4, userInfo: [
+                 NSLocalizedDescriptionKey: "Incorrect LUT data count: Found \(cubeData.count)/\(expectedDataCount) values. File may be corrupt or incomplete."
+             ])
         }
         
         // Validate values are in reasonable range (0.0-1.0)

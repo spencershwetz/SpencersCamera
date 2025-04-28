@@ -163,12 +163,18 @@ fragment float4 fragmentShaderYUV(RasterizerData in [[stage_in]],
     // Ensure valid RGB values
     float3 clampedRGB = clamp(rgb, 0.0, 1.0);
     
+    // --- Restore LUT Sampling Logic ---
+    // return float4(clampedRGB, 1.0); 
+    // /*
     if (isLUTActive) {
+        // Only sample if the LUT texture is meant to be active
         float4 lutColor = lutTexture.sample(lutSampler, clampedRGB);
         return float4(lutColor.rgb, 1.0);
     } else {
         return float4(clampedRGB, 1.0);
     }
+    // */
+    // --- End Restore --- 
 }
 
 // --- Compute Kernels for LUT Bake-in ---
