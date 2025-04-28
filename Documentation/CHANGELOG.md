@@ -1,5 +1,7 @@
 # Changelog
 
+> **Note:** Tap-to-focus and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
@@ -18,8 +20,7 @@ All notable changes to this project will be documented in this file.
 *   Setting: Added "Lock Exposure During Recording" toggle in Settings.
 *   Logic: Implemented logic in `CameraViewModel` to automatically lock exposure when recording starts (standard AE lock or temporary SP lock) and restore the previous state when recording stops, if the setting is enabled.
 *   Core: Added `AppLifecycleObserver` to manage `didBecomeActiveNotification` observation cleanly within `CameraView`'s lifecycle.
-*   UI: Implemented tap-to-focus and long-press-to-lock functionality in `CameraView` and `CameraDeviceService.setFocusAndExposure(at:lock:)`.
-*   UI: Added `FocusSquare` overlay to indicate focus point.
+*   Note: Tap-to-focus and exposure value (EV) compensation features are not included in this release. UI does not currently support tap-to-focus or EV compensation.
 *   UI: Added vertical `ExposureBiasSlider` on the right side of the preview for exposure compensation (delegates to `ExposureService`).
 
 ### Changed

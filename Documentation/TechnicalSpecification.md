@@ -1,5 +1,7 @@
 # Technical Specification
 
+> **Note:** Tap-to-focus and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+
 This document outlines the technical specifications and requirements for the Spencer's Camera application.
 
 ## Platform & Target
