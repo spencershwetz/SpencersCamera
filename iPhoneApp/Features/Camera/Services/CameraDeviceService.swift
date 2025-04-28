@@ -8,6 +8,7 @@ protocol CameraDeviceServiceDelegate: AnyObject {
     func didUpdateZoomFactor(_ factor: CGFloat)
     func didEncounterError(_ error: CameraError)
     var isExposureCurrentlyLocked: Bool { get }
+    var isVideoStabilizationCurrentlyEnabled: Bool { get }
 }
 
 class CameraDeviceService {
@@ -222,6 +223,65 @@ class CameraDeviceService {
             
             logger.debug("🔄 Lens switch: Committing configuration...")
             session.commitConfiguration()
+            logger.debug("🔄 Lens switch: Configuration committed.")
+
+            // ---> ADDED: Re-apply stabilization setting after configuration commit <---
+            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
+               let connection = videoDataOutput.connection(with: .video) {
+                
+                // Read setting from delegate
+                let isStabilizationEnabled = delegate?.isVideoStabilizationCurrentlyEnabled ?? false
+
+                var targetMode: AVCaptureVideoStabilizationMode = isStabilizationEnabled ? .standard : .off
+                
+                // Check if the *current device's active format* supports the *target* mode
+                if let currentDevice = self.device { // Use the current device
+                    if currentDevice.activeFormat.isVideoStabilizationModeSupported(targetMode) {
+                        // Apply stabilization if supported and different from current
+                        if connection.preferredVideoStabilizationMode != targetMode {
+                            connection.preferredVideoStabilizationMode = targetMode
+                            logger.info("✅🔄 Lens switch: Applied video stabilization mode: \(targetMode.rawValue)")
+                        } else {
+                            logger.info("ℹ️🔄 Lens switch: Video stabilization mode already set to \(targetMode.rawValue).")
+                        }
+                    } else if isStabilizationEnabled { 
+                        // If standard/target mode isn't supported, try falling back to .auto
+                        if currentDevice.activeFormat.isVideoStabilizationModeSupported(.auto) {
+                             if connection.preferredVideoStabilizationMode != .auto {
+                                 connection.preferredVideoStabilizationMode = .auto
+                                 logger.info("✅🔄 Lens switch: Applied fallback video stabilization mode: .auto")
+                             } else {
+                                 logger.info("ℹ️🔄 Lens switch: Video stabilization mode already set to fallback: .auto")
+                             }
+                        } else {
+                            logger.warning("⚠️🔄 Lens switch: Target stabilization mode \(targetMode.rawValue) and fallback .auto not supported by device format.")
+                            // Optionally force it off if enabling is not possible
+                            if connection.preferredVideoStabilizationMode != .off {
+                                connection.preferredVideoStabilizationMode = .off
+                                logger.info("✅🔄 Lens switch: Forcing stabilization off as requested mode/fallback are unsupported.")
+                            }
+                        }
+                    } else { // isStabilizationEnabled is false
+                         // Ensure it's off if the target mode was .off and it wasn't already
+                         if connection.preferredVideoStabilizationMode != .off {
+                             // Check if .off is actually supported (it always should be)
+                             if currentDevice.activeFormat.isVideoStabilizationModeSupported(.off) {
+                                 connection.preferredVideoStabilizationMode = .off
+                                 logger.info("✅🔄 Lens switch: Applied video stabilization mode: .off")
+                             } else {
+                                 logger.warning("⚠️🔄 Lens switch: Could not explicitly set stabilization mode to .off.")
+                             }
+                         } else {
+                              logger.info("ℹ️🔄 Lens switch: Video stabilization mode already set to .off.")
+                         }
+                    }
+                } else {
+                     logger.warning("⚠️🔄 Lens switch: Could not get current device to check stabilization support.")
+                }
+            } else {
+                logger.warning("⚠️🔄 Lens switch: Could not find video data output or connection to apply stabilization.")
+            }
+            // ---> END Stabilization Code <---
             
             // Apply digital zoom INSTANTLY if needed after the physical switch
             if zoomFactor != 1.0 {

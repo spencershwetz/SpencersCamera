@@ -876,11 +876,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Error Handling
 
     // Common error handler for all delegate protocols
-    func didEncounterError(_ error: CameraError) {
-        DispatchQueue.main.async {
-            self.error = error
-        }
-    }
+    // REMOVED - Moved to CameraDeviceServiceDelegate extension
+    // func didEncounterError(_ error: CameraError) {
+    //    DispatchQueue.main.async {
+    //        self.error = error
+    //    }
+    // }
 
     // MARK: - Video Frame Processing
     
@@ -1698,6 +1699,10 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
         return self.isExposureLocked
     }
     
+    var isVideoStabilizationCurrentlyEnabled: Bool {
+        return settingsModel.isVideoStabilizationEnabled
+    }
+    
     func didUpdateCurrentLens(_ lens: CameraLens) {
         logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
         // Update properties on the main thread
@@ -1722,6 +1727,12 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
         logger.debug("Delegate: didUpdateZoomFactor called with \(factor)")
         DispatchQueue.main.async {
             self.currentZoomFactor = factor
+        }
+    }
+    
+    func didEncounterError(_ error: CameraError) {
+        DispatchQueue.main.async {
+            self.error = error
         }
     }
 }
