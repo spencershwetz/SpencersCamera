@@ -613,4 +613,74 @@ class CameraDeviceService {
             throw error // Re-throw the error
         }
     }
+
+    // MARK: - Focus & Exposure
+
+    /// Sets the focus and exposure point of interest on the current device.
+    /// - Parameters:
+    ///   - point: The point of interest in **device coordinate space** (0-1, 0-1).
+    ///   - lock: If `true`, locks focus & exposure after setting; otherwise uses continuous modes.
+    func setFocusAndExposure(at point: CGPoint, lock: Bool) {
+        guard let device = self.device else {
+            logger.error("[Focus] No camera device available for focus/exposure POI")
+            return
+        }
+
+        cameraQueue.async { [weak self] in
+            guard let self = self else { return }
+            do {
+                try device.lockForConfiguration()
+
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = point
+                    if lock {
+                        if device.isFocusModeSupported(.locked) {
+                            device.focusMode = .locked
+                        } else if device.isFocusModeSupported(.autoFocus) {
+                            device.focusMode = .autoFocus
+                        }
+                    } else {
+                        if device.isFocusModeSupported(.continuousAutoFocus) {
+                            device.focusMode = .continuousAutoFocus
+                        }
+                    }
+                }
+
+                if device.isExposurePointOfInterestSupported {
+                    device.exposurePointOfInterest = point
+                    if lock {
+                        if device.isExposureModeSupported(.locked) {
+                            device.exposureMode = .locked
+                        }
+                    } else {
+                        if device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposureMode = .continuousAutoExposure
+                        }
+                    }
+                }
+
+                device.unlockForConfiguration()
+
+                // Notify delegate that exposure lock state changed if needed
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    if lock {
+                        self.delegate?.didUpdateCurrentLens(self.currentDeviceLens()) // placeholder to trigger UI update
+                    }
+                }
+
+            } catch {
+                self.logger.error("[Focus] Failed to set focus/exposure: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Helper to find current lens from device type
+    private func currentDeviceLens() -> CameraLens {
+        guard let device = self.device else { return .wide }
+        if let match = CameraLens.allCases.first(where: { $0.deviceType == device.deviceType }) {
+            return match
+        }
+        return .wide
+    }
 }

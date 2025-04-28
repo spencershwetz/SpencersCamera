@@ -362,6 +362,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var videoFormatService: VideoFormatService!
     
     @Published var lastLensSwitchTimestamp = Date()
+    @Published var exposureBias: Float = 0.0
+    var minExposureBias: Float { device?.minExposureTargetBias ?? -2.0 }
+    var maxExposureBias: Float { device?.maxExposureTargetBias ?? 2.0 }
     
     // Logger for orientation specific logs
     private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModelOrientation")
@@ -1591,6 +1594,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             logger.error("Error creating audio device input: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - Focus & Exposure Controls
+    /// Sets focus & exposure to a point (normalized) and optionally locks after.
+    @MainActor
+    func focus(at point: CGPoint, lockAfter: Bool) {
+        cameraDeviceService.setFocusAndExposure(at: point, lock: lockAfter)
+    }
+
+    /// Updates exposure compensation by adding delta to current value.
+    @MainActor
+    func adjustExposureBias(by delta: Float) {
+        let newBias = exposureBias + delta
+        exposureService.updateExposureTargetBias(newBias)
+    }
 }
 
 // MARK: - VideoFormatServiceDelegate
@@ -1678,6 +1695,12 @@ extension CameraViewModel: ExposureServiceDelegate {
     func didUpdateShutterSpeed(_ speed: CMTime) {
         DispatchQueue.main.async {
             self.shutterSpeed = speed
+        }
+    }
+    
+    func didUpdateExposureTargetBias(_ bias: Float) {
+        DispatchQueue.main.async {
+            self.exposureBias = bias
         }
     }
 }

@@ -105,7 +105,7 @@ struct FunctionButtonsView: View {
             // Do nothing or perhaps show an alert/hint to assign an ability
             print("Function button has no ability assigned.")
         case .lockExposure:
-            viewModel.toggleExposureLock() // Call the new method on CameraViewModel
+            viewModel.toggleExposureLock()
         case .shutterPriority:
             viewModel.toggleShutterPriority()
         // Add cases for future abilities

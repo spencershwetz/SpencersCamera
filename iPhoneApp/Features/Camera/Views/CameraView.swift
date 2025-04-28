@@ -17,6 +17,10 @@ struct CameraView: View {
     @State private var showLUTPreview = true
     @State private var isShowingVideoLibrary = false
     @State private var statusBarHidden = true
+    @State private var focusSquarePosition: CGPoint? = nil
+    @State private var lastFocusPoint: CGPoint? = nil // Normalized 0-1 point
+    @State private var showExposureSlider: Bool = true
+    @State private var lastTapLocation: CGPoint = .zero
     
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
@@ -196,6 +200,41 @@ struct CameraView: View {
         .clipped()
         .padding(.top, geometry.safeAreaInsets.top + 10)
         .frame(maxWidth: .infinity)
+        // Gesture layer
+        .contentShape(Rectangle())
+        // Capture touch location continuously
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    lastTapLocation = value.location
+                }
+        )
+        // Single tap to focus
+        .gesture(
+            TapGesture(count: 1)
+                .onEnded {
+                    let point = locationInPreview(lastTapLocation, geometry: geometry)
+                    focus(at: point, lock: false)
+                }
+        )
+        // Long press to lock focus & exposure
+        .gesture(
+            LongPressGesture(minimumDuration: 0.8)
+                .onEnded { _ in
+                    let point = locationInPreview(lastTapLocation, geometry: geometry)
+                    focus(at: point, lock: true)
+                }
+        )
+        .overlay(
+            focusSquare
+        )
+        .overlay(
+            ExposureBiasSlider(viewModel: viewModel)
+                .padding(.trailing, 16)
+                .opacity(showExposureSlider ? 1 : 0)
+                .animation(.easeInOut, value: showExposureSlider)
+            , alignment: .trailing
+        )
         .overlay(alignment: .topLeading) {
             if settings.isDebugEnabled {
                 debugOverlay
@@ -403,6 +442,34 @@ struct CameraView: View {
             return String(format: "1/%.0f (%.0f°)", 1.0/seconds, angle)
         } else {
             return String(format: "%.2fs (%.0f°)", seconds, angle)
+        }
+    }
+    
+    // MARK: - Focus & Exposure Helpers
+    private func focus(at point: CGPoint, lock: Bool) {
+        viewModel.focus(at: point, lockAfter: lock)
+        lastFocusPoint = point
+        focusSquarePosition = CGPoint(x: lastTapLocation.x, y: lastTapLocation.y)
+        // Hide square after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            focusSquarePosition = nil
+        }
+    }
+
+    private func locationInPreview(_ location: CGPoint, geometry: GeometryProxy) -> CGPoint {
+        // Convert from view coords to normalized device coords (0-1, 0-1) with origin bottom-left for AVCapture
+        let previewFrame = geometry.frame(in: .local)
+        let x = (location.x - previewFrame.minX) / previewFrame.width
+        let y = 1.0 - ((location.y - previewFrame.minY) / previewFrame.height) // invert Y
+        return CGPoint(x: x, y: y)
+    }
+
+    private var focusSquare: some View {
+        Group {
+            if let position = focusSquarePosition {
+                FocusSquare()
+                    .position(position)
+            }
         }
     }
 }

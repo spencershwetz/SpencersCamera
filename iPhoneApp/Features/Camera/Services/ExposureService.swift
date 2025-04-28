@@ -7,6 +7,7 @@ protocol ExposureServiceDelegate: AnyObject {
     func didUpdateISO(_ iso: Float)
     func didUpdateShutterSpeed(_ speed: CMTime)
     func didEncounterError(_ error: CameraError)
+    func didUpdateExposureTargetBias(_ bias: Float)
 }
 
 // Inherit from NSObject to support KVO
@@ -38,6 +39,8 @@ class ExposureService: NSObject {
     private var isoObservation: NSKeyValueObservation?
     private var exposureDurationObservation: NSKeyValueObservation?
     private var whiteBalanceGainsObservation: NSKeyValueObservation?
+    // Observation for exposure target bias
+    private var exposureBiasObservation: NSKeyValueObservation?
     
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
@@ -127,6 +130,14 @@ class ExposureService: NSObject {
             self?.handleExposureTargetOffsetUpdate(change: change)
         }
         
+        // Observe exposure target bias changes
+        exposureBiasObservation = device.observe(\.exposureTargetBias, options: [.new]) { [weak self] device, change in
+            guard let self = self, let newBias = change.newValue else { return }
+            DispatchQueue.main.async {
+                self.delegate?.didUpdateExposureTargetBias(newBias)
+            }
+        }
+        
         // Report initial values immediately after setting observers
         reportCurrentDeviceValues()
     }
@@ -138,11 +149,13 @@ class ExposureService: NSObject {
         isoObservation?.invalidate()
         exposureDurationObservation?.invalidate()
         whiteBalanceGainsObservation?.invalidate()
-        exposureTargetOffsetObservation?.invalidate() // Add invalidation for the new observer
+        exposureTargetOffsetObservation?.invalidate()
+        exposureBiasObservation?.invalidate()
         isoObservation = nil
         exposureDurationObservation = nil
         whiteBalanceGainsObservation = nil
-        exposureTargetOffsetObservation = nil // Add nil assignment for the new observer
+        exposureTargetOffsetObservation = nil
+        exposureBiasObservation = nil
     }
 
     /// Helper function to report the current values after setting observers or device change. Internal access needed by ViewModel.
@@ -175,6 +188,8 @@ class ExposureService: NSObject {
                      logger.warning("Could not report initial white balance - conversion failed or gains invalid.")
                  }
              }
+             // Report exposure bias
+             self.delegate?.didUpdateExposureTargetBias(device.exposureTargetBias)
         }
     }
     
@@ -836,6 +851,35 @@ class ExposureService: NSObject {
             DispatchQueue.main.async { [weak self] in
                 self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint)
             }
+        }
+    }
+
+    // MARK: - Exposure Compensation / Bias
+
+    /// Updates the exposure target bias (compensation) on the current device.
+    /// - Parameter bias: The desired exposure bias value. Will be clamped to the device supported range.
+    func updateExposureTargetBias(_ bias: Float) {
+        guard let device = device else {
+            logger.error("[ExposureBias] No camera device available to set exposure bias")
+            return
+        }
+
+        let clampedBias = min(max(device.minExposureTargetBias, bias), device.maxExposureTargetBias)
+
+        logger.debug("[ExposureBias] Requested bias: \(bias). Clamped to: \(clampedBias). Device range: (\(device.minExposureTargetBias) ... \(device.maxExposureTargetBias))")
+
+        do {
+            try device.lockForConfiguration()
+            device.setExposureTargetBias(clampedBias) { [weak self] _ in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.delegate?.didUpdateExposureTargetBias(clampedBias)
+                }
+            }
+            device.unlockForConfiguration()
+        } catch {
+            logger.error("[ExposureBias] Failed to set exposure bias: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure bias: \(error.localizedDescription)"))
         }
     }
 } 
