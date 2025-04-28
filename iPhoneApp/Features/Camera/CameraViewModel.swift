@@ -1726,15 +1726,25 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             self.lastLensSwitchTimestamp = Date() // Trigger preview update
             self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
             
-            // REMOVED: Re-applying exposure lock logic (now handled by CameraDeviceService)
-            /*
-            if self.isExposureLocked {
-                // Log the device name from the exposureService before attempting the lock
-                let deviceName = self.exposureService?.getCurrentDeviceName() ?? "Unknown"
-                self.logger.info("🔄 [didUpdateCurrentLens] Re-applying exposure lock for device: \(deviceName)")
+            // FIX: Re-apply exposure lock and shutter priority after lens switch if needed.
+            if self.isShutterPriorityEnabled {
+                self.logger.info("🔄 [didUpdateCurrentLens] Re-applying Shutter Priority mode after lens switch.")
+                self.exposureService?.enableShutterPriority(duration: self.shutterSpeed)
+                if self.isExposureLocked {
+                    self.logger.info("🔄 [didUpdateCurrentLens] Scheduling lock of Shutter Priority exposure after lens switch (delayed)")
+                    // Add a short delay to ensure device is ready before locking
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                        guard let self = self else { return }
+                        self.logger.info("🔄 [didUpdateCurrentLens] Locking Shutter Priority exposure after lens switch (delayed)")
+                        self.exposureService?.lockShutterPriorityExposureForRecording()
+                    }
+                }
+            } else if self.isExposureLocked {
+                self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")
                 self.exposureService?.setExposureLock(locked: true)
             }
-            */
+            // End FIX
+
         }
     }
     
