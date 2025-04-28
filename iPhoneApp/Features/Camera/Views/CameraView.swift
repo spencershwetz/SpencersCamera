@@ -274,6 +274,7 @@ struct CameraView: View {
             Text("WB: \(String(format: "%.0fK", viewModel.whiteBalance))")
             Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
             Text("Shutter: \(formatShutterSpeed(viewModel.shutterSpeed))")
+            Text("EV Bias: \(String(format: "%.1f", viewModel.exposureBias))")
             
             // Check the actual activeColorSpace from the device to display the correct value
             if let device = viewModel.currentCameraDevice {
@@ -457,11 +458,12 @@ struct CameraView: View {
     }
 
     private func locationInPreview(_ location: CGPoint, geometry: GeometryProxy) -> CGPoint {
-        // Convert from view coords to normalized device coords (0-1, 0-1) with origin bottom-left for AVCapture
+        // Convert from view coords to normalized device coords (0-1, 0-1) with origin top-left per AVFoundation
         let previewFrame = geometry.frame(in: .local)
         let x = (location.x - previewFrame.minX) / previewFrame.width
-        let y = 1.0 - ((location.y - previewFrame.minY) / previewFrame.height) // invert Y
-        return CGPoint(x: x, y: y)
+        let y = (location.y - previewFrame.minY) / previewFrame.height // origin top-left per AVFoundation
+        // Clamp to [0,1]
+        return CGPoint(x: min(max(0, x), 1), y: min(max(0, y), 1))
     }
 
     private var focusSquare: some View {
