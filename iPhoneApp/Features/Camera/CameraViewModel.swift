@@ -1729,7 +1729,12 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             // FIX: Re-apply exposure lock and shutter priority after lens switch if needed.
             if self.isShutterPriorityEnabled {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying Shutter Priority mode after lens switch.")
-                self.exposureService?.enableShutterPriority(duration: self.shutterSpeed)
+                // Always recalculate 180° shutter duration for current frame rate
+                let frameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0 // fallback
+                let durationSeconds = 1.0 / (frameRate * 2.0)
+                let duration = CMTimeMakeWithSeconds(durationSeconds, preferredTimescale: 1_000_000)
+                self.logger.info("🔄 [didUpdateCurrentLens] Calculated 180° shutter duration: \(String(format: "%.5f", durationSeconds))s for frameRate \(frameRate)")
+                self.exposureService?.enableShutterPriority(duration: duration)
                 if self.isExposureLocked {
                     self.logger.info("🔄 [didUpdateCurrentLens] Scheduling lock of Shutter Priority exposure after lens switch (delayed)")
                     // Add a short delay to ensure device is ready before locking

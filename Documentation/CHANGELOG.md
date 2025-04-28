@@ -24,11 +24,13 @@ All notable changes to this project will be documented in this file.
 *   Added DockKit integration to `CameraViewModel` through `CameraCaptureDelegate` protocol.
 *   Structured DockKit components in dedicated Core/DockKit directory.
 *   Added conditional compilation for DockKit features (iOS 18.0+).
+*   Improved DockKit error handling and accessory state management.
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice` for real-time updates and Shutter Priority logic.
 *   Refined exposure locking logic in `CameraViewModel` to correctly handle interaction between standard AE lock and Shutter Priority's temporary recording lock.
 *   Adjusted camera preview position and scale using `.scaleEffect(0.9)` and padding in `CameraView`.
 *   Improved initialization sequence in `CameraSetupService` and `ExposureService` to more reliably set `.continuousAutoExposure` mode on startup.
 *   Updated `RecordingService` to calculate video orientation transform using `UIDeviceOrientation.videoRotationAngleValue` instead of relying on potentially deprecated properties.
+*   Shutter Priority Robustness: After every lens switch, the 180° shutter duration is recalculated based on the current frame rate and immediately applied. This ensures consistent 180° exposure and fixes prior issues with incorrect shutter angles (e.g., 144°, 216°) after lens switches in Shutter Priority mode.
 
 ### Fixed
 
