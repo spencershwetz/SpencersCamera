@@ -95,6 +95,31 @@ This document outlines the technical specifications and requirements for the Spe
     *   `CameraViewModel` reads initial values from `SettingsModel` during initialization and applies them to the camera configuration.
     *   UI in `SettingsView` binds directly to `SettingsModel` properties, with `.onChange` handlers to update the active camera configuration.
 *   **Camera Configuration**: `CameraViewModel` orchestrates service interactions. `CameraSetupService` configures the initial session. `CameraDeviceService` handles lens changes. `VideoFormatService` handles format/frame rate/color space. `ExposureService` handles exposure/WB/tint. `CameraViewModel`'s `setupUnifiedVideoOutput` configures the `AVCaptureVideoDataOutput` connection, including setting `preferredVideoStabilizationMode` (prioritizing `.standard` over `.auto`) based on `SettingsModel`.
+*   **DockKit Integration** (iOS 18.0+):
+    *   Uses Apple's DockKit framework for accessory control and tracking.
+    *   `DockControlService` (actor) manages all DockKit interactions:
+        *   Handles accessory state changes and tracking.
+        *   Manages battery and tracking state subscriptions.
+        *   Processes accessory events (buttons, zoom, shutter, camera flip).
+        *   Supports manual control (pan/tilt) and system tracking modes.
+    *   Feature Support:
+        *   Subject Tracking: System and manual tracking modes.
+        *   Framing Modes: Auto, center, left, right positioning.
+        *   Region of Interest: Custom tracking regions.
+        *   Motion Control: Manual pan/tilt via chevrons.
+        *   Animations: Yes, no, wakeup, kapow gestures.
+    *   Camera Integration:
+        *   `CameraCaptureDelegate` protocol bridges DockKit and camera controls.
+        *   Supports zoom, lens switching, recording control.
+        *   Coordinate space conversion for tracking overlay.
+    *   State Management:
+        *   Published properties for accessory status and battery state.
+        *   Tracked person detection and position updates.
+        *   Battery level monitoring and charging state.
+    *   Error Handling:
+        *   Graceful degradation when accessory disconnects.
+        *   Proper cleanup of subscriptions and tasks.
+        *   Logging via unified logging system.
 
 ## Technical Requirements & Dependencies
 
@@ -108,6 +133,7 @@ This document outlines the technical specifications and requirements for the Spe
 *   **WatchConnectivity**: iPhone-Watch communication (`WCSession`, `WCSessionDelegate`).
 *   **UniformTypeIdentifiers**: Defining supported document types (`.cube`).
 *   **os.log**: Basic logging framework used throughout.
+*   **DockKit**: Accessory control, tracking, and camera integration (iOS 18.0+).
 
 ## Hardware Features Used
 
@@ -116,6 +142,7 @@ This document outlines the technical specifications and requirements for the Spe
 *   Torch (Flashlight) (via `AVCaptureDevice.hasTorch`, `.setTorchModeOn`).
 *   Metal-capable GPU.
 *   Volume Buttons (via `AVCaptureEventInteraction`, iOS 17.2+).
+*   DockKit-compatible accessories (iOS 18.0+).
 
 ## Key Technical Decisions & Trade-offs
 
@@ -129,5 +156,6 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Delegate Protocols vs. Combine**: Primarily uses delegate protocols for service-to-ViewModel communication. Could potentially use Combine publishers for certain events.
 *   **Synchronous Metal Bake-in**: `MetalFrameProcessor.processPixelBuffer` waits synchronously (`commandBuffer.waitUntilCompleted()`) for the compute kernel. This simplifies integration into the recording pipeline but could potentially block the processing queue if kernels are slow.
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
+*   **DockKit Integration**: Implemented as a separate actor service with conditional compilation (`canImport(DockKit)`) to maintain compatibility with simulators and older iOS versions. Uses delegate pattern for camera control to keep core camera logic independent of DockKit availability.
 
 *(This specification includes deeper implementation details.)*

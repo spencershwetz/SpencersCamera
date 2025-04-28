@@ -810,54 +810,32 @@ class ExposureService: NSObject {
     // MARK: - Safe White Balance Conversion (NEW HELPER)
 
     private func safeGetTemperatureAndTint(for gains: AVCaptureDevice.WhiteBalanceGains) -> AVCaptureDevice.WhiteBalanceTemperatureAndTintValues? {
-        guard let device = device else {
-            logger.warning("Cannot get temp/tint, device is nil.")
-            return nil
-        }
-
-        // Validate gains: Check for NaN, infinity, and non-positive values
-        guard gains.redGain.isFinite, gains.redGain > 0,
-              gains.greenGain.isFinite, gains.greenGain > 0,
-              gains.blueGain.isFinite, gains.blueGain > 0 else {
-            logger.warning("Invalid white balance gains detected: R:\\(gains.redGain), G:\\(gains.greenGain), B:\\(gains.blueGain). Cannot convert.")
-            return nil
-        }
-
-        // Attempt the conversion (no try needed)
-        let tempAndTint = device.temperatureAndTintValues(for: gains)
-        // Additional sanity check (optional but good practice)
-        guard tempAndTint.temperature.isFinite, tempAndTint.tint.isFinite else {
-            logger.warning("Conversion resulted in non-finite temp/tint: Temp=\(tempAndTint.temperature), Tint=\(tempAndTint.tint)")
-            return nil
-        }
-        return tempAndTint
+        guard let device = device else { return nil }
+        
+        // Clamp gains to valid range
+        let maxGain = device.maxWhiteBalanceGain
+        let clampedGains = AVCaptureDevice.WhiteBalanceGains(
+            redGain: min(max(1.0, gains.redGain), maxGain),
+            greenGain: min(max(1.0, gains.greenGain), maxGain),
+            blueGain: min(max(1.0, gains.blueGain), maxGain)
+        )
+        
+        return device.temperatureAndTintValues(for: clampedGains)
     }
 
     // MARK: - KVO Handlers (Adjusted)
 
     // Observe white balance gains changes
     private func handleWhiteBalanceGainsChange(_: AVCaptureDevice, change: NSKeyValueObservedChange<AVCaptureDevice.WhiteBalanceGains>) {
-        // print("[TEMP DEBUG] WB KVO Callback Entered!") // REMOVED
-        guard let newGains = change.newValue else {
-            // print("[TEMP DEBUG] WB KVO: No new gains value, exiting callback.") // REMOVED
-            return
-        }
-
-        // Use the safe helper function
+        guard let device = device,
+              let newGains = change.newValue,
+              device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked else { return }
+        
+        // Use the safe helper function that clamps gains
         if let tempAndTint = safeGetTemperatureAndTint(for: newGains) {
-            logger.debug("[KVO Safe] White balance gains changed, corresponding temperature: \(tempAndTint.temperature), tint: \(tempAndTint.tint)")
-
-            if delegate == nil {
-                logger.error("[TEMP DEBUG] WB KVO: Delegate is nil! (Synchronous Check)")
-            } else {
-                // Ensure delegate update happens on the main thread
-                 DispatchQueue.main.async { [weak self] in
-                     self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass both values
-                 }
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint)
             }
-        } else {
-            // Log that conversion failed or gains were invalid
-            logger.warning("[KVO Safe] Could not convert new white balance gains to temperature/tint or gains were invalid.")
         }
     }
 } 

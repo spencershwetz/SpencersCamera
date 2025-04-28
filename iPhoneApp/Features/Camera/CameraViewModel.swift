@@ -358,7 +358,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var cameraSetupService: CameraSetupService!
     private var exposureService: ExposureService!
     private var recordingService: RecordingService!
-    private var cameraDeviceService: CameraDeviceService!
+    internal var cameraDeviceService: CameraDeviceService!
     private var videoFormatService: VideoFormatService!
     
     @Published var lastLensSwitchTimestamp = Date()
@@ -515,6 +515,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                                                selector: #selector(sessionRuntimeError(_:)),
                                                name: .AVCaptureSessionRuntimeError,
                                                object: session)
+
+        // Boot-strap DockKit integration (if framework available)
+#if canImport(DockKit)
+        if #available(iOS 18.0, *) {
+            _bootstrapDockKitIfNeeded()
+        }
+#endif
     }
     
     deinit {

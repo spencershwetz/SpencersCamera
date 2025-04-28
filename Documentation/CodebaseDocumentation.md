@@ -72,6 +72,26 @@ This document provides a detailed overview of key classes, components, and their
         *   Adds the observer in its `init()` and removes it safely in `deinit()`, preventing retain cycles and ensuring cleanup.
         *   Publishes an event via a Combine `PassthroughSubject` (`didBecomeActivePublisher`) when the notification is received.
         *   This allows views observing it (like `CameraView`) to react to the app becoming active (e.g., restart camera session) without managing the observer manually.
+*   **DockKit (`iPhoneApp/Core/DockKit`)**
+    *   **`DockControlService` (`DockControlService.swift`)**: 
+        *   Actor that encapsulates all DockKit accessory interactions (iOS 18.0+).
+        *   Uses `@Published` properties to expose accessory status, battery state, region of interest, and tracked persons.
+        *   Manages accessory state changes via `DockAccessoryManager.shared.accessoryStateChanges`.
+        *   Handles tracking control (framing modes, subject selection, ROI).
+        *   Manages battery and tracking state subscriptions.
+        *   Processes accessory events (buttons, zoom, shutter, camera flip).
+        *   Supports manual control via chevrons (pan/tilt) in manual mode.
+        *   Uses `CameraCaptureDelegate` to communicate with `CameraViewModel`.
+    *   **`DockKitTypes` (`DockKitTypes.swift`)**:
+        *   Defines enums and structs for DockKit integration.
+        *   `DockAccessoryStatus`: Connection and tracking state.
+        *   `DockAccessoryBatteryStatus`: Battery level and charging state.
+        *   `DockAccessoryTrackedPerson`: Person tracking data.
+        *   `TrackingMode`, `FramingMode`, `Animation`: Control modes.
+    *   **`DockAccessoryFeatures` (`DockAccessoryFeatures.swift`)**:
+        *   Configuration class for DockKit features.
+        *   Manages feature flags and settings.
+        *   Controls tracking, ROI, framing, and animation options.
 
 ### Features (`iPhoneApp/Features`)
 
@@ -120,6 +140,15 @@ This document provides a detailed overview of key classes, components, and their
                 *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
                 *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
                 *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true`
+    *   **`DockKitIntegration` (`DockKitIntegration.swift`)**:
+        *   Extension to `CameraViewModel` implementing `CameraCaptureDelegate`.
+        *   Handles DockKit-initiated camera actions:
+            *   `startOrStopCapture`: Toggles recording.
+            *   `switchCamera`: Cycles through available lenses.
+            *   `zoom`: Handles zoom requests with factor and direction.
+            *   `convertToViewSpace`: Transforms tracking coordinates.
+        *   Bootstraps DockKit integration in `CameraViewModel`.
+        *   Conditionally compiled for iOS 18.0+ using `canImport(DockKit)`.
 *   **Settings (`iPhoneApp/Features/Settings`)**
     *   **`SettingsModel` (`iPhoneApp/Features/Settings/SettingsModel.swift`)**: 
         *   `ObservableObject` with `@Published` properties for app settings.

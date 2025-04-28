@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+*   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
+    *   Added `DockControlService` actor for managing DockKit interactions.
+    *   Added support for subject tracking, framing modes, and ROI.
+    *   Added manual pan/tilt control via chevrons.
+    *   Added battery monitoring and status tracking.
+    *   Added support for accessory-initiated camera controls.
 *   Feature: Added Video Stabilization toggle in Settings. The app now sets the `AVCaptureConnection`'s `preferredVideoStabilizationMode` (prioritizing `.standard` over `.auto`, falling back to `.off`) based on this setting during video output configuration.
 *   Feature: Implemented Shutter Priority mode (Function Button 2). Locks shutter speed (180°) and automatically adjusts ISO based on scene brightness changes (`ExposureService`, `CameraViewModel`). Uses KVO on `exposureTargetOffset`.
 *   Feature: Added temporary exposure lock during recording when Shutter Priority is active and "Lock Exposure During Recording" setting is enabled (`ExposureService`, `CameraViewModel`).
@@ -15,6 +21,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+*   Added DockKit integration to `CameraViewModel` through `CameraCaptureDelegate` protocol.
+*   Structured DockKit components in dedicated Core/DockKit directory.
+*   Added conditional compilation for DockKit features (iOS 18.0+).
 *   Updated `ExposureService` to use Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` on the `AVCaptureDevice` for real-time updates and Shutter Priority logic.
 *   Refined exposure locking logic in `CameraViewModel` to correctly handle interaction between standard AE lock and Shutter Priority's temporary recording lock.
 *   Adjusted camera preview position and scale using `.scaleEffect(0.9)` and padding in `CameraView`.

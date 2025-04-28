@@ -9,7 +9,7 @@ The application primarily follows the **MVVM (Model-View-ViewModel)** architectu
 *   **Views (SwiftUI)**: Responsible for UI layout, presentation, and user interaction. They observe ViewModels for state changes and forward user actions to the ViewModel.
 *   **ViewModels (`ObservableObject`)**: Contain UI state (`@Published` properties) and business logic. They interact with Services to perform tasks (camera control, recording, data fetching) and expose processed data/state to the Views. Communication often involves Combine publishers and subscribers (e.g., `DeviceOrientationViewModel`, `WatchConnectivityService`, `CameraViewModel` reacting to service delegate calls or notifications).
 *   **Models (`Struct`, `Enum`)**: Represent data structures (e.g., `CameraLens`, `CameraError`, `VideoAsset`, `SettingsModel`). Value types are preferred.
-*   **Services**: Encapsulate specific functionalities, often interacting with system frameworks (AVFoundation, Metal, Photos, WatchConnectivity). They communicate back to ViewModels typically via delegate protocols or Combine publishers.
+*   **Services**: Encapsulate specific functionalities, often interacting with system frameworks (AVFoundation, Metal, Photos, WatchConnectivity, DockKit). They communicate back to ViewModels typically via delegate protocols or Combine publishers.
 
 ## Directory Structure
 
@@ -23,6 +23,10 @@ The project is organized into the following main components:
 │   │   └── AppDelegate.swift
 │   ├── Assets.xcassets/   # Image assets, colors, etc.
 │   ├── Core/
+│   │   ├── DockKit/       # DockKit integration
+│   │   │   ├── DockControlService.swift  # Main DockKit service actor
+│   │   │   ├── DockKitTypes.swift        # DockKit-related types and enums
+│   │   │   └── DockAccessoryFeatures.swift # Feature configuration
 │   │   ├── Extensions/
 │   │   │   ├── CIContext+Shared.swift
 │   │   │   └── UIDeviceOrientation+Extensions.swift
@@ -35,9 +39,10 @@ The project is organized into the following main components:
 │   │   │   ├── DeviceRotationViewModifier.swift
 │   │   │   ├── OrientationFixView.swift
 │   │   │   └── RotatingView.swift
-│   │   └── Services/      # (Currently Empty)
+│   │   └── Services/      # Core services
 │   ├── Features/
 │   │   ├── Camera/
+│   │   │   ├── DockKitIntegration.swift    # DockKit integration with CameraViewModel
 │   │   │   ├── Extensions/
 │   │   │   │   └── AVFoundationExtensions.swift
 │   │   │   ├── Models/
@@ -102,18 +107,19 @@ The project is organized into the following main components:
     *   `CameraView` observes `CameraViewModel`. It uses `@StateObject` to manage an `AppLifecycleObserver` instance.
     *   `AppLifecycleObserver` manages the `UIApplication.didBecomeActiveNotification` observer lifecycle and publishes an event when the app becomes active.
     *   `CameraView` receives the event from `AppLifecycleObserver` and calls `startSession()` on the `CameraViewModel` to ensure the camera restarts when the app returns from the background.
-    *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
-    *   `CameraSetupService` configures the `AVCaptureSession`, sets initial device settings (including attempting to set `.continuousAutoExposure` mode early and verifying after start), requests permissions, adds inputs, sets preset, and reports status/device via delegate.
-    *   `CameraDeviceService` handles lens switching and zoom, interacting directly with `AVCaptureDevice` and notifying `CameraViewModel` via delegate.
-    *   `VideoFormatService` sets resolution, frame rate, and color space (`isAppleLogEnabled` state) on `AVCaptureDevice`, coordinated by `CameraViewModel`.
-    *   `ExposureService` sets exposure mode, ISO, shutter, WB, tint based on `CameraViewModel` requests. It also attempts to set `.continuousAutoExposure` upon device initialization (`setDevice`), with the final state synchronized via `CameraSetupService`. It uses Key-Value Observing (KVO) to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains` and `exposureTargetOffset` on the `AVCaptureDevice`. 
-        *   In **Shutter Priority** mode (`enableShutterPriority`), it sets the mode to `.custom` with a fixed shutter duration, then uses KVO on `exposureTargetOffset` to monitor deviations and automatically adjust the ISO (`setExposureModeCustom`), managed by `handleExposureTargetOffsetUpdate`.
-        *   It provides methods (`lock/unlockShutterPriorityExposureForRecording`) to temporarily pause auto-ISO adjustments during recording, coordinated by `CameraViewModel` based on settings.
-        *   It reports real-time values via delegate.
-    *   `RecordingService` uses the configured session/device to write video/audio using `AVAssetWriter`. It receives pixel buffers, potentially processes them using `MetalFrameProcessor` (for LUT bake-in) based on `SettingsModel` state provided via `CameraViewModel`, applies the correct orientation transform, and saves the final file.
-    *   `CameraView` displays preview via `CameraPreviewView` (which uses `MetalPreviewView` internally).
-    *   **Preview Performance**: Frames are now delivered on a `.userInteractive` queue (`processingQueue`) with `alwaysDiscardsLateVideoFrames = true`. `MetalPreviewView` is configured for `60fps` (`preferredFramesPerSecond = 60`) and no manual semaphore waits to minimize preview latency.
-    *   `MetalPreviewView` receives raw `CMSampleBuffer`s, creates Metal textures, and renders them using shaders from `PreviewShaders.metal`, applying the `currentLUTTexture` from `LUTManager` in the fragment shader.
+    *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
+    *   `DockControlService` manages DockKit accessory interactions, handling tracking, framing, and camera control events. It communicates with `CameraViewModel` through the `CameraCaptureDelegate` protocol.
+    *   `DockKitIntegration` extends `CameraViewModel` to conform to `CameraCaptureDelegate`, enabling DockKit accessory control of camera functions.
+
+*   **DockKit Integration**:
+    *   `DockControlService` (iOS 18.0+) is an actor that manages all DockKit accessory interactions.
+    *   Handles accessory state changes, tracking, framing modes, and camera control events.
+    *   Uses `@Published` properties to expose accessory status, battery state, and tracking information.
+    *   Communicates with `CameraViewModel` through `CameraCaptureDelegate` for camera control.
+    *   Supports manual control (chevrons) and system tracking modes.
+    *   Manages battery and tracking state subscriptions.
+    *   Handles accessory events (buttons, zoom, shutter, camera flip).
+
 *   **LUT Feature**: 
     *   `LUTManager` loads `.cube` files (using `CubeLUTLoader`), creates both a `MTLTexture` (`currentLUTTexture`).
     *   `MetalPreviewView` uses `currentLUTTexture` for rendering.
