@@ -328,7 +328,22 @@ class VideoFormatService {
             
             logger.info("🎨 [reapplyColorSpaceSettings] Determined target color space: \(targetColorSpace.rawValue) (Reason: \(reason))")
 
-            logger.info("✅ [reapplyColorSpaceSettings] Finished successfully. (Color space is handled by activeFormat)")
+            // *** ADDED: Explicitly set the active color space ***
+            if device.activeColorSpace != targetColorSpace {
+                logger.info("🎨 [reapplyColorSpaceSettings] Setting activeColorSpace to \(targetColorSpace.rawValue)...")
+                device.activeColorSpace = targetColorSpace
+                // Add verification
+                if device.activeColorSpace == targetColorSpace {
+                    logger.info("✅ [reapplyColorSpaceSettings] Successfully set activeColorSpace to \(targetColorSpace.rawValue).")
+                } else {
+                    logger.error("❌ [reapplyColorSpaceSettings] FAILED to set activeColorSpace to \(targetColorSpace.rawValue). Current space: \(device.activeColorSpace.rawValue)")
+                    // Decide if we should throw an error here
+                    throw CameraError.configurationFailed(message: "Failed to set target color space during reapply.")
+                }
+            } else {
+                 logger.info("ℹ️ [reapplyColorSpaceSettings] activeColorSpace is already set to the target value (\(targetColorSpace.rawValue)).")
+            }
+            // *** END ADDED CODE ***
         } catch let error as CameraError {
              logger.error("❌ [reapplyColorSpaceSettings] Failed with CameraError: \(error.description)")
              throw error // Re-throw specific camera errors
