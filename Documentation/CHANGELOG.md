@@ -1,6 +1,6 @@
 # Changelog
 
-> **Note:** Tap-to-focus and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
 
 All notable changes to this project will be documented in this file.
 
@@ -54,6 +54,7 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+*   Push-to-exposure (tap to set exposure point) support has been removed. Setting the exposure point via user tap is no longer available; only push-to-focus is supported.
 *   Redundant setting of `AVCaptureConnection.videoRotationAngle` in `CameraDeviceService`.
 
 ## [2024-08-10]

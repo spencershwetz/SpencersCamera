@@ -616,13 +616,14 @@ class CameraDeviceService {
 
     // MARK: - Focus & Exposure
 
-    /// Sets the focus and exposure point of interest on the current device.
+    /// Sets the focus point of interest on the current device.
     /// - Parameters:
     ///   - point: The point of interest in **device coordinate space** (0-1, 0-1).
-    ///   - lock: If `true`, locks focus & exposure after setting; otherwise uses continuous modes.
+    ///   - lock: If `true`, locks focus after setting; otherwise uses continuous mode.
+    ///   - Note: Exposure point is no longer set by this method (push to exposure removed).
     func setFocusAndExposure(at point: CGPoint, lock: Bool) {
         guard let device = self.device else {
-            logger.error("[Focus] No camera device available for focus/exposure POI")
+            logger.error("[Focus] No camera device available for focus POI")
             return
         }
 
@@ -646,22 +647,9 @@ class CameraDeviceService {
                     }
                 }
 
-                if device.isExposurePointOfInterestSupported {
-                    device.exposurePointOfInterest = point
-                    if lock {
-                        if device.isExposureModeSupported(.locked) {
-                            device.exposureMode = .locked
-                        }
-                    } else {
-                        if device.isExposureModeSupported(.continuousAutoExposure) {
-                            device.exposureMode = .continuousAutoExposure
-                        }
-                    }
-                }
-
                 device.unlockForConfiguration()
 
-                // Notify delegate that exposure lock state changed if needed
+                // Notify delegate that focus lock state changed if needed
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     if lock {
@@ -670,7 +658,7 @@ class CameraDeviceService {
                 }
 
             } catch {
-                self.logger.error("[Focus] Failed to set focus/exposure: \(error.localizedDescription)")
+                self.logger.error("[Focus] Failed to set focus: \(error.localizedDescription)")
             }
         }
     }

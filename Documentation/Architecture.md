@@ -1,6 +1,6 @@
 # Project Architecture
 
-> **Note:** Tap-to-focus and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
 
 This document describes the high-level architecture and directory structure of the Spencer's Camera application.
 
@@ -109,6 +109,7 @@ The project is organized into the following main components:
     *   `CameraView` observes `CameraViewModel`. It uses `@StateObject` to manage an `AppLifecycleObserver` instance.
     *   `AppLifecycleObserver` manages the `UIApplication.didBecomeActiveNotification` observer lifecycle and publishes an event when the app becomes active.
     *   `CameraView` receives the event from `AppLifecycleObserver` and calls `startSession()` on the `CameraViewModel` to ensure the camera restarts when the app returns from the background.
+    *   User tap (push) on the preview sets the focus point only (push-to-focus). Exposure point is not set by user tap.
     *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
     *   **Exposure Lock & Shutter Priority Lens Switch Handling:**
         *   When both "Lock Exposure During Recording" and "Shutter Priority" are enabled, `CameraViewModel` ensures that after a lens change, the correct exposure lock is restored.
