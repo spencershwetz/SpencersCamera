@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   UI: Added swipe gesture to camera preview to show/hide the EV compensation slider:
+    *   Right-to-left swipe (from right edge toward left): shows the EV slider.
+    *   Left-to-right swipe (from left edge toward right): hides the EV slider.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:

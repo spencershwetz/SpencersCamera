@@ -220,11 +220,34 @@ struct CameraView: View {
             focusSquare
         )
         .overlay(
-            ExposureBiasSlider(viewModel: viewModel)
-                .padding(.trailing, 16)
-                .opacity(showExposureSlider ? 1 : 0)
-                .animation(.easeInOut, value: showExposureSlider)
+            Group {
+                if showExposureSlider {
+                    ExposureBiasSlider(viewModel: viewModel)
+                        .padding(.trailing, 16)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut, value: showExposureSlider)
             , alignment: .trailing
+        )
+        // Add swipe gesture to the preview area
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 30, coordinateSpace: .local)
+                .onEnded { value in
+                    // Detect horizontal swipes only
+                    let horizontalAmount = value.translation.width
+                    let verticalAmount = value.translation.height
+                    if abs(horizontalAmount) > abs(verticalAmount) {
+                        if horizontalAmount > 40 {
+                            // Left-to-right swipe: hide slider
+                            showExposureSlider = false
+                        } else if horizontalAmount < -40 {
+                            // Right-to-left swipe: show slider
+                            showExposureSlider = true
+                        }
+                    }
+                }
         )
         .overlay(alignment: .topLeading) {
             if settings.isDebugEnabled {

@@ -4,6 +4,12 @@
 
 This document describes the high-level architecture and directory structure of the Spencer's Camera application.
 
+### EV Compensation Slider Gesture
+- The Exposure Value (EV) compensation slider can be toggled with a swipe gesture on the camera preview:
+    - Right-to-left swipe (from right edge toward left): shows the EV slider.
+    - Left-to-right swipe (from left edge toward right): hides the EV slider.
+- The slider animates in and out smoothly. This gesture does not interfere with tap-to-focus or other camera gestures.
+
 ## Architecture
 
 The application primarily follows the **MVVM (Model-View-ViewModel)** architecture pattern, particularly within the SwiftUI features (`CameraView`, `SettingsView`, `VideoLibraryView`, `Watch App/ContentView`).

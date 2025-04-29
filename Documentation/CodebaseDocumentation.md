@@ -4,6 +4,12 @@
 
 This document provides a detailed overview of key classes, components, and their responsibilities in the Spencer's Camera codebase.
 
+### EV Compensation Slider Gesture
+- The EV compensation slider can be shown or hidden using a swipe gesture on the camera preview:
+    - Right-to-left swipe (from right edge toward left): shows the EV slider.
+    - Left-to-right swipe (from left edge toward right): hides the EV slider.
+- This gesture is handled in `CameraView.swift` and animates the slider in/out without interfering with other camera controls.
+
 ## iPhoneApp
 
 ### App (`iPhoneApp/App`)
