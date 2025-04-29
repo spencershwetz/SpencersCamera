@@ -198,8 +198,16 @@ struct CameraView: View {
             onTap: { tapLocation, isLongPress in
                 lastTapLocation = tapLocation
                 let point = locationInPreview(tapLocation, geometry: geometry)
-                isFocusLocked = isLongPress
-                focus(at: point, lock: isLongPress)
+                
+                if isLongPress {
+                    // Long press always sets focus and locks
+                    isFocusLocked = true
+                    focus(at: point, lock: true)
+                } else {
+                    // Regular tap always sets continuous auto-focus
+                    isFocusLocked = false
+                    focus(at: point, lock: false)
+                }
             }
         )
         .aspectRatio(9.0/16.0, contentMode: .fit)
@@ -431,13 +439,15 @@ struct CameraView: View {
     
     // MARK: - Focus & Exposure Helpers
     private func focus(at point: CGPoint, lock: Bool) {
+        print("📍 [CameraView.focus] Called with point: \(point), lock: \(lock), isFocusLocked: \(isFocusLocked)")
         viewModel.focus(at: point, lockAfter: lock)
         lastFocusPoint = point
         focusSquarePosition = CGPoint(x: lastTapLocation.x, y: lastTapLocation.y)
-        // Only hide square after delay if not locked
+        
+        // Hide square after delay only if not locked
         if !lock {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                if !self.isFocusLocked {  // Only hide if still not locked
+                if !self.isFocusLocked {  // Only hide if not locked
                     focusSquarePosition = nil
                 }
             }

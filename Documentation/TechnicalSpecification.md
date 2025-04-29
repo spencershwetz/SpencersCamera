@@ -30,7 +30,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   **Shutter Priority**: Implemented in `ExposureService`. When enabled via `CameraViewModel`:
         *   **Shutter Priority Mode:** When enabled, the app sets a fixed shutter duration (typically 180°) and allows ISO to float. The user can toggle this mode, and the app ensures that the correct duration is set based on the selected frame rate. 
         *   **Robust Shutter Priority Logic (2025-04-28):** After every lens switch, the 180° shutter duration is recalculated based on the *current* frame rate and immediately applied. A helper computes the duration as `1.0 / (2 * frameRate)`. This prevents incorrect shutter angles (e.g., 144°, 216°) after lens switches and guarantees consistent 180° exposure regardless of previous state or lens.
-        *   During recording, if “Lock Exposure During Recording” is also enabled, the app temporarily locks exposure using the current ISO and duration, then restores shutter priority after lens switches or format changes, using the recalculated duration., subject to rate limits and thresholds (`handleExposureTargetOffsetUpdate`).
+        *   During recording, if "Lock Exposure During Recording" is also enabled, the app temporarily locks exposure using the current ISO and duration, then restores shutter priority after lens switches or format changes, using the recalculated duration., subject to rate limits and thresholds (`handleExposureTargetOffsetUpdate`).
         *   Includes logic (`isTemporarilyLockedForRecording`, `lock/unlockShutterPriorityExposureForRecording`) to temporarily pause auto-ISO adjustments during recording when the "Lock Exposure During Recording" setting is enabled, preventing conflicts with the intended lock.
     *   **Lens Switch Exposure Lock Handling**: When both "Lock Exposure During Recording" and "Shutter Priority" are enabled, `CameraViewModel` restores the exposure lock after a lens change by re-enabling shutter priority and, after a short delay, re-locking ISO. This prevents ISO drift and ensures consistent exposure during recording across lens switches.
     *   **Exposure Lock**: Standard AE lock (`.locked` mode) is managed by `ExposureService` via `setExposureLock`. `CameraViewModel` handles the UI state (`isExposureLocked`) and ensures standard AE lock cannot be toggled while Shutter Priority is active.
@@ -123,6 +123,27 @@ This document outlines the technical specifications and requirements for the Spe
         *   Graceful degradation when accessory disconnects.
         *   Proper cleanup of subscriptions and tasks.
         *   Logging via unified logging system.
+*   **Focus Control Implementation**:
+    *   Focus Point Management:
+        *   Uses `AVCaptureDevice.focusPointOfInterest` for point targeting
+        *   Coordinates normalized to device space (0,1 x 0,1)
+        *   Handles 90-degree rotation transform for portrait orientation
+    *   Focus Lock Implementation:
+        *   Long press gesture recognition via `UILongPressGestureRecognizer`
+        *   Two-phase locking process:
+            1. Sets `.autoFocus` mode to acquire focus at point
+            2. Waits 300ms for focus acquisition
+            3. Transitions to `.locked` mode to maintain focus
+        *   Maintains lock state across lens switches
+    *   UI Components:
+        *   `FocusSquare` SwiftUI view with lock state
+        *   Uses SF Symbols "lock.fill" for lock indicator
+        *   Persistent display when locked
+        *   Auto-hiding behavior when unlocked
+    *   Coordinate Space Handling:
+        *   Transforms between UI and device coordinate spaces
+        *   Accounts for device orientation and preview scaling
+        *   Maintains accuracy across all device orientations
 
 ## Technical Requirements & Dependencies
 

@@ -640,12 +640,13 @@ class CameraDeviceService {
                     let rotatedPoint = CGPoint(x: point.y, y: 1.0 - point.x)
                     print("📍 [CameraDeviceService.setFocusAndExposure] Original point: \(point), Rotated point: \(rotatedPoint)")
                     
+                    // Always set the focus point first
                     device.focusPointOfInterest = rotatedPoint
                     
                     if lock {
-                        // First set to auto-focus to grab focus at the point
+                        // Two-step focus lock process
                         if device.isFocusModeSupported(.autoFocus) {
-                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .autoFocus to grab focus")
+                            print("📍 [CameraDeviceService.setFocusAndExposure] Step 1: Setting focus mode to .autoFocus to grab focus")
                             device.focusMode = .autoFocus
                             
                             // Wait for focus to complete before locking
@@ -654,7 +655,7 @@ class CameraDeviceService {
                                 do {
                                     try device.lockForConfiguration()
                                     if device.isFocusModeSupported(.locked) {
-                                        print("📍 [CameraDeviceService.setFocusAndExposure] Locking focus after auto-focus completed")
+                                        print("📍 [CameraDeviceService.setFocusAndExposure] Step 2: Locking focus after auto-focus completed")
                                         device.focusMode = .locked
                                     }
                                     device.unlockForConfiguration()
@@ -664,9 +665,28 @@ class CameraDeviceService {
                             }
                         }
                     } else {
+                        // For regular tap, ensure we switch to continuous auto-focus
                         if device.isFocusModeSupported(.continuousAutoFocus) {
                             print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .continuousAutoFocus")
-                            device.focusMode = .continuousAutoFocus
+                            // First use auto-focus to grab initial focus at the point
+                            if device.isFocusModeSupported(.autoFocus) {
+                                device.focusMode = .autoFocus
+                                
+                                // Then switch to continuous after a brief moment
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                                    guard let self = self else { return }
+                                    do {
+                                        try device.lockForConfiguration()
+                                        device.focusMode = .continuousAutoFocus
+                                        device.unlockForConfiguration()
+                                    } catch {
+                                        self.logger.error("[Focus] Failed to switch to continuous auto-focus: \(error.localizedDescription)")
+                                    }
+                                }
+                            } else {
+                                // If .autoFocus not supported, go directly to continuous
+                                device.focusMode = .continuousAutoFocus
+                            }
                         }
                     }
                 } else {
