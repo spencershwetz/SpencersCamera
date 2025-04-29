@@ -21,6 +21,7 @@ struct CameraView: View {
     @State private var lastFocusPoint: CGPoint? = nil // Normalized 0-1 point
     @State private var showExposureSlider: Bool = true
     @State private var lastTapLocation: CGPoint = .zero
+    @State private var isFocusLocked: Bool = false
     
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
@@ -194,10 +195,11 @@ struct CameraView: View {
             session: viewModel.session,
             lutManager: viewModel.lutManager,
             viewModel: viewModel,
-            onTap: { tapLocation in
+            onTap: { tapLocation, isLongPress in
                 lastTapLocation = tapLocation
                 let point = locationInPreview(tapLocation, geometry: geometry)
-                focus(at: point, lock: false)
+                isFocusLocked = isLongPress
+                focus(at: point, lock: isLongPress)
             }
         )
         .aspectRatio(9.0/16.0, contentMode: .fit)
@@ -429,15 +431,16 @@ struct CameraView: View {
     
     // MARK: - Focus & Exposure Helpers
     private func focus(at point: CGPoint, lock: Bool) {
-        print("📍 [CameraView.focus] Called with point: \(point), lock: \(lock)")
         viewModel.focus(at: point, lockAfter: lock)
         lastFocusPoint = point
         focusSquarePosition = CGPoint(x: lastTapLocation.x, y: lastTapLocation.y)
-        print("📍 [CameraView.focus] Set focusSquarePosition to: \(String(describing: focusSquarePosition))")
-        // Hide square after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            print("📍 [CameraView.focus] Hiding focus square")
-            focusSquarePosition = nil
+        // Only hide square after delay if not locked
+        if !lock {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if !self.isFocusLocked {  // Only hide if still not locked
+                    focusSquarePosition = nil
+                }
+            }
         }
     }
 
@@ -479,7 +482,7 @@ struct CameraView: View {
     private var focusSquare: some View {
         Group {
             if let position = focusSquarePosition {
-                FocusSquare()
+                FocusSquare(isLocked: isFocusLocked)
                     .position(position)
             }
         }

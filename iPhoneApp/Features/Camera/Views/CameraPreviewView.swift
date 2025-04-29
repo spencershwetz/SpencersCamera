@@ -9,13 +9,13 @@ struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
     @ObservedObject var lutManager: LUTManager
     let viewModel: CameraViewModel
-    var onTap: ((CGPoint) -> Void)? = nil
+    var onTap: ((CGPoint, Bool) -> Void)? = nil  // Added Bool parameter for lock state
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewRepresentable")
 
     // ---> ADD INIT LOG <---
-    init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel, onTap: ((CGPoint) -> Void)? = nil) {
+    init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel, onTap: ((CGPoint, Bool) -> Void)? = nil) {
         self.session = session
         self.lutManager = lutManager
         self.viewModel = viewModel
@@ -42,9 +42,14 @@ struct CameraPreviewView: UIViewRepresentable {
         
         logger.info("makeUIView: MTKView and MetalPreviewView delegate created.")
         
-        // Attach native tap gesture recognizer
+        // Add tap gesture recognizer
         let tapRecognizer = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         mtkView.addGestureRecognizer(tapRecognizer)
+        
+        // Add long press gesture recognizer
+        let longPressRecognizer = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        longPressRecognizer.minimumPressDuration = 0.5
+        mtkView.addGestureRecognizer(longPressRecognizer)
         
         // Store reference to parent for callback
         context.coordinator.onTap = onTap
@@ -63,7 +68,7 @@ struct CameraPreviewView: UIViewRepresentable {
     
     class Coordinator: NSObject {
         var parent: CameraPreviewView
-        var onTap: ((CGPoint) -> Void)?
+        var onTap: ((CGPoint, Bool) -> Void)?
         private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewCoordinator")
         
         init(parent: CameraPreviewView) {
@@ -76,7 +81,15 @@ struct CameraPreviewView: UIViewRepresentable {
             let location = sender.location(in: sender.view)
             print("📍 [CameraPreviewView.handleTap] Raw tap location in view: \(location)")
             print("📍 [CameraPreviewView.handleTap] View bounds: \(String(describing: sender.view?.bounds))")
-            onTap?(location)
+            onTap?(location, false)  // false for regular tap (not locked)
+        }
+        
+        @objc func handleLongPress(_ sender: UILongPressGestureRecognizer) {
+            guard sender.state == .began else { return }
+            let location = sender.location(in: sender.view)
+            print("📍 [CameraPreviewView.handleLongPress] Raw long press location in view: \(location)")
+            print("📍 [CameraPreviewView.handleLongPress] View bounds: \(String(describing: sender.view?.bounds))")
+            onTap?(location, true)  // true for long press (locked)
         }
     }
 }
