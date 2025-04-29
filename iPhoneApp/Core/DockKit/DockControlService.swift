@@ -121,13 +121,9 @@ actor DockControlService {
         guard let accessory = dockkitAccessory else { return false }
         do {
             if let point = point {
-                if #available(iOS 18.0, *) {
-                    try await accessory.selectSubject(at: point)
-                }
+                try await accessory.selectSubject(at: point)
             } else {
-                if #available(iOS 18.0, *) {
-                    try await accessory.selectSubjects([])
-                }
+                try await accessory.selectSubjects([])
             }
         } catch {
             logger.error("Failed to select subject: \(error, privacy: .public)")
@@ -182,7 +178,7 @@ actor DockControlService {
         if DockAccessoryManager.shared.isSystemTrackingEnabled { return }
         if animating { return }
 
-        let orientation = getCameraOrientation()
+        let orientation = await getCameraOrientation()
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let referenceDimensions = CGSize(width: CVPixelBufferGetWidth(pixelBuffer),
@@ -227,21 +223,19 @@ actor DockControlService {
 
         trackingSummaryTask = Task {
             do {
-                if #available(iOS 18.0, *) {
-                    for await summary in try dockkitAccessory.trackingStates {
-                        lastTrackingSummary = summary
-                        var persons: [DockAccessoryTrackedPerson] = []
-                        for subject in summary.trackedSubjects {
-                            if case .person(let p) = subject,
-                               let rect = await cameraCaptureDelegate?.convertToViewSpace(from: p.rect) {
-                                persons.append(DockAccessoryTrackedPerson(saliency: p.saliencyRank,
-                                                                           rect: rect,
-                                                                           speaking: p.speakingConfidence,
-                                                                           looking: p.lookingAtCameraConfidence))
-                            }
+                for await summary in try dockkitAccessory.trackingStates {
+                    lastTrackingSummary = summary
+                    var persons: [DockAccessoryTrackedPerson] = []
+                    for subject in summary.trackedSubjects {
+                        if case .person(let p) = subject,
+                           let rect = await cameraCaptureDelegate?.convertToViewSpace(from: p.rect) {
+                            persons.append(DockAccessoryTrackedPerson(saliency: p.saliencyRank,
+                                                                       rect: rect,
+                                                                       speaking: p.speakingConfidence,
+                                                                       looking: p.lookingAtCameraConfidence))
                         }
-                        trackedPersons = persons
                     }
+                    trackedPersons = persons
                 }
             } catch {
                 logger.error("Error receiving tracking summary: \(error, privacy: .public)")
@@ -261,11 +255,9 @@ actor DockControlService {
 
         batterySummaryTask = Task {
             do {
-                if #available(iOS 18.0, *) {
-                    for await summary in try dockkitAccessory.batteryStates {
-                        battery = .available(percentage: summary.batteryLevel,
-                                             charging: summary.chargeState == .charging)
-                    }
+                for await summary in try dockkitAccessory.batteryStates {
+                    battery = .available(percentage: summary.batteryLevel,
+                                         charging: summary.chargeState == .charging)
                 }
             } catch {
                 logger.error("Error receiving battery summary: \(error, privacy: .public)")
@@ -353,16 +345,17 @@ actor DockControlService {
         trackedPersons = []
     }
 
-    private func getCameraOrientation() -> DockAccessory.CameraOrientation {
-        switch UIDevice.current.orientation {
-        case .portrait: return .portrait
-        case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeLeft
-        case .landscapeRight: return .landscapeRight
-        case .faceDown: return .faceDown
-        case .faceUp: return .faceUp
-        default: return .corrected
-        }
+    private func getCameraOrientation() async -> DockAccessory.CameraOrientation {
+    let orientation = await MainActor.run { UIDevice.current.orientation }
+    switch orientation {
+    case .portrait: return .portrait
+    case .portraitUpsideDown: return .portraitUpsideDown
+    case .landscapeLeft: return .landscapeLeft
+    case .landscapeRight: return .landscapeRight
+    case .faceDown: return .faceDown
+    case .faceUp: return .faceUp
+    default: return .corrected
     }
+}
 #endif
 } 
