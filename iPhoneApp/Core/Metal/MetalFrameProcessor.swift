@@ -70,6 +70,13 @@ class MetalFrameProcessor {
     ///   - bakeInLUT: Flag indicating whether the LUT should be baked into the output, primarily relevant for YUV formats during recording.
     /// - Returns: A new CVPixelBuffer in BGRA format with the LUT applied (if applicable), or nil if processing fails or is skipped.
     func processFrame(pixelBuffer: CVPixelBuffer, bakeInLUT: Bool) -> CVPixelBuffer? {
+        // Quick exit: If no LUT is set **and** we are not force-baking (e.g. preview pass with no active LUT)
+        // then simply skip Metal processing and let the caller use the original buffer.
+        // This prevents unnecessary compute passes that can overwhelm the GPU and lead to timeout crashes
+        // (manifested as a solid pink preview when the command buffer queue stalls).
+        guard lutTexture != nil || bakeInLUT else {
+            return nil // Nothing to do – let caller use the original pixel buffer
+        }
         guard let cache = textureCache else {
             logger.error("Texture cache is not available.")
             return nil
