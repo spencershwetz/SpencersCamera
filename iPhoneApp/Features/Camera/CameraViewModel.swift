@@ -1599,6 +1599,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     /// Sets focus & exposure to a point (normalized) and optionally locks after.
     @MainActor
     func focus(at point: CGPoint, lockAfter: Bool) {
+        print("📍 [CameraViewModel.focus] Called with point: \(point), lockAfter: \(lockAfter)")
         cameraDeviceService.setFocusAndExposure(at: point, lock: lockAfter)
     }
 

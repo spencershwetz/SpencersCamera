@@ -622,43 +622,55 @@ class CameraDeviceService {
     ///   - lock: If `true`, locks focus after setting; otherwise uses continuous mode.
     ///   - Note: Exposure point is no longer set by this method (push to exposure removed).
     func setFocusAndExposure(at point: CGPoint, lock: Bool) {
+        print("📍 [CameraDeviceService.setFocusAndExposure] Called with point: \(point), lock: \(lock)")
         guard let device = self.device else {
             logger.error("[Focus] No camera device available for focus POI")
             return
         }
+        print("📍 [CameraDeviceService.setFocusAndExposure] Current device: \(device.localizedName)")
 
         cameraQueue.async { [weak self] in
             guard let self = self else { return }
             do {
                 try device.lockForConfiguration()
+                print("📍 [CameraDeviceService.setFocusAndExposure] Device locked for configuration")
 
                 if device.isFocusPointOfInterestSupported {
+                    print("📍 [CameraDeviceService.setFocusAndExposure] Focus POI supported, setting point: \(point)")
                     device.focusPointOfInterest = point
                     if lock {
                         if device.isFocusModeSupported(.locked) {
+                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .locked")
                             device.focusMode = .locked
                         } else if device.isFocusModeSupported(.autoFocus) {
+                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .autoFocus")
                             device.focusMode = .autoFocus
                         }
                     } else {
                         if device.isFocusModeSupported(.continuousAutoFocus) {
+                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .continuousAutoFocus")
                             device.focusMode = .continuousAutoFocus
                         }
                     }
+                } else {
+                    print("📍 [CameraDeviceService.setFocusAndExposure] Focus POI not supported on device")
                 }
 
                 device.unlockForConfiguration()
+                print("📍 [CameraDeviceService.setFocusAndExposure] Device configuration unlocked")
 
                 // Notify delegate that focus lock state changed if needed
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     if lock {
-                        self.delegate?.didUpdateCurrentLens(self.currentDeviceLens()) // placeholder to trigger UI update
+                        print("📍 [CameraDeviceService.setFocusAndExposure] Notifying delegate of focus lock state change")
+                        self.delegate?.didUpdateCurrentLens(self.currentDeviceLens())
                     }
                 }
 
             } catch {
                 self.logger.error("[Focus] Failed to set focus: \(error.localizedDescription)")
+                print("❌ [CameraDeviceService.setFocusAndExposure] Error setting focus: \(error.localizedDescription)")
             }
         }
     }

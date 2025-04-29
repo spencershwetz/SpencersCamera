@@ -64,6 +64,7 @@ struct CameraPreviewView: UIViewRepresentable {
     class Coordinator: NSObject {
         var parent: CameraPreviewView
         var onTap: ((CGPoint) -> Void)?
+        private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewCoordinator")
         
         init(parent: CameraPreviewView) {
             self.parent = parent
@@ -73,6 +74,8 @@ struct CameraPreviewView: UIViewRepresentable {
         
         @objc func handleTap(_ sender: UITapGestureRecognizer) {
             let location = sender.location(in: sender.view)
+            print("📍 [CameraPreviewView.handleTap] Raw tap location in view: \(location)")
+            print("📍 [CameraPreviewView.handleTap] View bounds: \(String(describing: sender.view?.bounds))")
             onTap?(location)
         }
     }

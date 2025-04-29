@@ -429,22 +429,51 @@ struct CameraView: View {
     
     // MARK: - Focus & Exposure Helpers
     private func focus(at point: CGPoint, lock: Bool) {
+        print("📍 [CameraView.focus] Called with point: \(point), lock: \(lock)")
         viewModel.focus(at: point, lockAfter: lock)
         lastFocusPoint = point
         focusSquarePosition = CGPoint(x: lastTapLocation.x, y: lastTapLocation.y)
+        print("📍 [CameraView.focus] Set focusSquarePosition to: \(String(describing: focusSquarePosition))")
         // Hide square after delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            print("📍 [CameraView.focus] Hiding focus square")
             focusSquarePosition = nil
         }
     }
 
     private func locationInPreview(_ location: CGPoint, geometry: GeometryProxy) -> CGPoint {
-        // Convert from view coords to normalized device coords (0-1, 0-1) with origin top-left per AVFoundation
+        print("📍 [CameraView.locationInPreview] Raw tap location: \(location)")
+        // Get the preview frame
         let previewFrame = geometry.frame(in: .local)
-        let x = (location.x - previewFrame.minX) / previewFrame.width
-        let y = (location.y - previewFrame.minY) / previewFrame.height // origin top-left per AVFoundation
-        // Clamp to [0,1]
-        return CGPoint(x: min(max(0, x), 1), y: min(max(0, y), 1))
+        print("📍 [CameraView.locationInPreview] Preview frame: \(previewFrame)")
+        
+        // Account for the 0.9 scale effect and top padding
+        let scaledWidth = previewFrame.width * 0.9
+        let scaledHeight = previewFrame.height * 0.9
+        let topPadding = geometry.safeAreaInsets.top + 10
+        print("📍 [CameraView.locationInPreview] Scaled dimensions - width: \(scaledWidth), height: \(scaledHeight), topPadding: \(topPadding)")
+        
+        // Calculate the actual preview bounds
+        let previewBounds = CGRect(
+            x: (previewFrame.width - scaledWidth) / 2,
+            y: topPadding,
+            width: scaledWidth,
+            height: scaledHeight
+        )
+        print("📍 [CameraView.locationInPreview] Calculated preview bounds: \(previewBounds)")
+        
+        // Convert tap location to normalized coordinates (0-1)
+        let x = (location.x - previewBounds.minX) / previewBounds.width
+        let y = (location.y - previewBounds.minY) / previewBounds.height
+        print("📍 [CameraView.locationInPreview] Pre-clamp normalized coordinates - x: \(x), y: \(y)")
+        
+        // Clamp to valid range [0,1]
+        let normalizedPoint = CGPoint(
+            x: min(max(0, x), 1),
+            y: min(max(0, y), 1)
+        )
+        print("📍 [CameraView.locationInPreview] Final normalized point: \(normalizedPoint)")
+        return normalizedPoint
     }
 
     private var focusSquare: some View {
