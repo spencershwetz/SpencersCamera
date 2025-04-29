@@ -537,6 +537,14 @@ class ExposureService: NSObject {
         }
     }
     
+    // Helper to clamp temperature and tint to safe ranges
+    private func clampedTemperature(_ temp: Float) -> Float {
+        return min(max(temp, 2500.0), 8000.0)
+    }
+    private func clampedTint(_ tint: Float) -> Float {
+        return min(max(tint, -150.0), 150.0)
+    }
+
     func updateTint(_ tint: Float, currentWhiteBalance: Float) {
         guard let device = device else { 
             logger.error("No camera device available")
@@ -546,10 +554,22 @@ class ExposureService: NSObject {
         do {
             try device.lockForConfiguration()
             
-            // Use the provided current white balance temperature
-            let temperature = currentWhiteBalance
-            let tnt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: temperature, tint: tint) // Use the Float tint
-            var gains = device.deviceWhiteBalanceGains(for: tnt)
+            // Clamp temperature and tint to safe ranges
+            let clampedTemperature = clampedTemperature(currentWhiteBalance)
+            let clampedTint = clampedTint(tint)
+            if clampedTemperature != currentWhiteBalance || clampedTint != tint {
+                logger.warning("Clamped WB values: temperature=\(currentWhiteBalance)→\(clampedTemperature), tint=\(tint)→\(clampedTint)")
+            }
+            let tnt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: clampedTemperature, tint: clampedTint)
+            var gains: AVCaptureDevice.WhiteBalanceGains
+            do {
+                gains = device.deviceWhiteBalanceGains(for: tnt)
+            } catch {
+                logger.error("deviceWhiteBalanceGains(for:) failed: \(error.localizedDescription). temperature=\(clampedTemperature), tint=\(clampedTint)")
+                device.unlockForConfiguration()
+                delegate?.didEncounterError(.whiteBalanceError)
+                return
+            }
             let maxGain = device.maxWhiteBalanceGain
             
             gains.redGain   = min(max(1.0, gains.redGain), maxGain)
