@@ -636,8 +636,13 @@ class CameraDeviceService {
                 print("📍 [CameraDeviceService.setFocusAndExposure] Device locked for configuration")
 
                 if device.isFocusPointOfInterestSupported {
-                    print("📍 [CameraDeviceService.setFocusAndExposure] Focus POI supported, setting point: \(point)")
-                    device.focusPointOfInterest = point
+                    // Convert the point for portrait orientation
+                    // In portrait, we need to swap x and y, and invert one axis
+                    // because the camera sensor is rotated 90 degrees
+                    let rotatedPoint = CGPoint(x: point.y, y: 1.0 - point.x)
+                    print("📍 [CameraDeviceService.setFocusAndExposure] Original point: \(point), Rotated point: \(rotatedPoint)")
+                    
+                    device.focusPointOfInterest = rotatedPoint
                     if lock {
                         if device.isFocusModeSupported(.locked) {
                             print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .locked")
