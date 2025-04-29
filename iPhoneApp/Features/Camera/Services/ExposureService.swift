@@ -561,15 +561,7 @@ class ExposureService: NSObject {
                 logger.warning("Clamped WB values: temperature=\(currentWhiteBalance)→\(clampedTemperature), tint=\(tint)→\(clampedTint)")
             }
             let tnt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(temperature: clampedTemperature, tint: clampedTint)
-            var gains: AVCaptureDevice.WhiteBalanceGains
-            do {
-                gains = device.deviceWhiteBalanceGains(for: tnt)
-            } catch {
-                logger.error("deviceWhiteBalanceGains(for:) failed: \(error.localizedDescription). temperature=\(clampedTemperature), tint=\(clampedTint)")
-                device.unlockForConfiguration()
-                delegate?.didEncounterError(.whiteBalanceError)
-                return
-            }
+            var gains = device.deviceWhiteBalanceGains(for: tnt)
             let maxGain = device.maxWhiteBalanceGain
             
             gains.redGain   = min(max(1.0, gains.redGain), maxGain)

@@ -377,6 +377,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Timer for polling WB
     private var wbPollingTimerCancellable: AnyCancellable?
     private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
+
+    // MARK: - Public Exposure Bias Setter
+    func setExposureBias(_ bias: Float) {
+        exposureService.updateExposureTargetBias(bias)
+    }
     
     // Add a computed property to expose the current device for debug purposes
     var currentCameraDevice: AVCaptureDevice? {

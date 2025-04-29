@@ -222,9 +222,22 @@ struct CameraView: View {
         .overlay(
             Group {
                 if showExposureSlider {
-                    ExposureBiasSlider(viewModel: viewModel)
-                        .padding(.trailing, 16)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    EVWheelPicker(
+                        value: $viewModel.exposureBias,
+                        minEV: viewModel.minExposureBias,
+                        maxEV: viewModel.maxExposureBias,
+                        step: 0.3 // Or use a property from viewModel if available
+                    ) { editing in
+                        // Optionally, you can trigger any side effects when editing starts/ends
+                    }
+                    .frame(height: 80)
+                    .padding(.horizontal, 0)
+                    .transition(.opacity) // Fade in/out for smoothness
+                    .zIndex(200) // Ensure it appears above other overlays
+                    .onChange(of: viewModel.exposureBias) { _, newValue in
+                        viewModel.setExposureBias(newValue)
+                    }
+
                 }
             }
             .animation(.easeInOut, value: showExposureSlider)
