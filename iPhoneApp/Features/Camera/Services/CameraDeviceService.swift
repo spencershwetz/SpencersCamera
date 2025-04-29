@@ -637,19 +637,31 @@ class CameraDeviceService {
 
                 if device.isFocusPointOfInterestSupported {
                     // Convert the point for portrait orientation
-                    // In portrait, we need to swap x and y, and invert one axis
-                    // because the camera sensor is rotated 90 degrees
                     let rotatedPoint = CGPoint(x: point.y, y: 1.0 - point.x)
                     print("📍 [CameraDeviceService.setFocusAndExposure] Original point: \(point), Rotated point: \(rotatedPoint)")
                     
                     device.focusPointOfInterest = rotatedPoint
+                    
                     if lock {
-                        if device.isFocusModeSupported(.locked) {
-                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .locked")
-                            device.focusMode = .locked
-                        } else if device.isFocusModeSupported(.autoFocus) {
-                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .autoFocus")
+                        // First set to auto-focus to grab focus at the point
+                        if device.isFocusModeSupported(.autoFocus) {
+                            print("📍 [CameraDeviceService.setFocusAndExposure] Setting focus mode to .autoFocus to grab focus")
                             device.focusMode = .autoFocus
+                            
+                            // Wait for focus to complete before locking
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                                guard let self = self else { return }
+                                do {
+                                    try device.lockForConfiguration()
+                                    if device.isFocusModeSupported(.locked) {
+                                        print("📍 [CameraDeviceService.setFocusAndExposure] Locking focus after auto-focus completed")
+                                        device.focusMode = .locked
+                                    }
+                                    device.unlockForConfiguration()
+                                } catch {
+                                    self.logger.error("[Focus] Failed to lock focus after auto-focus: \(error.localizedDescription)")
+                                }
+                            }
                         }
                     } else {
                         if device.isFocusModeSupported(.continuousAutoFocus) {

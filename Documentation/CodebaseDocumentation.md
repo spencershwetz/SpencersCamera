@@ -159,3 +159,11 @@ This document provides a detailed overview of key classes, components, and their
         *   Includes camera format settings (resolution, codec, frame rate, color space/Apple Log), LUT bake-in, flashlight, exposure lock during recording, video stabilization, and debug info display.
         *   Uses `NotificationCenter` to broadcast changes for some settings.
         *   Provides computed properties for enum-based settings to simplify type conversion.
+*   **Focus Control**:
+    *   Tap-to-focus: Supports single tap for continuous auto-focus at point.
+    *   Focus Lock: Long press to lock focus at a specific point.
+        *   Two-step process: First acquires focus using auto-focus mode, then locks.
+        *   Visual feedback with persistent focus square and lock icon.
+        *   Uses `AVCaptureDevice.focusMode` transitions: `.continuousAutoFocus` -> `.autoFocus` -> `.locked`.
+        *   Coordinate transformation handles device orientation for accurate focus point mapping.
+        *   Focus UI handled by `FocusSquare` view with lock state visualization.

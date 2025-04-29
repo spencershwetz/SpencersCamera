@@ -22,6 +22,11 @@ All notable changes to this project will be documented in this file.
 *   Core: Added `AppLifecycleObserver` to manage `didBecomeActiveNotification` observation cleanly within `CameraView`'s lifecycle.
 *   Note: Tap-to-focus and exposure value (EV) compensation features are not included in this release. UI does not currently support tap-to-focus or EV compensation.
 *   UI: Added vertical `ExposureBiasSlider` on the right side of the preview for exposure compensation (delegates to `ExposureService`).
+*   Feature: Enhanced tap-to-focus with lock capability:
+    *   Added long-press gesture to lock focus
+    *   Implemented two-step focus lock process (auto-focus then lock)
+    *   Added visual lock indicator with SF Symbol
+    *   Focus square remains visible when locked
 
 ### Changed
 
