@@ -112,8 +112,8 @@ struct SimpleWheelPicker: View {
                 logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
                 isLoaded = true
             }
-            .onReceive(debouncer.debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)) { debouncedValue in
-                // This block executes after 200ms of no new values from the debouncer.
+            .onReceive(debouncer.debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)) { debouncedValue in
+                // This block executes after 50ms of no new values from the debouncer.
                 logger.log("Debounced value received: \(debouncedValue, format: .fixed(precision: 2)). Current binding: \(value, format: .fixed(precision: 2))")
                 // Update the actual binding value only if it's different
                 let needsUpdate = abs(debouncedValue - value) > 0.001
