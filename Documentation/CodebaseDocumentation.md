@@ -54,22 +54,19 @@ This document provides a detailed overview of key classes, components, and their
         *   `fragmentShaderYUV`: Samples Y and CbCr textures ('x422' format assumed), performs YUV(BT.2020) to RGB conversion (producing Log RGB), uses the Log RGB to sample the `lutTexture` (if active), and returns the final color. Includes a uniform `isLUTActive` to bypass LUT sampling.
         *   `applyLUTComputeRGB`: Compute kernel taking BGRA input, BGRA output, and LUT textures. Reads input, samples LUT using input RGB, writes LUT color to output.
         *   `applyLUTComputeYUV`: Compute kernel taking Y input, CbCr input, BGRA output, and LUT textures. Reads Y/CbCr (handles 4:2:2 subsampling), converts to Log RGB, samples LUT using Log RGB, writes LUT color to output BGRA texture.
-*   **Orientation (`iPhoneApp/Core/Orientation`)**
+*   **Orientation (`iPhoneApp/Core/Orientation`)
+
+*   **RotatingViewController (`RotatingView.swift`)**: A `UIViewController` subclass used to apply rotation transforms to wrapped SwiftUI views, ensuring UI elements remain properly oriented as the device rotates. Utilized by the `RotatingView` representable.
+
+*   **OrientationFixViewController (`OrientationFixView.swift`)**: A `UIViewController` subclass that enforces a fixed interface orientation for its child views. Used by `OrientationFixView` to ensure parts of the UI remain locked to portrait or landscape regardless of device rotation.
+
+*   **DeviceRotationViewModifier (`DeviceRotationViewModifier.swift`)**: A SwiftUI `ViewModifier` that observes device orientation changes and applies rotation transforms to its content. Used to dynamically rotate UI elements (e.g., icons, overlays) in response to physical device rotation.
+
     *   **`DeviceOrientationViewModel` (`DeviceOrientationViewModel.swift`)**: 
         *   Shared `ObservableObject` (`DeviceOrientationViewModel.shared`).
         *   Uses `NotificationCenter` (`UIDevice.orientationDidChangeNotification`, debounced) to observe and publish device orientation changes (`orientation: UIDeviceOrientation`).
         *   Uses `CMMotionManager` (device motion updates) to calculate and publish a rotation angle (`rotationAngleInDegrees: Double`).
         *   Provides a computed `rotationAngle: Angle` based on the motion-derived angle for UI rotation.
-    *   **`OrientationFixView` (`OrientationFixView.swift`)**: 
-        *   `UIViewControllerRepresentable` wrapping `OrientationFixViewController`.
-        *   Takes `allowsLandscapeMode: Bool` parameter.
-        *   `OrientationFixViewController`: `UIViewController` subclass that hosts the SwiftUI `Content` view (via a `UIHostingController`). Sets its own view background to black. 
-            *   Overrides `supportedInterfaceOrientations` based on `allowsLandscapeMode`.
-            *   If `allowsLandscapeMode` is false, sets `modalPresentationStyle = .fullScreen` and actively attempts to enforce portrait orientation in `viewWillAppear` by calling `requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))` on the window scene.
-    *   **`RotatingView` (`RotatingView.swift`)**: 
-        *   `UIViewControllerRepresentable` wrapping `RotatingViewController`.
-        *   Takes `orientationViewModel` and `invertRotation: Bool`.
-        *   `RotatingViewController`: `UIViewController` subclass hosting the SwiftUI `Content`. Observes `orientationViewModel.$orientation` via Combine `sink`. Applies a `CGAffineTransform(rotationAngle:)` to the `hostingController.view.transform` based on the orientation and `invertRotation` flag, animating the change. (Logging reduced).
 *   **Extensions (`iPhoneApp/Core/Extensions`)**
     *   **`UIDeviceOrientation+Extensions.swift`**: Adds helpers (`isPortrait`, `isLandscape`, `isValidInterfaceOrientation`), `videoRotationAngleValue: CGFloat` (returns 0, 90, 180, 270 for video metadata), and `videoTransform: CGAffineTransform` (returns rotation transform for video). Also includes `StatusBarHidingModifier`.
     *   **`CIContext+Shared.swift`**: Provides `CIContext.shared` configured for Display P3 and GPU rendering.
@@ -81,6 +78,10 @@ This document provides a detailed overview of key classes, components, and their
         *   Publishes an event via a Combine `PassthroughSubject` (`didBecomeActivePublisher`) when the notification is received.
         *   This allows views observing it (like `CameraView`) to react to the app becoming active (e.g., restart camera session) without managing the observer manually.
 *   **DockKit (`iPhoneApp/Core/DockKit`)**
+    *   **`DockAccessoryTrackedPerson` (`DockKitTypes.swift`)**: Represents a person (or subject) being tracked by a DockKit accessory. Contains properties for identification and tracking metadata (e.g., position, confidence). Used by `DockControlService` to manage and update tracked subjects in real time.
+
+    *   **`EnabledDockKitFeatures` (`DockKitTypes.swift`)**: Struct encapsulating the set of DockKit features currently enabled in the app (e.g., tracking, framing, manual controls). Used by `DockAccessoryFeatures` and `DockControlService` to configure accessory behavior and toggle features based on user settings or accessory capabilities.
+
     *   **`DockControlService` (`DockControlService.swift`)**: 
         *   Actor that encapsulates all DockKit accessory interactions (iOS 18.0+).
         *   Uses `@Published` properties to expose accessory status, battery state, region of interest, and tracked persons.
@@ -105,6 +106,8 @@ This document provides a detailed overview of key classes, components, and their
 
 *   **Camera (`iPhoneApp/Features/Camera`)**
     *   **`CameraViewModel` (`CameraViewModel.swift`)**:
+    *   **VideoOutputDelegate (`Services/VideoOutputDelegate.swift`)**: Handles video sample buffer output from the camera session. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` to process frames for preview, recording, or real-time effects. Acts as a bridge between `AVCaptureSession` and higher-level camera logic.
+
     *   Handles restoration of exposure lock after lens changes when both "Lock Exposure During Recording" and "Shutter Priority" are enabled. After a lens switch, it re-enables shutter priority and, after a short delay, re-applies the shutter priority exposure lock to ensure ISO remains fixed. 
         *   Acts as central coordinator, holding references to all camera-related services and the `LUTManager`.
         *   Manages `AVCaptureSession` state (`session`, `isSessionRunning`, `status`, `error`).

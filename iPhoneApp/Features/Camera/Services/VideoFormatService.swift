@@ -457,21 +457,7 @@ class VideoFormatService {
             }
             // --- End set format ---
 
-            // Explicitly set the color space to Apple Log
-            logger.info("🎨 [configureAppleLog] Setting activeColorSpace to Apple Log...")
-            device.activeColorSpace = .appleLog
-
-            // --- Verify the activeColorSpace is now Apple Log --- 
-            if device.activeColorSpace == .appleLog {
-                 logger.info("✅ [configureAppleLog] Verified activeColorSpace is now Apple Log after explicit set.")
-             } else {
-                  logger.error("❌ [configureAppleLog] FAILED verification: activeColorSpace is \(device.activeColorSpace.rawValue), not Apple Log, after explicit set for format \(selectedFormat.description).")
-                  // Throw error if verification fails after explicit attempt
-                 throw CameraError.configurationFailed(message: "Failed to verify Apple Log color space after explicit set.")
-             }
-            // --- End verification ---
-             
-            // Verify the format supports Apple Log (redundant check, but safe)
+            // Verify the format supports Apple Log
             logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
             guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
                 logger.error("❌ [configureAppleLog] Failed: Selected format \(selectedFormat.description) does not support Apple Log despite findBestFormat.")

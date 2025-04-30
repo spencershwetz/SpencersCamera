@@ -174,6 +174,16 @@ This document outlines the technical specifications and requirements for the Spe
 
 ## Key Technical Decisions & Trade-offs
 
+### Additional Components (2025-04-30)
+- **RotatingViewController**: UIViewController subclass for applying rotation transforms to SwiftUI content.
+- **OrientationFixViewController**: Locks interface orientation for embedded SwiftUI views.
+- **DeviceRotationViewModifier**: SwiftUI modifier for device-based UI rotation.
+- **DockAccessoryTrackedPerson**: Data model for tracked subjects in DockKit.
+- **EnabledDockKitFeatures**: Struct for feature flags/configuration in DockKit.
+- **VideoOutputDelegate**: Handles video sample buffer output for camera preview/recording.
+- **LensSelectionView**: SwiftUI view for camera lens selection.
+- **Coordinator Classes**: Used for bridging UIKit/AppKit delegates to SwiftUI.
+
 *   **Initial Exposure Mode**: Ensuring the device reliably starts in `.continuousAutoExposure` mode required setting it at multiple points in the initialization lifecycle (before session start, after session start with verification) due to potential AVFoundation state resets during session startup. `CameraSetupService` handles the initial attempts, and `ExposureService` confirms after the device is set.
 *   **Shutter Priority Implementation**: Using KVO on `exposureTargetOffset` allows for reactive ISO adjustments based on the camera's own metering, rather than manual calculations. Requires careful tuning of thresholds and rate limits. The temporary lock during recording (`isTemporarilyLockedForRecording`) ensures predictable behavior when combined with the lock-on-record feature.
 *   **Exposure Lock Decoupling**: Separating the UI state (`CameraViewModel.isExposureLocked`) from the internal Shutter Priority recording lock logic (`ExposureService.isTemporarilyLockedForRecording`) was crucial to prevent conflicts and ensure the correct lock (standard AE or SP custom) is applied and maintained during recording, coordinated by `CameraViewModel`.

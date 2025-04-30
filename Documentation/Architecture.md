@@ -12,6 +12,17 @@ This document describes the high-level architecture and directory structure of t
 
 ## Architecture
 
+### Additional Core Components (2025-04-30)
+
+- **RotatingViewController**: Applies rotation transforms to SwiftUI views for orientation-aware UI.
+- **OrientationFixViewController**: Enforces fixed interface orientation for child views.
+- **DeviceRotationViewModifier**: SwiftUI modifier for rotating UI elements with device orientation.
+- **DockAccessoryTrackedPerson**: Represents tracked subjects for DockKit integration.
+- **EnabledDockKitFeatures**: Encapsulates feature flags for DockKit accessory capabilities.
+- **VideoOutputDelegate**: Handles video sample buffer output for preview/recording.
+- **LensSelectionView**: UI for selecting camera lenses.
+- **Coordinator Classes**: Bridge UIKit/AppKit delegates to SwiftUI views for event handling.
+
 The application primarily follows the **MVVM (Model-View-ViewModel)** architecture pattern, particularly within the SwiftUI features (`CameraView`, `SettingsView`, `VideoLibraryView`, `Watch App/ContentView`).
 
 *   **Views (SwiftUI)**: Responsible for UI layout, presentation, and user interaction. They observe ViewModels for state changes and forward user actions to the ViewModel.
