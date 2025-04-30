@@ -3,6 +3,7 @@ import CoreData
 import CoreMedia
 import UIKit
 import AVFoundation
+import os.log // Import os.log
 
 struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
@@ -23,6 +24,10 @@ struct CameraView: View {
     @State private var lastTapLocation: CGPoint = .zero
     @State private var isFocusLocked: Bool = false
     
+    // State for the temporary test button haptics
+    @State private var testFeedbackGenerator = UISelectionFeedbackGenerator()
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraView")
+
     // Initialize with proper handling of StateObjects
     init(viewModel: CameraViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -45,6 +50,21 @@ struct CameraView: View {
                 FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
                     .zIndex(100)
                     .allowsHitTesting(true)
+                
+                // Temporary Haptic Test Button (Bottom Right)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button("Test Haptic") {
+                            logger.debug("CameraView Test Haptic Button Tapped")
+                            testFeedbackGenerator.selectionChanged()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding()
+                    }
+                }
+                .zIndex(110) // Ensure it's above most things
                 
                 // Lens selection with zoom slider
                 VStack {

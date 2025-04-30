@@ -13,8 +13,7 @@ struct EVWheelPicker: View {
     let step: Float
     let onEditingChanged: (Bool) -> Void
     
-    // For haptic feedback and gesture tracking
-    @State private var lastFeedbackValue: Float = 0.0
+    // For gesture tracking
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging = false
     @State private var isSettingValue = false
@@ -22,7 +21,7 @@ struct EVWheelPicker: View {
     // For smooth scrolling and state management
     @State private var initialOffset: CGFloat = 0
     @State private var accumulatedOffset: CGFloat = 0
-    @State private var lastIndex: Int = 0
+    @State private var lastIndex: Int = -1 // Initialize to -1 to ensure first feedback
     @State private var startLocation: CGFloat = 0
     @State private var hasInitialized: Bool = false
     @State private var stableValue: Float = 0.0
@@ -33,6 +32,7 @@ struct EVWheelPicker: View {
     @State private var lastExternalValue: Float = 0.0
     @State private var lastSettledValue: Float = 0.0
     @State private var valueSettleTask: Task<Void, Never>?
+    @State private var feedbackGenerator = UISelectionFeedbackGenerator()
     
     // Constants for gesture handling - Adjusted for smoother feel
     private let movementThreshold: CGFloat = 5.0   // Lower threshold for responsiveness
@@ -91,8 +91,6 @@ struct EVWheelPicker: View {
             }
         }
         
-        hapticFeedbackIfNeeded(oldValue: lastFeedbackValue, newValue: roundedNew)
-        lastFeedbackValue = roundedNew
         onEditingChanged(isIntermediate)
         
         isSettingValue = false
@@ -116,6 +114,7 @@ struct EVWheelPicker: View {
                                     stableValue = value
                                     lastUpdateTime = Date()
                                     lastGestureLocation = gesture.location.x
+                                    feedbackGenerator.prepare() // Prepare generator on drag start
                                     logger.debug("Started dragging at x: \(startLocation)")
                                 }
                                 
@@ -147,6 +146,8 @@ struct EVWheelPicker: View {
                                 let targetIndex = nearestValidIndex(for: totalOffset, itemWidth: itemWidth)
                                 
                                 if targetIndex != lastIndex {
+                                    feedbackGenerator.selectionChanged() // Trigger feedback on index change
+                                    logger.debug("Haptic feedback triggered (selectionChanged) for index: \(targetIndex)")
                                     let newValue = evValues[targetIndex]
                                     updateValue(to: newValue)
                                     lastIndex = targetIndex
@@ -210,6 +211,18 @@ struct EVWheelPicker: View {
                     .frame(width: 2, height: 48)
                     .foregroundColor(.accentColor)
                     .opacity(0.8)
+
+                // Temporary Test Button - REMOVED
+                // VStack {
+                //     Spacer()
+                //     Button("Test Haptic") {
+                //         logger.debug("Test Haptic Button Tapped")
+                //         feedbackGenerator.selectionChanged()
+                //     }
+                //     .buttonStyle(.borderedProminent)
+                //     .padding(.bottom, 5)
+                // }
+                // .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .frame(height: 72)
@@ -222,13 +235,13 @@ struct EVWheelPicker: View {
             isSettingValue = true
             value = 0
             stableValue = 0
-            lastFeedbackValue = 0
             lastExternalValue = 0
-            lastIndex = zeroIndex
+            let currentZeroIndex = zeroIndex
+            lastIndex = currentZeroIndex // Set initial index
             
             // Center the wheel at zero
             let itemWidth: CGFloat = 40 + 16
-            accumulatedOffset = -CGFloat(zeroIndex) * itemWidth
+            accumulatedOffset = -CGFloat(currentZeroIndex) * itemWidth
             initialOffset = accumulatedOffset
             
             isSettingValue = false
@@ -249,21 +262,12 @@ struct EVWheelPicker: View {
                     // Reset relevant state variables
                     initialOffset = accumulatedOffset
                     dragOffset = 0 // Ensure drag offset is reset
-                    lastFeedbackValue = newValue
-                    lastIndex = index
-                    stableValue = newValue
                     lastExternalValue = newValue
                     gestureVelocity = 0 // Reset velocity on external change
+                    stableValue = newValue
+                    lastIndex = index // Update index on external change too
                 }
             }
-        }
-    }
-    
-    private func hapticFeedbackIfNeeded(oldValue: Float, newValue: Float) {
-        if Int(oldValue * 10) != Int(newValue * 10) {
-            let generator = UIImpactFeedbackGenerator(style: .rigid)
-            generator.prepare()
-            generator.impactOccurred(intensity: 0.5) // Slightly lower intensity
         }
     }
 }
