@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   UI: Added EVWheelPicker for precise EV bias control:
+    *   Horizontal wheel interface with haptic feedback
+    *   Smooth scrolling with precise value selection
+    *   Visual indicators for zero and current value
+    *   Maintains exact position when gesture ends
+    *   Always starts centered at 0 EV
+
 *   UI: Added swipe gesture to camera preview to show/hide the EV compensation slider:
     *   Right-to-left swipe (from right edge toward left): shows the EV slider.
     *   Left-to-right swipe (from left edge toward right): hides the EV slider.

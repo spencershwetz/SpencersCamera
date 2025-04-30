@@ -4,11 +4,17 @@
 
 This document describes the high-level architecture and directory structure of the Spencer's Camera application.
 
-### EV Compensation Slider Gesture
-- The Exposure Value (EV) compensation slider can be toggled with a swipe gesture on the camera preview:
-    - Right-to-left swipe (from right edge toward left): shows the EV slider.
-    - Left-to-right swipe (from left edge toward right): hides the EV slider.
-- The slider animates in and out smoothly. This gesture does not interfere with tap-to-focus or other camera gestures.
+### EV Compensation Control
+- The EVWheelPicker provides precise control over exposure value (EV) compensation:
+    - Horizontal wheel interface with haptic feedback for value changes
+    - Smooth scrolling with precise value selection
+    - Visual indicators for zero and current value
+    - Maintains exact position when gesture ends
+    - Always starts centered at 0 EV
+- The wheel can be shown/hidden with a swipe gesture on the camera preview:
+    - Right-to-left swipe (from right edge toward left): shows the wheel
+    - Left-to-right swipe (from left edge toward right): hides the wheel
+- The wheel animates in and out smoothly and does not interfere with other camera gestures.
 
 ## Architecture
 

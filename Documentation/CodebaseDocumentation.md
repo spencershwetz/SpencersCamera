@@ -4,6 +4,20 @@
 
 This document provides a detailed overview of key classes, components, and their responsibilities in the Spencer's Camera codebase.
 
+### EV Compensation Implementation
+- **EVWheelPicker (`EVWheelPicker.swift`)**:
+    - SwiftUI view for precise EV bias control
+    - Uses `DragGesture` with configurable threshold and sensitivity
+    - Maintains state for smooth scrolling and position tracking
+    - Provides haptic feedback on value changes
+    - Uses GeometryReader for proper layout and spacing
+    - Implements exact position maintenance on gesture end
+    - Ensures consistent 0 EV centering on initialization
+- The wheel visibility is controlled through swipe gestures:
+    - Right-to-left swipe (from right edge): shows the wheel
+    - Left-to-right swipe (from left edge): hides the wheel
+- Gesture handling is implemented in `CameraView.swift`
+
 ### EV Compensation Slider Gesture
 - The EV compensation slider can be shown or hidden using a swipe gesture on the camera preview:
     - Right-to-left swipe (from right edge toward left): shows the EV slider.

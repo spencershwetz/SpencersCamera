@@ -14,10 +14,13 @@ This document outlines the technical specifications and requirements for the Spe
     *   watchOS: Apple Watch models compatible with watchOS 11+.
 *   **Architecture**: MVVM (primarily), Service Layer for encapsulating framework interactions.
 *   **UI Framework**: SwiftUI (primarily), UIKit (`UIViewControllerRepresentable`, `UIViewRepresentable`, `AppDelegate`) for bridging AVFoundation, MetalKit, and specific view controllers/app lifecycle.
-*   **EV Compensation Slider Gesture**: The EV slider can be shown or hidden using a swipe gesture on the camera preview:
-    - Right-to-left swipe (from right edge toward left): shows the EV slider.
-    - Left-to-right swipe (from left edge toward right): hides the EV slider.
-    - The gesture is designed not to interfere with tap-to-focus or other camera controls.
+*   **EV Compensation Control**: 
+    - EVWheelPicker component for precise EV bias control
+    - Horizontal wheel interface with haptic feedback
+    - Gesture-based interaction with smooth scrolling
+    - Maintains exact position when gesture ends
+    - Always initializes centered at 0 EV
+    - Show/hide with edge swipe gestures on camera preview
 *   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
     *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.
     *   `didBecomeActive` is managed by `AppLifecycleObserver` (used as `@StateObject` in `CameraView`), which publishes an event triggering `startSession` in `CameraView` to ensure the session restarts correctly after backgrounding.
