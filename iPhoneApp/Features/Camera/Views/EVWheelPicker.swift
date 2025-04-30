@@ -23,12 +23,19 @@ struct EVWheelPicker: View {
     @State private var initialOffset: CGFloat = 0
     @State private var accumulatedOffset: CGFloat = 0
     @State private var lastIndex: Int = 0
+    @State private var startLocation: CGFloat = 0
+    @State private var hasInitialized: Bool = false
     
     // Threshold for gesture movement before updating value
     private let movementThreshold: CGFloat = 8.0
+    private let sensitivity: CGFloat = 1.0
     
     private var evValues: [Float] {
         stride(from: minEV, through: maxEV, by: step).map { round($0 * 100) / 100 }
+    }
+    
+    private var zeroIndex: Int {
+        evValues.firstIndex(of: 0) ?? evValues.count / 2
     }
     
     var body: some View {
@@ -43,19 +50,18 @@ struct EVWheelPicker: View {
                     .gesture(
                         DragGesture(minimumDistance: movementThreshold)
                             .onChanged { gesture in
-                                isDragging = true
-                                let translation = gesture.translation.width
+                                if !isDragging {
+                                    startLocation = gesture.location.x
+                                    isDragging = true
+                                }
                                 
-                                // Apply movement threshold and smoothing
+                                let translation = (gesture.location.x - startLocation) * sensitivity
                                 let scrolledValue = -translation / itemWidth
-                                let rawIndex = Int(round(scrolledValue))
+                                let rawIndex = Int(round(scrolledValue)) + lastIndex
+                                let clampedIndex = max(0, min(rawIndex, evValues.count - 1))
                                 
-                                // Only update if we've moved enough to warrant a change
-                                if abs(rawIndex - lastIndex) >= 1 {
-                                    let index = max(0, min(rawIndex, evValues.count - 1))
-                                    lastIndex = index
-                                    
-                                    let newValue = evValues[index]
+                                if clampedIndex != lastIndex {
+                                    let newValue = evValues[clampedIndex]
                                     if newValue != value {
                                         isSettingValue = true
                                         value = newValue
@@ -63,36 +69,24 @@ struct EVWheelPicker: View {
                                         lastFeedbackValue = newValue
                                         onEditingChanged(true)
                                         isSettingValue = false
+                                        lastIndex = clampedIndex
                                     }
                                 }
                                 
-                                // Update visual offset with smoothing
+                                // Update visual offset
                                 dragOffset = translation
                             }
                             .onEnded { gesture in
                                 isDragging = false
                                 
-                                // Find the nearest value with improved rounding
-                                let finalOffset = gesture.translation.width
-                                let nearestIndex = Int(round(-finalOffset / itemWidth))
-                                let clampedIndex = max(0, min(nearestIndex, evValues.count - 1))
+                                // Update accumulated offset
+                                accumulatedOffset = -CGFloat(lastIndex) * itemWidth
                                 
-                                // Animate to the nearest value
+                                // Animate to final position
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
-                                    accumulatedOffset = -CGFloat(clampedIndex) * itemWidth
                                     dragOffset = 0
                                 }
                                 
-                                // Update the value one final time
-                                let finalValue = evValues[clampedIndex]
-                                if finalValue != value {
-                                    isSettingValue = true
-                                    value = finalValue
-                                    lastFeedbackValue = finalValue
-                                    isSettingValue = false
-                                }
-                                
-                                lastIndex = clampedIndex
                                 onEditingChanged(false)
                             }
                     )
@@ -123,13 +117,21 @@ struct EVWheelPicker: View {
         }
         .frame(height: 72)
         .onAppear {
-            // Set initial position
-            if let index = evValues.firstIndex(of: value) {
-                accumulatedOffset = -CGFloat(index) * (40 + 16)
-                initialOffset = accumulatedOffset
-                lastFeedbackValue = value
-                lastIndex = index
-            }
+            guard !hasInitialized else { return }
+            hasInitialized = true
+            
+            // Initialize at zero
+            isSettingValue = true
+            value = 0
+            lastFeedbackValue = 0
+            lastIndex = zeroIndex
+            
+            // Center the wheel at zero
+            let itemWidth: CGFloat = 40 + 16
+            accumulatedOffset = -CGFloat(zeroIndex) * itemWidth
+            initialOffset = accumulatedOffset
+            
+            isSettingValue = false
         }
         .onChange(of: value) { oldValue, newValue in
             // Only update position if the value was changed externally (not by dragging)
