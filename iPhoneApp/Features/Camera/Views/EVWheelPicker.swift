@@ -36,78 +36,90 @@ struct EVWheelPicker: View {
             let itemWidth: CGFloat = 40 + 16 // width + spacing
             let horizontalPadding = geo.size.width / 2
             
-            HStack(spacing: 16) {
-                ForEach(evValues, id: \.self) { ev in
-                    VStack(spacing: 4) {
-                        Rectangle()
-                            .fill(ev == 0 ? Color.accentColor : Color.gray.opacity(0.6))
-                            .frame(width: 2, height: ev == 0 ? 32 : 20)
-                        Text(ev == 0 ? "0" : String(format: "%+.1f", ev))
-                            .font(.caption2)
-                            .foregroundColor(ev == value ? .accentColor : .secondary)
-                    }
-                    .frame(width: 40)
-                    .id(ev)
-                }
-            }
-            .offset(x: horizontalPadding + accumulatedOffset + dragOffset)
-            .gesture(
-                DragGesture(minimumDistance: movementThreshold)
-                    .onChanged { gesture in
-                        isDragging = true
-                        let translation = gesture.translation.width
-                        
-                        // Apply movement threshold and smoothing
-                        let scrolledValue = -translation / itemWidth
-                        let rawIndex = Int(round(scrolledValue))
-                        
-                        // Only update if we've moved enough to warrant a change
-                        if abs(rawIndex - lastIndex) >= 1 {
-                            let index = max(0, min(rawIndex, evValues.count - 1))
-                            lastIndex = index
-                            
-                            let newValue = evValues[index]
-                            if newValue != value {
-                                logger.debug("📱 Setting new value: \(value) -> \(newValue)")
-                                isSettingValue = true
-                                value = newValue
-                                hapticFeedbackIfNeeded(oldValue: lastFeedbackValue, newValue: newValue)
-                                lastFeedbackValue = newValue
-                                onEditingChanged(true)
-                                isSettingValue = false
+            ZStack {
+                // Background gesture area
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: movementThreshold)
+                            .onChanged { gesture in
+                                isDragging = true
+                                let translation = gesture.translation.width
+                                
+                                // Apply movement threshold and smoothing
+                                let scrolledValue = -translation / itemWidth
+                                let rawIndex = Int(round(scrolledValue))
+                                
+                                // Only update if we've moved enough to warrant a change
+                                if abs(rawIndex - lastIndex) >= 1 {
+                                    let index = max(0, min(rawIndex, evValues.count - 1))
+                                    lastIndex = index
+                                    
+                                    let newValue = evValues[index]
+                                    if newValue != value {
+                                        isSettingValue = true
+                                        value = newValue
+                                        hapticFeedbackIfNeeded(oldValue: lastFeedbackValue, newValue: newValue)
+                                        lastFeedbackValue = newValue
+                                        onEditingChanged(true)
+                                        isSettingValue = false
+                                    }
+                                }
+                                
+                                // Update visual offset with smoothing
+                                dragOffset = translation
                             }
+                            .onEnded { gesture in
+                                isDragging = false
+                                
+                                // Find the nearest value with improved rounding
+                                let finalOffset = gesture.translation.width
+                                let nearestIndex = Int(round(-finalOffset / itemWidth))
+                                let clampedIndex = max(0, min(nearestIndex, evValues.count - 1))
+                                
+                                // Animate to the nearest value
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
+                                    accumulatedOffset = -CGFloat(clampedIndex) * itemWidth
+                                    dragOffset = 0
+                                }
+                                
+                                // Update the value one final time
+                                let finalValue = evValues[clampedIndex]
+                                if finalValue != value {
+                                    isSettingValue = true
+                                    value = finalValue
+                                    lastFeedbackValue = finalValue
+                                    isSettingValue = false
+                                }
+                                
+                                lastIndex = clampedIndex
+                                onEditingChanged(false)
+                            }
+                    )
+                
+                // EV wheel marks and values
+                HStack(spacing: 16) {
+                    ForEach(evValues, id: \.self) { ev in
+                        VStack(spacing: 4) {
+                            Rectangle()
+                                .fill(ev == 0 ? Color.accentColor : Color.gray.opacity(0.6))
+                                .frame(width: 2, height: ev == 0 ? 32 : 20)
+                            Text(ev == 0 ? "0" : String(format: "%+.1f", ev))
+                                .font(.caption2)
+                                .foregroundColor(ev == value ? .accentColor : .secondary)
                         }
-                        
-                        // Update visual offset with smoothing
-                        dragOffset = translation
+                        .frame(width: 40)
+                        .id(ev)
                     }
-                    .onEnded { gesture in
-                        isDragging = false
-                        
-                        // Find the nearest value with improved rounding
-                        let finalOffset = gesture.translation.width
-                        let nearestIndex = Int(round(-finalOffset / itemWidth))
-                        let clampedIndex = max(0, min(nearestIndex, evValues.count - 1))
-                        
-                        // Animate to the nearest value
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
-                            accumulatedOffset = -CGFloat(clampedIndex) * itemWidth
-                            dragOffset = 0
-                        }
-                        
-                        // Update the value one final time
-                        let finalValue = evValues[clampedIndex]
-                        if finalValue != value {
-                            isSettingValue = true
-                            value = finalValue
-                            lastFeedbackValue = finalValue
-                            isSettingValue = false
-                        }
-                        
-                        lastIndex = clampedIndex
-                        onEditingChanged(false)
-                    }
-            )
+                }
+                .offset(x: horizontalPadding + accumulatedOffset + dragOffset)
+                
+                // Center indicator
+                Rectangle()
+                    .frame(width: 2, height: 48)
+                    .foregroundColor(.accentColor)
+                    .opacity(0.8)
+            }
         }
         .frame(height: 72)
         .onAppear {
@@ -122,7 +134,6 @@ struct EVWheelPicker: View {
         .onChange(of: value) { oldValue, newValue in
             // Only update position if the value was changed externally (not by dragging)
             if !isSettingValue, !isDragging, let index = evValues.firstIndex(of: newValue) {
-                logger.debug("📍 External value change: \(oldValue) -> \(newValue)")
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
                     accumulatedOffset = -CGFloat(index) * (40 + 16)
                 }
@@ -131,13 +142,6 @@ struct EVWheelPicker: View {
                 lastIndex = index
             }
         }
-        .overlay(
-            Rectangle()
-                .frame(width: 2, height: 48)
-                .foregroundColor(.accentColor)
-                .opacity(0.8),
-            alignment: .center
-        )
     }
     
     private func hapticFeedbackIfNeeded(oldValue: Float, newValue: Float) {
