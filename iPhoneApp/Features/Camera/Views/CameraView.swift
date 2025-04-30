@@ -4,6 +4,10 @@ import CoreMedia
 import UIKit
 import AVFoundation
 import os.log // Import os.log
+import CoreLocation
+
+// Add import for the new picker's directory if needed (adjust path if necessary)
+// import AppName.UI.CommonViews // Or similar depending on your project structure
 
 struct CameraView: View {
     @StateObject private var viewModel: CameraViewModel
@@ -24,6 +28,10 @@ struct CameraView: View {
     @State private var lastTapLocation: CGPoint = .zero
     @State private var isFocusLocked: Bool = false
     
+    // State for the temporary SimpleWheelPicker test - REMOVED
+    // @State private var testWheelValue: CGFloat = 0
+    // @State private var testWheelConfig: SimpleWheelPicker.Config = .init(count: 20, steps: 5, spacing: 8, multiplier: 1, showsText: true)
+
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraView")
 
     // Initialize with proper handling of StateObjects
@@ -225,26 +233,57 @@ struct CameraView: View {
         .overlay(
             Group {
                 if showExposureSlider {
-                    EVWheelPicker(
-                        value: $viewModel.exposureBias,
-                        minEV: viewModel.minExposureBias,
-                        maxEV: viewModel.maxExposureBias,
-                        step: 0.3 // Or use a property from viewModel if available
-                    ) { editing in
-                        // Optionally, you can trigger any side effects when editing starts/ends
+                    VStack { 
+                        // --- Use SimpleWheelPicker for Exposure Bias ---
+                        // Create a Binding<CGFloat> that converts to/from Binding<Float>
+                        let exposureBiasBinding = Binding<CGFloat>(
+                            get: { CGFloat(viewModel.exposureBias) },
+                            set: { viewModel.exposureBias = Float($0) }
+                        )
+                        
+                        SimpleWheelPicker(
+                            config: .init(
+                                min: CGFloat(viewModel.minExposureBias), // Convert Float to CGFloat
+                                max: CGFloat(viewModel.maxExposureBias), // Convert Float to CGFloat
+                                stepsPerUnit: 10, 
+                                spacing: 8,       
+                                showsText: true
+                            ),
+                            value: exposureBiasBinding // Use the CGFloat binding
+                        )
+                        .frame(height: 60)
+                        .background(Color.black.opacity(0.5)) // Use a less intrusive background
+                        .padding(.horizontal, 0) // Use padding from VStack instead
+                        
+                        // Display current EV value below the picker
+                        Text(String(format: "%+.1f EV", viewModel.exposureBias))
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.bottom, 5)
+                        // ----------------------------------------------
+
+                        // --- SimpleWheelPicker for Haptic Test --- - REMOVED
+                        /*
+                        Divider().background(Color.white)
+                        Text("Test Wheel: \(testWheelValue, specifier: "%.1f")")
+                            .foregroundColor(.white)
+                            .font(.caption)
+                        SimpleWheelPicker(config: testWheelConfig, value: $testWheelValue)
+                            .frame(height: 60)
+                            .background(Color.red.opacity(0.3)) // Make it visible
+                        */
+                        // ---------------------------------
                     }
-                    .frame(height: 80)
-                    .padding(.horizontal, 0)
-                    .transition(.opacity) // Fade in/out for smoothness
+                    .padding(.trailing, 10) 
+                    .transition(.opacity) 
                     .zIndex(200) // Ensure it appears above other overlays
                     .onChange(of: viewModel.exposureBias) { _, newValue in
                         viewModel.setExposureBias(newValue)
                     }
-
                 }
             }
-            .animation(.easeInOut, value: showExposureSlider)
-            , alignment: .trailing
+            .animation(.easeInOut, value: showExposureSlider),
+            alignment: .trailing // Align the overlay to the trailing edge
         )
         // Add swipe gesture to the preview area
         .contentShape(Rectangle())

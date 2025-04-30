@@ -32,7 +32,6 @@ struct EVWheelPicker: View {
     @State private var lastExternalValue: Float = 0.0
     @State private var lastSettledValue: Float = 0.0
     @State private var valueSettleTask: Task<Void, Never>?
-    @State private var impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     
     // Constants for gesture handling - Adjusted for smoother feel
     private let movementThreshold: CGFloat = 5.0   // Lower threshold for responsiveness
@@ -68,9 +67,15 @@ struct EVWheelPicker: View {
         let roundedLast = round(lastSettledValue * 100) / 100
         
         // Only update if value has changed significantly
-        guard abs(roundedNew - roundedCurrent) >= (step / 2) || 
+        guard abs(roundedNew - roundedCurrent) >= (step / 2) ||
               (!isIntermediate && roundedNew != roundedLast) else { return }
         
+        // --- Trigger Haptic Feedback Here ---
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+        logger.debug("Haptic feedback triggered (in updateValue) before setting value: \(roundedNew)")
+        // -----------------------------------
+
         isSettingValue = true
         logger.debug("Updating value from \(stableValue) to \(roundedNew) (intermediate: \(isIntermediate))")
         
@@ -114,7 +119,6 @@ struct EVWheelPicker: View {
                                     stableValue = value
                                     lastUpdateTime = Date()
                                     lastGestureLocation = gesture.location.x
-                                    impactFeedbackGenerator.prepare() // Prepare light impact generator
                                     logger.debug("Started dragging at x: \(startLocation)")
                                 }
                                 
@@ -145,9 +149,12 @@ struct EVWheelPicker: View {
                                 let totalOffset = accumulatedOffset + dragOffset
                                 let targetIndex = nearestValidIndex(for: totalOffset, itemWidth: itemWidth)
                                 
+                                // Trigger haptic feedback if index changed - REMOVED from here
                                 if targetIndex != lastIndex {
-                                    impactFeedbackGenerator.impactOccurred() // Use light impact generator
-                                    logger.debug("Haptic feedback triggered (UIImpactFeedbackGenerator Light) for index: \(targetIndex)")
+                                    // Create and trigger locally - REMOVED
+                                    // let generator = UIImpactFeedbackGenerator(style: .light)
+                                    // generator.impactOccurred()
+                                    // logger.debug("Haptic feedback triggered (Local UIImpactFeedbackGenerator Light) for index: \(targetIndex)")
                                     let newValue = evValues[targetIndex]
                                     updateValue(to: newValue)
                                     lastIndex = targetIndex
