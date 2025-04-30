@@ -290,16 +290,18 @@ struct CameraView: View {
         .gesture(
             DragGesture(minimumDistance: 30, coordinateSpace: .local)
                 .onEnded { value in
-                    // Detect horizontal swipes only
+                    // Detect vertical swipes primarily
                     let horizontalAmount = value.translation.width
                     let verticalAmount = value.translation.height
-                    if abs(horizontalAmount) > abs(verticalAmount) {
-                        if horizontalAmount > 40 {
-                            // Left-to-right swipe: hide slider
-                            showExposureSlider = false
-                        } else if horizontalAmount < -40 {
-                            // Right-to-left swipe: show slider
+                    
+                    // Check if vertical movement is greater than horizontal movement
+                    if abs(verticalAmount) > abs(horizontalAmount) {
+                        if verticalAmount < -40 { // Swipe Up
+                            // Swipe up: show slider
                             showExposureSlider = true
+                        } else if verticalAmount > 40 { // Swipe Down
+                            // Swipe down: hide slider
+                            showExposureSlider = false
                         }
                     }
                 }

@@ -11,10 +11,10 @@ This document describes the high-level architecture and directory structure of t
     - Visual indicators for zero and current value
     - Maintains exact position when gesture ends
     - Always starts centered at 0 EV
-- The wheel can be shown/hidden with a swipe gesture on the camera preview:
-    - Right-to-left swipe (from right edge toward left): shows the wheel
-    - Left-to-right swipe (from left edge toward right): hides the wheel
-- The wheel animates in and out smoothly and does not interfere with other camera gestures.
+- The wheel can be shown/hidden with a vertical swipe gesture on the camera preview:
+    - Swipe Up: Shows the EV wheel.
+    - Swipe Down: Hides the EV wheel.
+- The wheel animates in and out smoothly from the side and does not interfere with other camera gestures.
 
 ## Architecture
 

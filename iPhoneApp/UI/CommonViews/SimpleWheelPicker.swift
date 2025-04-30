@@ -76,8 +76,18 @@ struct SimpleWheelPicker: View {
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
                         logger.debug("Haptic triggered for position \(newPosition), value \(newValue, format: .fixed(precision: 2))")
-                        // Update the binding value based on the new scroll position
-                        value = newValue
+                        
+                        // Update the binding value based on the new scroll position, but with a slight delay
+                        // This *might* help prevent fighting the scroll view's final settling/snapping.
+                        Task { @MainActor in
+                            // Delay slightly (e.g., 50 milliseconds)
+                            try? await Task.sleep(nanoseconds: 50_000_000)
+                            // Check again if the value still needs updating, in case it changed again during the delay
+                            if abs(newValue - self.value) > 0.001 {
+                                self.value = newValue
+                                logger.trace("Value updated after delay: \(newValue, format: .fixed(precision: 2))")
+                            }
+                        }
                     }
                 }
             }))
