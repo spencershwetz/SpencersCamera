@@ -293,16 +293,26 @@ struct CameraView: View {
                     // Detect vertical swipes primarily
                     let horizontalAmount = value.translation.width
                     let verticalAmount = value.translation.height
+                    logger.debug("[SwipeGesture] Ended: H=\(horizontalAmount, format: .fixed(precision: 1)), V=\(verticalAmount, format: .fixed(precision: 1))")
                     
                     // Check if vertical movement is greater than horizontal movement
-                    if abs(verticalAmount) > abs(horizontalAmount) {
+                    let isVerticalSwipe = abs(verticalAmount) > abs(horizontalAmount)
+                    logger.debug("[SwipeGesture] Is Vertical Swipe? \(isVerticalSwipe)")
+                    
+                    if isVerticalSwipe {
                         if verticalAmount < -40 { // Swipe Up
+                            logger.debug("[SwipeGesture] Detected Swipe Up. Showing EV slider.")
                             // Swipe up: show slider
                             showExposureSlider = true
                         } else if verticalAmount > 40 { // Swipe Down
+                            logger.debug("[SwipeGesture] Detected Swipe Down. Hiding EV slider.")
                             // Swipe down: hide slider
                             showExposureSlider = false
+                        } else {
+                            logger.debug("[SwipeGesture] Vertical swipe detected, but below threshold (40). No action.")
                         }
+                    } else {
+                        logger.debug("[SwipeGesture] Horizontal swipe detected or movement too small. No action.")
                     }
                 }
         )

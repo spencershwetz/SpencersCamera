@@ -1,5 +1,6 @@
 import SwiftUI
 import OSLog // Import OSLog for debugging
+import Combine // Import Combine for debounce
 
 /// A simple horizontal wheel picker based on ScrollView and .scrollPosition.
 struct SimpleWheelPicker: View {
@@ -8,8 +9,12 @@ struct SimpleWheelPicker: View {
     @Binding var value: CGFloat
     /// View Properties
     @State private var isLoaded: Bool = false
+    // Local state to track the value *during* scrolling, avoiding immediate binding updates.
+    @State private var intermediateValue: CGFloat = 0.0
     // Logger for debugging
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "SimpleWheelPicker")
+    // Publisher for debouncing
+    private let debouncer = PassthroughSubject<CGFloat, Never>()
 
     // Calculate the total number of finest steps based on range and steps per unit
     private var totalNumberOfSteps: Int {
@@ -62,32 +67,28 @@ struct SimpleWheelPicker: View {
             .scrollIndicators(.hidden)
             .scrollTargetBehavior(.viewAligned)
             .scrollPosition(id: .init(get: {
-                // Calculate the scroll position (index) based on the current value
-                let position: Int? = isLoaded ? index(for: value) : nil
-                logger.trace("ScrollPosition GET: value = \(value, format: .fixed(precision: 2)), position = \(position ?? -1)")
+                // Read from the intermediate value while scrolling
+                let position: Int? = isLoaded ? index(for: intermediateValue) : nil
+                logger.trace("ScrollPosition GET: intermediateValue = \(intermediateValue, format: .fixed(precision: 2)), position = \(position ?? -1)")
                 return position
             }, set: { newPosition in
                 if let newPosition {
                     let newValue = value(for: newPosition).clamped(to: config.min...config.max)
                     logger.trace("ScrollPosition SET: newPosition = \(newPosition), calculated newValue = \(newValue, format: .fixed(precision: 2))")
-                    // Check if the value actually changed to avoid redundant updates and haptics
-                    if abs(newValue - value) > 0.001 { // Use a small tolerance
-                        // Create and trigger haptic feedback *locally* when position changes
+                    // Check if the intermediate value actually changed
+                    if abs(newValue - intermediateValue) > 0.001 { // Use a small tolerance
+                        // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
-                        logger.debug("Haptic triggered for position \(newPosition), value \(newValue, format: .fixed(precision: 2))")
+                        logger.debug("Haptic triggered for position \(newPosition), intermediateValue \(newValue, format: .fixed(precision: 2))")
                         
-                        // Update the binding value based on the new scroll position, but with a slight delay
-                        // This *might* help prevent fighting the scroll view's final settling/snapping.
-                        Task { @MainActor in
-                            // Delay slightly (e.g., 50 milliseconds)
-                            try? await Task.sleep(nanoseconds: 50_000_000)
-                            // Check again if the value still needs updating, in case it changed again during the delay
-                            if abs(newValue - self.value) > 0.001 {
-                                self.value = newValue
-                                logger.trace("Value updated after delay: \(newValue, format: .fixed(precision: 2))")
-                            }
-                        }
+                        // Update the LOCAL intermediate value immediately
+                        intermediateValue = newValue
+                        logger.trace("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2))")
+                        
+                        // Send the new intermediate value to the debouncer
+                        logger.trace("Sending to debouncer: \(intermediateValue, format: .fixed(precision: 2))")
+                        debouncer.send(intermediateValue)
                     }
                 }
             }))
@@ -100,21 +101,44 @@ struct SimpleWheelPicker: View {
             }
             .safeAreaPadding(.horizontal, horizontalPadding)
             .onAppear {
-                logger.debug("SimpleWheelPicker appeared. Initial value: \(value, format: .fixed(precision: 2))")
-                // Ensures scrollPosition works correctly on first appearance
-                if !isLoaded {
-                    isLoaded = true
-                    // Ensure the value is clamped initially
-                    let clampedInitialValue = value.clamped(to: config.min...config.max)
-                    if clampedInitialValue != value {
-                         value = clampedInitialValue
-                         logger.warning("Initial value \(value, format: .fixed(precision: 2)) was outside range [\(config.min)...\(config.max)], clamped to \(clampedInitialValue).")
-                    }
+                logger.debug("SimpleWheelPicker appeared. Initial binding value: \(value, format: .fixed(precision: 2))")
+                // Initialize intermediateValue from the binding on appear
+                let clampedInitialValue = value.clamped(to: config.min...config.max)
+                intermediateValue = clampedInitialValue
+                if clampedInitialValue != value {
+                     value = clampedInitialValue // Ensure binding is also clamped initially
+                     logger.warning("Initial binding value \(value, format: .fixed(precision: 2)) was outside range [\(config.min)...\(config.max)], clamped to \(clampedInitialValue).")
+                }
+                logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
+                isLoaded = true
+            }
+            .onReceive(debouncer.debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)) { debouncedValue in
+                // This block executes after 200ms of no new values from the debouncer.
+                logger.log("Debounced value received: \(debouncedValue, format: .fixed(precision: 2)). Current binding: \(value, format: .fixed(precision: 2))")
+                // Update the actual binding value only if it's different
+                let needsUpdate = abs(debouncedValue - value) > 0.001
+                logger.trace("Compare debounced vs binding: |\(debouncedValue) - \(value)| > 0.001 ? \(needsUpdate)")
+                if needsUpdate {
+                     logger.log("Updating binding value to debounced value: \(debouncedValue, format: .fixed(precision: 2))")
+                    value = debouncedValue
+                } else {
+                    logger.trace("Debounced value is same as binding value, no update needed.")
                 }
             }
         }
-        // Note: Removing the .onChange(of: config) that resets value, 
-        // as we want it to reflect the viewModel's state.
+        // Sync intermediateValue if the external binding changes (e.g., reset)
+        .onChange(of: value) { _, newValue in
+            // Only update intermediate if it's significantly different, avoiding feedback loops with the debouncer
+            let difference = abs(newValue - intermediateValue)
+            let needsSync = difference > 0.01 // Use slightly larger tolerance here
+            logger.trace("onChange(value): newValue=\(newValue, format: .fixed(precision: 2)), intermediate=\(intermediateValue, format: .fixed(precision: 2)), diff=\(difference, format: .fixed(precision: 4)), needsSync=\(needsSync)")
+            if needsSync {
+                logger.debug("External binding changed significantly. Updating intermediate value.")
+                intermediateValue = newValue.clamped(to: config.min...config.max)
+            } else {
+                logger.trace("External binding change insignificant or same as intermediate. No sync needed.")
+            }
+        }
     }
     
     /// Picker Configuration
