@@ -32,7 +32,7 @@ struct EVWheelPicker: View {
     @State private var lastExternalValue: Float = 0.0
     @State private var lastSettledValue: Float = 0.0
     @State private var valueSettleTask: Task<Void, Never>?
-    @State private var feedbackGenerator = UISelectionFeedbackGenerator()
+    @State private var impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     
     // Constants for gesture handling - Adjusted for smoother feel
     private let movementThreshold: CGFloat = 5.0   // Lower threshold for responsiveness
@@ -114,7 +114,7 @@ struct EVWheelPicker: View {
                                     stableValue = value
                                     lastUpdateTime = Date()
                                     lastGestureLocation = gesture.location.x
-                                    feedbackGenerator.prepare() // Prepare generator on drag start
+                                    impactFeedbackGenerator.prepare() // Prepare light impact generator
                                     logger.debug("Started dragging at x: \(startLocation)")
                                 }
                                 
@@ -146,8 +146,8 @@ struct EVWheelPicker: View {
                                 let targetIndex = nearestValidIndex(for: totalOffset, itemWidth: itemWidth)
                                 
                                 if targetIndex != lastIndex {
-                                    feedbackGenerator.selectionChanged() // Trigger feedback on index change
-                                    logger.debug("Haptic feedback triggered (selectionChanged) for index: \(targetIndex)")
+                                    impactFeedbackGenerator.impactOccurred() // Use light impact generator
+                                    logger.debug("Haptic feedback triggered (UIImpactFeedbackGenerator Light) for index: \(targetIndex)")
                                     let newValue = evValues[targetIndex]
                                     updateValue(to: newValue)
                                     lastIndex = targetIndex

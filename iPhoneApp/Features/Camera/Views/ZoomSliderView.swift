@@ -8,6 +8,7 @@ struct ZoomSliderView: View {
     @State private var dragVelocity: CGFloat = 0
     @State private var lastDragLocation: CGPoint?
     @State private var lastDragTime: Date?
+    @State private var impactFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     
     private let minZoom: CGFloat = 1.0
     private let maxZoom: CGFloat = 10.0
@@ -110,6 +111,7 @@ struct ZoomSliderView: View {
             HStack(spacing: 14) {
                 ForEach(availableLenses, id: \.self) { lens in
                     Button(action: {
+                        impactFeedbackGenerator.impactOccurred()
                         viewModel.switchToLens(lens)
                     }) {
                         Text(lens.rawValue + "×")
