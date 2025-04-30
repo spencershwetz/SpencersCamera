@@ -126,19 +126,6 @@ struct SimpleWheelPicker: View {
                 }
             }
         }
-        // Sync intermediateValue if the external binding changes (e.g., reset)
-        .onChange(of: value) { _, newValue in
-            // Only update intermediate if it's significantly different, avoiding feedback loops with the debouncer
-            let difference = abs(newValue - intermediateValue)
-            let needsSync = difference > 0.01 // Use slightly larger tolerance here
-            logger.trace("onChange(value): newValue=\(newValue, format: .fixed(precision: 2)), intermediate=\(intermediateValue, format: .fixed(precision: 2)), diff=\(difference, format: .fixed(precision: 4)), needsSync=\(needsSync)")
-            if needsSync {
-                logger.debug("External binding changed significantly. Updating intermediate value.")
-                intermediateValue = newValue.clamped(to: config.min...config.max)
-            } else {
-                logger.trace("External binding change insignificant or same as intermediate. No sync needed.")
-            }
-        }
     }
     
     /// Picker Configuration
