@@ -31,14 +31,17 @@ struct EVWheelPicker: View {
     @State private var lastGestureLocation: CGFloat = 0
     @State private var isAnimating: Bool = false
     @State private var lastExternalValue: Float = 0.0
+    @State private var lastSettledValue: Float = 0.0
+    @State private var valueSettleTask: Task<Void, Never>?
     
-    // Constants for gesture handling
-    private let movementThreshold: CGFloat = 8.0
-    private let sensitivity: CGFloat = 0.6  // Reduced sensitivity for more stable control
-    private let velocityThreshold: CGFloat = 50.0 // Reduced threshold
-    private let snapAnimationDuration: TimeInterval = 0.25
-    private let debounceInterval: TimeInterval = 0.1 // Increased debounce
-    private let velocityDampingFactor: CGFloat = 0.15 // Reduced momentum effect
+    // Constants for gesture handling - Adjusted for smoother feel
+    private let movementThreshold: CGFloat = 5.0   // Lower threshold for responsiveness
+    private let sensitivity: CGFloat = 0.5         // Slightly increased sensitivity
+    private let velocityThreshold: CGFloat = 50.0  // Increased threshold to require more flick
+    private let snapAnimationDuration: TimeInterval = 0.4 // Slightly longer for smoother settle
+    private let debounceInterval: TimeInterval = 0.016 // Reduced debounce (~1 frame)
+    private let velocityDampingFactor: CGFloat = 0.15 // Increased momentum
+    private let valueSettleDelay: TimeInterval = 0.5
     
     private var evValues: [Float] {
         stride(from: minEV, through: maxEV, by: step).map { round($0 * 10) / 10 }
@@ -56,11 +59,17 @@ struct EVWheelPicker: View {
     private func updateValue(to newValue: Float, isIntermediate: Bool = true) {
         guard !isSettingValue else { return }
         
-        // Prevent rapid oscillation by checking if the value has significantly changed
+        // Cancel any pending settle task
+        valueSettleTask?.cancel()
+        
+        // Round values for comparison
         let roundedNew = round(newValue * 100) / 100
         let roundedCurrent = round(stableValue * 100) / 100
+        let roundedLast = round(lastSettledValue * 100) / 100
         
-        guard abs(roundedNew - roundedCurrent) >= (step / 2) else { return }
+        // Only update if value has changed significantly
+        guard abs(roundedNew - roundedCurrent) >= (step / 2) || 
+              (!isIntermediate && roundedNew != roundedLast) else { return }
         
         isSettingValue = true
         logger.debug("Updating value from \(stableValue) to \(roundedNew) (intermediate: \(isIntermediate))")
@@ -68,6 +77,19 @@ struct EVWheelPicker: View {
         value = roundedNew
         stableValue = roundedNew
         lastExternalValue = roundedNew
+        
+        if !isIntermediate {
+            lastSettledValue = roundedNew
+            // Create a new task to settle the value after a delay
+            valueSettleTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(valueSettleDelay * 1_000_000_000))
+                if !Task.isCancelled {
+                    await MainActor.run {
+                        lastSettledValue = roundedNew
+                    }
+                }
+            }
+        }
         
         hapticFeedbackIfNeeded(oldValue: lastFeedbackValue, newValue: roundedNew)
         lastFeedbackValue = roundedNew
@@ -99,22 +121,28 @@ struct EVWheelPicker: View {
                                 
                                 let currentTime = Date()
                                 let timeDelta = currentTime.timeIntervalSince(lastUpdateTime)
-                                
-                                guard timeDelta >= debounceInterval else { return }
-                                
-                                let translation = (gesture.location.x - startLocation) * sensitivity
-                                
-                                // Calculate and smooth velocity with more dampening
-                                if timeDelta > 0 {
-                                    let deltaX = gesture.location.x - lastGestureLocation
-                                    let instantVelocity = CGFloat(deltaX / CGFloat(timeDelta))
-                                    gestureVelocity = gestureVelocity * 0.5 + instantVelocity * 0.5
+
+                                // Guard against near-zero time delta
+                                guard timeDelta > 0.001 else {
+                                    lastGestureLocation = gesture.location.x // Still update location
+                                    return
                                 }
-                                
+
+                                // Debounce based on time interval
+                                guard timeDelta >= debounceInterval else { return }
+
+                                let translation = (gesture.location.x - startLocation) * sensitivity
+
+                                // Calculate and smooth velocity
+                                let deltaX = gesture.location.x - lastGestureLocation
+                                let instantVelocity = CGFloat(deltaX / CGFloat(timeDelta))
+                                // Use a simple low-pass filter for velocity smoothing
+                                gestureVelocity = gestureVelocity * 0.8 + instantVelocity * 0.2
+
                                 dragOffset = translation
                                 lastUpdateTime = currentTime
                                 lastGestureLocation = gesture.location.x
-                                
+
                                 let totalOffset = accumulatedOffset + dragOffset
                                 let targetIndex = nearestValidIndex(for: totalOffset, itemWidth: itemWidth)
                                 
@@ -130,16 +158,20 @@ struct EVWheelPicker: View {
                                 
                                 let totalOffset = accumulatedOffset + dragOffset
                                 var targetIndex = nearestValidIndex(for: totalOffset, itemWidth: itemWidth)
-                                
-                                // Apply reduced momentum if significant velocity
+
+                                // Apply momentum only if velocity exceeds threshold
                                 if abs(gestureVelocity) > velocityThreshold {
                                     let momentumOffset = gestureVelocity * velocityDampingFactor
-                                    targetIndex = nearestValidIndex(for: totalOffset + momentumOffset, itemWidth: itemWidth)
+                                    let projectedOffset = totalOffset + momentumOffset
+                                    targetIndex = nearestValidIndex(for: projectedOffset, itemWidth: itemWidth)
+                                    logger.debug("Applying momentum: velocity=\(gestureVelocity), offset=\(momentumOffset), newIndex=\(targetIndex)")
+                                } else {
+                                    logger.debug("Velocity \(gestureVelocity) below threshold \(velocityThreshold), snapping to nearest.")
                                 }
-                                
-                                // Ensure smooth animation to final position
+
+                                // Ensure smooth animation to final position using interactiveSpring
                                 isAnimating = true
-                                withAnimation(.spring(response: snapAnimationDuration, dampingFraction: 0.9, blendDuration: 0.1)) {
+                                withAnimation(.interactiveSpring(response: snapAnimationDuration, dampingFraction: 0.8, blendDuration: 0.25)) {
                                     accumulatedOffset = -CGFloat(targetIndex) * itemWidth
                                     dragOffset = 0
                                 }
@@ -210,14 +242,18 @@ struct EVWheelPicker: View {
                 if abs(roundedNew - roundedLast) >= (step / 2),
                    let index = evValues.firstIndex(of: round(newValue * 10) / 10) {
                     logger.debug("External value change: \(oldValue) -> \(newValue)")
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.2)) {
+                    // Use the same interactiveSpring for consistency
+                    withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.8, blendDuration: 0.25)) {
                         accumulatedOffset = -CGFloat(index) * (40 + 16)
                     }
+                    // Reset relevant state variables
                     initialOffset = accumulatedOffset
+                    dragOffset = 0 // Ensure drag offset is reset
                     lastFeedbackValue = newValue
                     lastIndex = index
                     stableValue = newValue
                     lastExternalValue = newValue
+                    gestureVelocity = 0 // Reset velocity on external change
                 }
             }
         }
@@ -227,7 +263,7 @@ struct EVWheelPicker: View {
         if Int(oldValue * 10) != Int(newValue * 10) {
             let generator = UIImpactFeedbackGenerator(style: .rigid)
             generator.prepare()
-            generator.impactOccurred()
+            generator.impactOccurred(intensity: 0.5) // Slightly lower intensity
         }
     }
 }
