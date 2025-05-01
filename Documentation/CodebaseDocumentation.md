@@ -13,7 +13,7 @@ This document provides a detailed overview of key classes, components, and their
     - Uses GeometryReader for proper layout and spacing
     - Implements exact position maintenance on gesture end
     - Ensures consistent 0 EV centering on initialization
-    - **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    - **Live updating:** The visual representation updates continuously during drag. The final EV value is committed to the binding after the scroll settles.
     - **No edge bounce:** The wheel locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
 - The wheel visibility is controlled through vertical swipe gestures:
     - Swipe Up: Shows the EV wheel.

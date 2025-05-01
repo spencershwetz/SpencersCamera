@@ -119,30 +119,41 @@ struct SimpleWheelPicker: View {
                 if let newPosition {
                     let newValue = value(for: newPosition).clamped(to: config.min...config.max)
                     logger.trace("ScrollPosition SET: newPosition = \(newPosition), calculated newValue = \(newValue, format: .fixed(precision: 2))")
-                    // Check if the intermediate value actually changed
+                    // Check if the intermediate value actually changed significantly
                     if abs(newValue - intermediateValue) > 0.001 { // Use a small tolerance
-                        // Call onEditingChanged(true) on drag start
-                        onEditingChanged?(true)
-                        // Debounce drag end: cancel previous, schedule new
-                        dragEndWorkItem?.cancel()
-                        let workItem = DispatchWorkItem {
-                            onEditingChanged?(false)
+                        // Signal editing started if it hasn't already
+                        if dragEndWorkItem == nil { // Check if we are already tracking a drag
+                            onEditingChanged?(true)
                         }
-                        dragEndWorkItem = workItem
+                        // Cancel any pending drag end signal
+                        dragEndWorkItem?.cancel()
+                        dragEndWorkItem = DispatchWorkItem { /* Only used for cancellation */ }
+
                         // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
-                        logger.trace("Haptic triggered for position \(newPosition), intermediateValue \(newValue, format: .fixed(precision: 2))")
+                        logger.trace("Haptic triggered for position \(newPosition), newValue \(newValue, format: .fixed(precision: 2))")
+
+                        // --- Update ONLY intermediate value during scroll ---
                         intermediateValue = newValue
-                        value = newValue // Always update binding live
-                        logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2)), binding value updated live.")
-                        // Debounce only the onEditingChanged(false) event
+                        // value = newValue // <--- REMOVED: Do not update binding live
+                        logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2))")
+
+                        // --- Debounce the FINAL value commit and editing end signal ---
                         lastScrollPosition = newPosition
                         scrollEndDebounce?.invalidate()
-                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { _ in
-                            if lastScrollPosition == newPosition {
-                                onEditingChanged?(false)
-                                logger.info("Editing ended after scroll settled.")
+                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [finalValue = intermediateValue, finalPosition = newPosition] _ in
+                            // Check if the position is still the same after the delay
+                            if self.lastScrollPosition == finalPosition {
+                                logger.info("Scroll settled at position \(finalPosition). Committing final value.")
+                                // --- Commit the final value to the binding ---
+                                self.value = finalValue
+                                logger.debug("Final binding value committed: \(finalValue, format: .fixed(precision: 2))")
+
+                                // Signal editing ended
+                                self.onEditingChanged?(false)
+                                self.dragEndWorkItem = nil // Reset drag tracking
+                                self.lastScrollPosition = nil // Reset last position tracking
                             }
                         }
                     }

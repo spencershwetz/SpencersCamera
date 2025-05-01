@@ -12,7 +12,7 @@ All notable changes to this project will be documented in this file.
     *   Visual indicators for zero and current value
     *   Maintains exact position when gesture ends
     *   Always starts centered at 0 EV
-    *   **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    *   **Live updating:** The visual representation updates continuously during drag. The final EV value is committed to the binding after the scroll settles.
     *   **No edge bounce:** The EV wheel now locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
     *   Removed EVWheelPicker and all legacy code related to debounced EV updates.
 
