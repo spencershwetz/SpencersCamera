@@ -43,58 +43,48 @@ struct CameraView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                // Background
-                Color.black
-                    .edgesIgnoringSafeArea(.all)
-                
-                // Camera preview with LUT
-                cameraPreview
-                    .edgesIgnoringSafeArea(.all)
-                
-                // Function buttons overlay
-                FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
-                    .zIndex(100)
-                    .allowsHitTesting(true)
-                
-                // Lens selection with zoom slider
-                VStack {
-                    Spacer()
-                        .frame(height: geometry.safeAreaInsets.top + geometry.size.height * 0.75)
+            VStack(spacing: 0) {
+                ZStack {
+                    // Background
+                    Color.black
+                        .edgesIgnoringSafeArea(.all)
                     
-                    if !viewModel.availableLenses.isEmpty {
-                        ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
-                            .padding(.bottom, 20)
-                    }
+                    // Camera preview
+                    cameraPreview
+                        .edgesIgnoringSafeArea(.all)
                     
-                    Spacer()
+                    // Function buttons overlay
+                    FunctionButtonsView(viewModel: viewModel, settingsModel: settings, isShowingSettings: $isShowingSettings, isShowingLibrary: $isShowingVideoLibrary)
+                        .zIndex(100)
+                        .allowsHitTesting(true)
                 }
-                .zIndex(99)
                 
-                // Bottom controls container
-                VStack {
-                    Spacer()
-                    ZStack {
-                        // Center record button
-                        recordButton
-                            .frame(width: 75, height: 75)
-                        
-                        // Position library button on the left and settings button on the right
-                        HStack {
-                            videoLibraryButton
-                                .frame(width: 60, height: 60)
-                                .disabled(viewModel.isRecording)
-                            Spacer()
-                            settingsButton
-                                .frame(width: 60, height: 60)
-                                .disabled(viewModel.isRecording)
-                        }
-                        .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
-                    }
-                    .padding(.bottom, 30) // Approximately 1cm from USB-C port
+                // Lens selection buttons
+                if !viewModel.availableLenses.isEmpty {
+                    ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                        .padding(.vertical, 10)
+                        .background(Color.black)
                 }
-                .ignoresSafeArea()
-                .zIndex(101)
+                
+                // Bottom controls
+                ZStack {
+                    // Center record button
+                    recordButton
+                        .frame(width: 75, height: 75)
+                    
+                    // Position library button on the left and settings button on the right
+                    HStack {
+                        videoLibraryButton
+                            .frame(width: 60, height: 60)
+                            .disabled(viewModel.isRecording)
+                        Spacer()
+                        settingsButton
+                            .frame(width: 60, height: 60)
+                            .disabled(viewModel.isRecording)
+                    }
+                    .padding(.horizontal, 67.5) // Half the record button width (75/2) + button width (60)
+                }
+                .padding(.bottom, 30) // Approximately 1cm from USB-C port
             }
             .onAppear {
                 print("DEBUG: CameraView appeared, size: \(geometry.size), safeArea: \(geometry.safeAreaInsets)")
