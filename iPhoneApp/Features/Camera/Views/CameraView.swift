@@ -223,33 +223,37 @@ struct CameraView: View {
         .overlay(
             Group {
                 if showExposureSlider {
-                    VStack { 
+                    VStack {
+                        Spacer()
+                        
                         // --- Use SimpleWheelPicker for Exposure Bias ---
-                        // Create a Binding<CGFloat> that converts to/from Binding<Float>
-                        let exposureBiasBinding = Binding<CGFloat>(
-                            get: { CGFloat(viewModel.exposureBias) },
-                            set: { viewModel.exposureBias = Float($0) }
-                        )
-                        
-                        SimpleWheelPicker(
-                            config: .init(
-                                min: CGFloat(viewModel.minExposureBias), // Convert Float to CGFloat
-                                max: CGFloat(viewModel.maxExposureBias), // Convert Float to CGFloat
-                                stepsPerUnit: 10, 
-                                spacing: 8,       
-                                showsText: true
-                            ),
-                            value: exposureBiasBinding // Use the CGFloat binding
-                        )
-                        .frame(height: 60)
-                        .background(Color.black.opacity(0.5)) // Use a less intrusive background
-                        .padding(.horizontal, 0) // Use padding from VStack instead
-                        
-                        // Display current EV value below the picker
-                        Text(String(format: "%+.1f EV", viewModel.exposureBias))
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.bottom, 5)
+                        VStack(spacing: 4) {
+                            // Create a Binding<CGFloat> that converts to/from Binding<Float>
+                            let exposureBiasBinding = Binding<CGFloat>(
+                                get: { CGFloat(viewModel.exposureBias) },
+                                set: { viewModel.exposureBias = Float($0) }
+                            )
+                            
+                            SimpleWheelPicker(
+                                config: .init(
+                                    min: CGFloat(viewModel.minExposureBias),
+                                    max: CGFloat(viewModel.maxExposureBias),
+                                    stepsPerUnit: 10, 
+                                    spacing: 8,       
+                                    showsText: true
+                                ),
+                                value: exposureBiasBinding
+                            )
+                            .frame(height: 60)
+                            
+                            // Display current EV value below the picker
+                            Text(String(format: "%+.1f EV", viewModel.exposureBias))
+                                .font(.caption)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.5))
+                        .padding(.bottom, 20)
                         // ----------------------------------------------
 
                         // --- SimpleWheelPicker for Haptic Test --- - REMOVED
