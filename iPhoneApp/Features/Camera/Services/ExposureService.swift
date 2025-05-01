@@ -785,67 +785,70 @@ class ExposureService: NSObject {
     }
     // --------------------------
 
-    // MARK: - Recording Lock for Shutter Priority
-
+    // MARK: - Shutter Priority Recording Lock
+    
+    /// Locks exposure for recording when Shutter Priority is active
     func lockShutterPriorityExposureForRecording() {
-        // Check stabilization state before attempting custom exposure lock
-        if isVideoStabilizationCurrentlyEnabled?() == true {
-            logger.warning("[SP Lock] Skipping custom exposure lock: stabilization is enabled.")
+        guard let device = device else {
+            logger.error("No camera device available for SP recording lock")
             return
-        }
-        guard isShutterPriorityActive, let _ = device, let currentTargetDuration = targetShutterDuration else {
-            logger.warning("Attempted to lock SP exposure for recording, but SP is not active or device/duration is missing.")
-            return
-        }
-
-        exposureAdjustmentQueue.async { [weak self] in
-            guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
-            
-            let currentISO = currentDevice.iso
-            // No need to clamp ISO here, just use the current one for the lock.
-
-            // Defensive: Only attempt if custom exposure is supported
-            guard currentDevice.isExposureModeSupported(.custom) else {
-                self.logger.warning("[SP Lock] Custom exposure mode not supported on current device. Skipping lock.")
-                return
-            }
-            do {
-                try currentDevice.lockForConfiguration()
-                self.logger.info("[SP Lock] Applying lock: Duration \(currentTargetDuration.seconds)s, ISO \(currentISO)")
-                currentDevice.setExposureModeCustom(duration: currentTargetDuration, iso: currentISO) { _ in 
-                    // Maybe report locked values?
-                }
-                self.isTemporarilyLockedForRecording = true // Set lock flag AFTER successful configuration
-                currentDevice.unlockForConfiguration()
-            } catch {
-                self.logger.error("[SP Lock] Error locking exposure for recording: \(error.localizedDescription)")
-                // Attempt to unlock configuration if lock failed during change
-                currentDevice.unlockForConfiguration()
-                // Should we revert isTemporarilyLockedForRecording?
-                // If lock failed, adjustments are still paused because isShutterPriorityActive might be true,
-                // but the intended lock isn't set. Let's leave the flag false if it failed.
-            }
-        }
-    }
-
-    func unlockShutterPriorityExposureAfterRecording() {
-        guard isShutterPriorityActive else {
-             logger.debug("[SP Unlock] Ignored: SP not active.")
-             return 
-        }
-        guard isTemporarilyLockedForRecording else {
-             logger.debug("[SP Unlock] Ignored: SP was not locked for recording.")
-             return
         }
         
-        logger.info("[SP Unlock] Releasing temporary lock and resuming auto-ISO adjustments.")
-        isTemporarilyLockedForRecording = false
-        // Trigger an immediate evaluation/adjustment? Or let the KVO naturally take over?
-        // Let KVO take over for now.
+        do {
+            try device.lockForConfiguration()
+            
+            // Store current values before locking
+            let currentISO = device.iso
+            let currentDuration = device.exposureDuration
+            
+            // Set to locked mode with current values
+            if device.isExposureModeSupported(.locked) {
+                device.exposureMode = .locked
+                logger.info("🔒 Locked SP exposure for recording with ISO: \(currentISO), Duration: \(CMTimeGetSeconds(currentDuration))s")
+            }
+            
+            device.unlockForConfiguration()
+            
+            // Set internal state
+            isTemporarilyLockedForRecording = true
+            
+        } catch {
+            logger.error("Failed to lock SP exposure for recording: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed)
+        }
     }
-
-    // MARK: - Manual Exposure Control (Refined)
-
+    
+    /// Unlocks exposure after recording when Shutter Priority is active
+    func unlockShutterPriorityExposureAfterRecording() {
+        guard let device = device else {
+            logger.error("No camera device available for SP recording unlock")
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // Return to custom mode for Shutter Priority
+            if device.isExposureModeSupported(.custom) {
+                device.exposureMode = .custom
+                // Re-apply the target shutter duration if we have it
+                if let targetDuration = targetShutterDuration {
+                    device.setExposureModeCustom(duration: targetDuration, iso: device.iso)
+                }
+                logger.info("🔓 Unlocked SP exposure after recording, returning to custom mode")
+            }
+            
+            device.unlockForConfiguration()
+            
+            // Reset internal state
+            isTemporarilyLockedForRecording = false
+            
+        } catch {
+            logger.error("Failed to unlock SP exposure after recording: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed)
+        }
+    }
+    
     // MARK: - Safe White Balance Conversion (NEW HELPER)
 
     private func safeGetTemperatureAndTint(for gains: AVCaptureDevice.WhiteBalanceGains) -> AVCaptureDevice.WhiteBalanceTemperatureAndTintValues? {

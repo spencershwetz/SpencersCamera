@@ -92,6 +92,10 @@ All notable changes to this project will be documented in this file.
 *   Refined HDR video configuration logic in `CameraDeviceService.configureSession` to correctly use `automaticallyAdjustsVideoHDREnabled` for non-Log modes, preventing potential crashes.
 *   Changed `var targetMode` to `let targetMode` in `CameraDeviceService` during stabilization setup to resolve a compiler warning.
 *   Removed duplicate `@main` attribute from AppDelegate to resolve build conflict with SwiftUI app entry point
+*   Fixed issue where Shutter Priority exposure lock would not engage during recording even when "Lock Exposure During Recording" was enabled:
+    *   Improved lockShutterPriorityExposureForRecording to properly lock exposure values
+    *   Enhanced unlockShutterPriorityExposureAfterRecording to restore Shutter Priority state
+    *   Added proper state management for recording lock in ExposureService
 
 ### Removed
 
