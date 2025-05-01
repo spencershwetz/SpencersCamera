@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   UI: Added persistent storage for visibility states:
+    *   EV bias wheel visibility state is now preserved between app launches
+    *   Debug overlay visibility state is now preserved between app launches
+    *   States are managed through SettingsModel using UserDefaults
+
 *   UI: Migrated to SimpleWheelPicker for precise, live EV bias control:
     *   Horizontal wheel interface with haptic feedback
     *   Smooth scrolling with precise value selection
