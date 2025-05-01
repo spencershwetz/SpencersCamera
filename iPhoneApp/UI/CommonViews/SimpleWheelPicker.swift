@@ -13,8 +13,6 @@ struct SimpleWheelPicker: View {
     @State private var intermediateValue: CGFloat = 0.0
     // Logger for debugging
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "SimpleWheelPicker")
-    // Publisher for debouncing
-    private let debouncer = PassthroughSubject<CGFloat, Never>()
 
     // Calculate the total number of finest steps based on range and steps per unit
     private var totalNumberOfSteps: Int {
@@ -80,15 +78,10 @@ struct SimpleWheelPicker: View {
                         // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
-                        logger.debug("Haptic triggered for position \(newPosition), intermediateValue \(newValue, format: .fixed(precision: 2))")
-                        
-                        // Update the LOCAL intermediate value immediately
+                        logger.trace("Haptic triggered for position \(newPosition), intermediateValue \(newValue, format: .fixed(precision: 2))")
                         intermediateValue = newValue
-                        logger.trace("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2))")
-                        
-                        // Send the new intermediate value to the debouncer
-                        logger.trace("Sending to debouncer: \(intermediateValue, format: .fixed(precision: 2))")
-                        debouncer.send(intermediateValue)
+                        value = newValue // Update binding live
+                        logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2)), binding value updated live.")
                     }
                 }
             }))
@@ -112,19 +105,7 @@ struct SimpleWheelPicker: View {
                 logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
                 isLoaded = true
             }
-            .onReceive(debouncer.debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)) { debouncedValue in
-                // This block executes after 50ms of no new values from the debouncer.
-                logger.log("Debounced value received: \(debouncedValue, format: .fixed(precision: 2)). Current binding: \(value, format: .fixed(precision: 2))")
-                // Update the actual binding value only if it's different
-                let needsUpdate = abs(debouncedValue - value) > 0.001
-                logger.trace("Compare debounced vs binding: |\(debouncedValue) - \(value)| > 0.001 ? \(needsUpdate)")
-                if needsUpdate {
-                     logger.log("Updating binding value to debounced value: \(debouncedValue, format: .fixed(precision: 2))")
-                    value = debouncedValue
-                } else {
-                    logger.trace("Debounced value is same as binding value, no update needed.")
-                }
-            }
+
         }
     }
     
