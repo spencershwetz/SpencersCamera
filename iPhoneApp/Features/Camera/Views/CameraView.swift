@@ -25,6 +25,7 @@ struct CameraView: View {
     @State private var focusSquarePosition: CGPoint? = nil
     @State private var lastFocusPoint: CGPoint? = nil // Normalized 0-1 point
     @State private var showExposureSlider: Bool = true
+    @State private var showDebugOverlay: Bool = true
     @State private var lastTapLocation: CGPoint = .zero
     @State private var isFocusLocked: Bool = false
     
@@ -312,10 +313,15 @@ struct CameraView: View {
                 }
         )
         .overlay(alignment: .topLeading) {
-            if settings.isDebugEnabled {
+            if settings.isDebugEnabled && showDebugOverlay {
                 debugOverlay
                     .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
                     .padding(.leading, 20)
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showDebugOverlay.toggle()
+                        }
+                    }
             }
         }
         .overlay {
@@ -351,6 +357,7 @@ struct CameraView: View {
             Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
             Text("Shutter: \(formatShutterSpeed(viewModel.shutterSpeed))")
             Text("EV Bias: \(String(format: "%.1f", viewModel.exposureBias))")
+            Text("Stabilization: \(settings.isVideoStabilizationEnabled ? "On ✓" : "Off ✗")")
             
             // Check the actual activeColorSpace from the device to display the correct value
             if let device = viewModel.currentCameraDevice {
