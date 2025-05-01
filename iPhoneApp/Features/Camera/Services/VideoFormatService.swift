@@ -457,6 +457,23 @@ class VideoFormatService {
             }
             // --- End set format ---
 
+            // Configure color space through device configuration
+            logger.info("🎨 [configureAppleLog] Configuring Apple Log color space...")
+            guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
+                logger.error("❌ [configureAppleLog] Selected format does not support Apple Log color space")
+                throw CameraError.configurationFailed(message: "Selected format does not support Apple Log color space")
+            }
+            
+            do {
+                try device.lockForConfiguration()
+                device.activeColorSpace = AVCaptureColorSpace.appleLog
+                device.unlockForConfiguration()
+                logger.info("✅ [configureAppleLog] Successfully configured Apple Log color space")
+            } catch {
+                logger.error("❌ [configureAppleLog] Failed to configure color space: \(error)")
+                throw CameraError.configurationFailed(message: "Failed to configure color space: \(error)")
+            }
+
             // Verify the format supports Apple Log
             logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
             guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
