@@ -20,6 +20,21 @@ This document provides a detailed overview of key classes, components, and their
     - Swipe Down: Hides the EV wheel.
 - Gesture handling is implemented in `CameraView.swift`
 
+### UI Components
+- Enhanced camera preview interface:
+    *   EV Compensation Wheel:
+        *   Located at bottom of preview for better visibility
+        *   Width constrained to match camera preview width (90% of screen width)
+        *   Shows/hides with vertical swipe gestures
+        *   EV value display positioned above the wheel
+    *   Debug Overlay:
+        *   Shows camera parameters (resolution, FPS, ISO, etc.)
+        *   Includes stabilization status indicator
+        *   Shows/hides with vertical swipe gestures (same as EV wheel)
+    *   Both overlays use smooth animations for transitions
+    *   Layout maintains proper spacing and visual hierarchy
+- Gesture handling and layout management are implemented in `CameraView.swift`
+
 ### EV Compensation Slider Gesture
 - The EV compensation slider can be shown or hidden using a swipe gesture on the camera preview:
     - Right-to-left swipe (from right edge toward left): shows the EV slider.

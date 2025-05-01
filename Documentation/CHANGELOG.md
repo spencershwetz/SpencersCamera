@@ -16,9 +16,16 @@ All notable changes to this project will be documented in this file.
     *   **No edge bounce:** The EV wheel now locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
     *   Removed EVWheelPicker and all legacy code related to debounced EV updates.
 
-*   UI: Added swipe gesture to camera preview to show/hide the EV compensation slider:
-    *   Right-to-left swipe (from right edge toward left): shows the EV slider.
-    *   Left-to-right swipe (from left edge toward right): hides the EV slider.
+*   UI: Enhanced camera preview interface:
+    *   Moved EV compensation wheel to bottom of preview for better visibility
+    *   Added debug overlay showing camera parameters (resolution, FPS, ISO, etc.)
+    *   Added stabilization status indicator to debug overlay
+    *   Both EV wheel and debug overlay now show/hide with vertical swipe gestures:
+        *   Swipe Up: Shows both EV wheel and debug overlay
+        *   Swipe Down: Hides both EV wheel and debug overlay
+    *   Constrained EV wheel width to match camera preview width (90% of screen width)
+    *   Improved layout of EV value display above the wheel
+    *   Enhanced visual hierarchy with semi-transparent backgrounds and proper spacing
 
 ### Added
 
