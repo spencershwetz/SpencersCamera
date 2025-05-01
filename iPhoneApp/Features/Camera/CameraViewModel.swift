@@ -573,6 +573,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Initialize services with self as delegate
         // Ensure ExposureService is initialized before CameraSetupService
         exposureService = ExposureService(delegate: self)
+        // Inject closure to allow ExposureService to check stabilization state
+        exposureService.isVideoStabilizationCurrentlyEnabled = { [weak self] in
+            return self?.settingsModel.isVideoStabilizationEnabled ?? false
+        }
         cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self) // Pass self (ViewModel) here
         recordingService = RecordingService(session: session, delegate: self)
         // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
@@ -1226,6 +1230,33 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     if let currentDevice = self.device {
                         self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")
                         self.exposureService.setDevice(currentDevice)
+                        // --- Ensure Apple Log (or selected color space) is re-applied after session start ---
+                        if self.isAppleLogEnabled && self.isAppleLogSupported {
+                            self.logger.info("[SessionControl] Re-applying Apple Log color space after session start...")
+                            self.videoFormatService.setAppleLogEnabled(true)
+                            Task {
+                                do {
+                                    try await self.videoFormatService.configureAppleLog()
+                                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                    self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
+                                } catch {
+                                    self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \(error)")
+                                }
+                            }
+                        } else if !self.isAppleLogEnabled {
+                            self.logger.info("[SessionControl] Re-applying Rec. 709 / P3 color space after session start...")
+                            self.videoFormatService.setAppleLogEnabled(false)
+                            Task {
+                                do {
+                                    try await self.videoFormatService.resetAppleLog()
+                                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                    self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
+                                } catch {
+                                    self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \(error)")
+                                }
+                            }
+                        }
+                        // --- END color space re-application ---
                     } else {
                         self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
                     }

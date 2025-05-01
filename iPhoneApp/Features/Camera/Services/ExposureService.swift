@@ -12,6 +12,8 @@ protocol ExposureServiceDelegate: AnyObject {
 
 // Inherit from NSObject to support KVO
 class ExposureService: NSObject {
+    /// Optional closure to query if video stabilization is currently enabled.
+    var isVideoStabilizationCurrentlyEnabled: (() -> Bool)? = nil
     private let logger = Logger(subsystem: "com.camera", category: "ExposureService")
     private weak var delegate: ExposureServiceDelegate?
     
@@ -786,6 +788,11 @@ class ExposureService: NSObject {
     // MARK: - Recording Lock for Shutter Priority
 
     func lockShutterPriorityExposureForRecording() {
+        // Check stabilization state before attempting custom exposure lock
+        if isVideoStabilizationCurrentlyEnabled?() == true {
+            logger.warning("[SP Lock] Skipping custom exposure lock: stabilization is enabled.")
+            return
+        }
         guard isShutterPriorityActive, let _ = device, let currentTargetDuration = targetShutterDuration else {
             logger.warning("Attempted to lock SP exposure for recording, but SP is not active or device/duration is missing.")
             return
@@ -796,17 +803,22 @@ class ExposureService: NSObject {
             
             let currentISO = currentDevice.iso
             // No need to clamp ISO here, just use the current one for the lock.
-            
+
+            // Defensive: Only attempt if custom exposure is supported
+            guard currentDevice.isExposureModeSupported(.custom) else {
+                self.logger.warning("[SP Lock] Custom exposure mode not supported on current device. Skipping lock.")
+                return
+            }
             do {
                 try currentDevice.lockForConfiguration()
-                self.logger.info("[SP Lock] Applying lock: Duration \\(currentTargetDuration.seconds)s, ISO \\(currentISO)")
+                self.logger.info("[SP Lock] Applying lock: Duration \(currentTargetDuration.seconds)s, ISO \(currentISO)")
                 currentDevice.setExposureModeCustom(duration: currentTargetDuration, iso: currentISO) { _ in 
                     // Maybe report locked values?
                 }
                 self.isTemporarilyLockedForRecording = true // Set lock flag AFTER successful configuration
                 currentDevice.unlockForConfiguration()
             } catch {
-                self.logger.error("[SP Lock] Error locking exposure for recording: \\(error.localizedDescription)")
+                self.logger.error("[SP Lock] Error locking exposure for recording: \(error.localizedDescription)")
                 // Attempt to unlock configuration if lock failed during change
                 currentDevice.unlockForConfiguration()
                 // Should we revert isTemporarilyLockedForRecording?

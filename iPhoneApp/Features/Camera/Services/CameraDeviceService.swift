@@ -183,7 +183,16 @@ class CameraDeviceService {
             newDevice.focusMode = .continuousAutoFocus
         }
         // Note: Frame rate lock, color space, and HDR are now handled within this method.
-        
+
+        // === MOVE color space setting to after all other device configuration ===
+        if newDevice.activeColorSpace != targetColorSpace {
+            newDevice.activeColorSpace = targetColorSpace
+            logger.info("✅ [configureSession] (FINAL) Set activeColorSpace to \(targetColorSpace.rawValue) after all configuration.")
+        } else {
+            logger.info("ℹ️ [configureSession] (FINAL) activeColorSpace already set to \(targetColorSpace.rawValue) after all configuration.")
+        }
+        logger.info("🔍 [configureSession] (FINAL) Device reports activeColorSpace: \(newDevice.activeColorSpace.rawValue)")
+
         logger.info("✅ Successfully configured session for \(newDevice.localizedName)")
     }
     
