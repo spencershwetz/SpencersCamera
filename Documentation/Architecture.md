@@ -12,6 +12,7 @@ This document describes the high-level architecture and directory structure of t
     - Maintains exact position when gesture ends
     - Always starts centered at 0 EV
     - **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    - **No edge bounce:** The wheel locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
 - The wheel can be shown/hidden with a vertical swipe gesture on the camera preview:
     - Swipe Up: Shows the EV wheel.
     - Swipe Down: Hides the EV wheel.

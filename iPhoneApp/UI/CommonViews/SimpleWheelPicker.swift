@@ -2,6 +2,43 @@ import SwiftUI
 import OSLog // Import OSLog for debugging
 import Combine // Import Combine for debounce
 
+/// ViewModifier to disable bounce on underlying UIScrollView (for iOS < 18 compatibility)
+struct DisableBounce: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                BounceDisabler()
+                    .frame(width: 0, height: 0)
+            )
+    }
+    
+    private struct BounceDisabler: UIViewRepresentable {
+        func makeUIView(context: Context) -> UIView {
+            let view = UIView()
+            DispatchQueue.main.async {
+                // Traverse superview hierarchy to find UIScrollView
+                if let scrollView = view.findSuperview(of: UIScrollView.self) {
+                    scrollView.bounces = false
+                    scrollView.alwaysBounceHorizontal = false
+                }
+            }
+            return view
+        }
+        func updateUIView(_ uiView: UIView, context: Context) {}
+    }
+}
+
+private extension UIView {
+    func findSuperview<T: UIView>(of type: T.Type) -> T? {
+        var view: UIView? = self.superview
+        while let v = view {
+            if let match = v as? T { return match }
+            view = v.superview
+        }
+        return nil
+    }
+}
+
 /// A simple horizontal wheel picker based on ScrollView and .scrollPosition.
 struct SimpleWheelPicker: View {
     /// Config
@@ -71,6 +108,7 @@ struct SimpleWheelPicker: View {
                 .scrollTargetLayout()
             }
             .scrollIndicators(.hidden)
+            .modifier(DisableBounce())
             .scrollTargetBehavior(.viewAligned)
             .scrollPosition(id: .init(get: {
                 // Read from the intermediate value while scrolling

@@ -13,6 +13,7 @@ All notable changes to this project will be documented in this file.
     *   Maintains exact position when gesture ends
     *   Always starts centered at 0 EV
     *   **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    *   **No edge bounce:** The EV wheel now locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
     *   Removed EVWheelPicker and all legacy code related to debounced EV updates.
 
 *   UI: Added swipe gesture to camera preview to show/hide the EV compensation slider:
