@@ -17,9 +17,8 @@ All notable changes to this project will be documented in this file.
     *   Added logging to track EV bias persistence during lens switches
 
 *   Fixed: Shutter Priority exposure lock is now correctly maintained during lens changes when "Lock Exposure During Recording" is enabled:
-    *   Fixed issue where SP exposure lock would become unlocked when switching lenses during recording
-    *   Improved lens switch handling to properly re-apply SP mode and lock state
-    *   Added delay to ensure camera device is ready before re-applying lock
+    *   Added proper exposure lock state preservation in CameraDeviceService.configureSession
+    *   Ensures exposure remains locked when switching lenses during recording
 
 *   UI: Migrated to SimpleWheelPicker for precise, live EV bias control:
     *   Horizontal wheel interface with haptic feedback

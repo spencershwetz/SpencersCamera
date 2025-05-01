@@ -175,10 +175,21 @@ class CameraDeviceService {
         }
         // ---> END Color Space / HDR Configuration <---
 
-        // Set other default configurations like exposure/focus (if needed here)
-        if newDevice.isExposureModeSupported(.continuousAutoExposure) {
-            newDevice.exposureMode = .continuousAutoExposure
+        // Check if exposure should be locked (during recording or shutter priority)
+        let shouldLockExposure = delegate?.isExposureCurrentlyLocked ?? false
+        if shouldLockExposure {
+            logger.info("🔒 [configureSession] Exposure lock required, setting mode to .locked")
+            if newDevice.isExposureModeSupported(.locked) {
+                newDevice.exposureMode = .locked
+            }
+        } else {
+            // Set default exposure mode only if not locked
+            if newDevice.isExposureModeSupported(.continuousAutoExposure) {
+                newDevice.exposureMode = .continuousAutoExposure
+            }
         }
+
+        // Set other default configurations like focus (if needed here)
         if newDevice.isFocusModeSupported(.continuousAutoFocus) {
             newDevice.focusMode = .continuousAutoFocus
         }
