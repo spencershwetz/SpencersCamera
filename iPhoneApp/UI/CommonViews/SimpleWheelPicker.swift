@@ -90,16 +90,15 @@ struct SimpleWheelPicker: View {
                         Divider()
                             .background(isMajorTick ? Color.primary : .gray)
                             .frame(width: 0, height: isMajorTick ? 20 : 10, alignment: .center)
-                            .frame(maxHeight: 20, alignment: .bottom)
-                            .overlay(alignment: .bottom) {
+                            .frame(maxHeight: 20, alignment: .top)
+                            .overlay(alignment: .top) {
                                 if isMajorTick && config.showsText {
                                     // Display the value for major ticks
                                     Text(String(format: "%g", tickValue)) // Use %g for cleaner number format
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                        .textScale(.secondary)
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
                                         .fixedSize()
-                                        .offset(y: 20)
+                                        .offset(y: -20)
                                 }
                             }
                     }

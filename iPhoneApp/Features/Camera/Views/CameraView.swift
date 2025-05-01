@@ -228,6 +228,12 @@ struct CameraView: View {
                         
                         // --- Use SimpleWheelPicker for Exposure Bias ---
                         VStack(spacing: 4) {
+                            // Display current EV value above the picker
+                            Text(String(format: "%+.1f EV", viewModel.exposureBias))
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.top, 4)
+                            
                             // Create a Binding<CGFloat> that converts to/from Binding<Float>
                             let exposureBiasBinding = Binding<CGFloat>(
                                 get: { CGFloat(viewModel.exposureBias) },
@@ -245,11 +251,6 @@ struct CameraView: View {
                                 value: exposureBiasBinding
                             )
                             .frame(height: 60)
-                            
-                            // Display current EV value below the picker
-                            Text(String(format: "%+.1f EV", viewModel.exposureBias))
-                                .font(.caption)
-                                .foregroundColor(.white)
                         }
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.5))
