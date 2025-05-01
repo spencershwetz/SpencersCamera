@@ -1,17 +1,19 @@
 # Changelog
 
-> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Exposure value (EV) compensation is now fully implemented with a live, continuous wheel picker. Push-to-exposure (tap to set exposure point) is not implemented in this version.
 
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-*   UI: Added EVWheelPicker for precise EV bias control:
+*   UI: Migrated to SimpleWheelPicker for precise, live EV bias control:
     *   Horizontal wheel interface with haptic feedback
     *   Smooth scrolling with precise value selection
     *   Visual indicators for zero and current value
     *   Maintains exact position when gesture ends
     *   Always starts centered at 0 EV
+    *   **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    *   Removed EVWheelPicker and all legacy code related to debounced EV updates.
 
 *   UI: Added swipe gesture to camera preview to show/hide the EV compensation slider:
     *   Right-to-left swipe (from right edge toward left): shows the EV slider.

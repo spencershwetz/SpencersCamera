@@ -1,6 +1,6 @@
 # Technical Specification
 
-> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Exposure value (EV) compensation is now fully implemented with a live, continuous wheel picker. Push-to-exposure (tap to set exposure point) is not implemented in this version.
 
 This document outlines the technical specifications and requirements for the Spencer's Camera application.
 
@@ -14,13 +14,14 @@ This document outlines the technical specifications and requirements for the Spe
     *   watchOS: Apple Watch models compatible with watchOS 11+.
 *   **Architecture**: MVVM (primarily), Service Layer for encapsulating framework interactions.
 *   **UI Framework**: SwiftUI (primarily), UIKit (`UIViewControllerRepresentable`, `UIViewRepresentable`, `AppDelegate`) for bridging AVFoundation, MetalKit, and specific view controllers/app lifecycle.
-*   **EV Compensation Control**: 
-    - EVWheelPicker component for precise EV bias control
+*   **EV Compensation Control**:
+    - SimpleWheelPicker component for precise, live EV bias control
     - Horizontal wheel interface with haptic feedback
     - Gesture-based interaction with smooth scrolling
     - Maintains exact position when gesture ends
     - Always initializes centered at 0 EV
-    - Show/hide with edge swipe gestures on camera preview
+    - **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+    - Show/hide with vertical swipe gestures on camera preview
 *   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
     *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.
     *   `didBecomeActive` is managed by `AppLifecycleObserver` (used as `@StateObject` in `CameraView`), which publishes an event triggering `startSession` in `CameraView` to ensure the session restarts correctly after backgrounding.

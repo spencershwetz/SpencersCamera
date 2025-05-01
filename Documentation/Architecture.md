@@ -1,16 +1,17 @@
 # Project Architecture
 
-> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Exposure value (EV) compensation is now fully implemented with a live, continuous wheel picker. Push-to-exposure (tap to set exposure point) is not implemented in this version.
 
 This document describes the high-level architecture and directory structure of the Spencer's Camera application.
 
 ### EV Compensation Control
-- The EVWheelPicker provides precise control over exposure value (EV) compensation:
+- The **SimpleWheelPicker** provides precise, live control over exposure value (EV) compensation:
     - Horizontal wheel interface with haptic feedback for value changes
     - Smooth scrolling with precise value selection
     - Visual indicators for zero and current value
     - Maintains exact position when gesture ends
     - Always starts centered at 0 EV
+    - **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
 - The wheel can be shown/hidden with a vertical swipe gesture on the camera preview:
     - Swipe Up: Shows the EV wheel.
     - Swipe Down: Hides the EV wheel.

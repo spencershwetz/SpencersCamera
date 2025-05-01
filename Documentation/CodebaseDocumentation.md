@@ -1,21 +1,22 @@
 # Codebase Documentation
 
-> **Note:** Push-to-focus (tap to set focus point) is supported. Push-to-exposure (tap to set exposure point) and exposure value (EV) compensation are NOT implemented in this version. Any previous references to these features have been removed or clarified.
+> **Note:** Push-to-focus (tap to set focus point) is supported. Exposure value (EV) compensation is now fully implemented with a live, continuous wheel picker. Push-to-exposure (tap to set exposure point) is not implemented in this version.
 
 This document provides a detailed overview of key classes, components, and their responsibilities in the Spencer's Camera codebase.
 
 ### EV Compensation Implementation
-- **EVWheelPicker (`EVWheelPicker.swift`)**:
-    - SwiftUI view for precise EV bias control
-    - Uses `DragGesture` with configurable threshold and sensitivity
+- **SimpleWheelPicker (`SimpleWheelPicker.swift`)**:
+    - SwiftUI view for precise, live EV bias control
+    - Uses `ScrollView` with view-aligned scrolling and haptic feedback
     - Maintains state for smooth scrolling and position tracking
     - Provides haptic feedback on value changes
     - Uses GeometryReader for proper layout and spacing
     - Implements exact position maintenance on gesture end
     - Ensures consistent 0 EV centering on initialization
-- The wheel visibility is controlled through swipe gestures:
-    - Right-to-left swipe (from right edge): shows the wheel
-    - Left-to-right swipe (from left edge): hides the wheel
+    - **Live updating:** The EV value updates continuously as you drag, with no debounce delay.
+- The wheel visibility is controlled through vertical swipe gestures:
+    - Swipe Up: Shows the EV wheel.
+    - Swipe Down: Hides the EV wheel.
 - Gesture handling is implemented in `CameraView.swift`
 
 ### EV Compensation Slider Gesture
