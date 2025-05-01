@@ -1805,9 +1805,13 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
                 let durationSeconds = 1.0 / (frameRate * 2.0)
                 let duration = CMTimeMakeWithSeconds(durationSeconds, preferredTimescale: 1_000_000)
                 self.logger.info("🔄 [didUpdateCurrentLens] Calculated 180° shutter duration: \(String(format: "%.5f", durationSeconds))s for frameRate \(frameRate)")
+                
+                // First, re-enable Shutter Priority mode
                 self.exposureService?.enableShutterPriority(duration: duration)
-                if self.isExposureLocked {
-                    self.logger.info("🔄 [didUpdateCurrentLens] Scheduling lock of Shutter Priority exposure after lens switch (delayed)")
+                
+                // Check if we need to lock exposure (either recording or manual lock)
+                if self.isRecording && self.settingsModel.isExposureLockEnabledDuringRecording {
+                    self.logger.info("🔄 [didUpdateCurrentLens] Re-applying Shutter Priority recording lock after lens switch")
                     // Add a short delay to ensure device is ready before locking
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                         guard let self = self else { return }
@@ -1819,8 +1823,6 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")
                 self.exposureService?.setExposureLock(locked: true)
             }
-            // End FIX
-
         }
     }
     

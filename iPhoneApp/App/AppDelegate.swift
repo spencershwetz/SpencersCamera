@@ -1,5 +1,6 @@
 import UIKit
 import SwiftUI
+import AVFoundation
 import os.log
 
 /// Main application delegate that handles orientation locking and other app-level functionality
@@ -7,7 +8,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     // Logger for AppDelegate
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppDelegateOrientation")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "AppDelegate")
 
     // MARK: - Orientation Lock Properties
     
@@ -20,18 +21,39 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - Application Lifecycle
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // REMOVED: Manual window setup, root view controller assignment, and appearance settings.
-        // The SwiftUI App lifecycle (@main, WindowGroup) will handle this.
-
-        // Keep essential non-UI setup:
-        logger.info("Setting up AppDelegate for iOS 18+")
-        // Register for device orientation notifications
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        // REMOVED: Setup orientation lock observer (using custom CameraOrientationLock)
-        // UIWindowScene.setupOrientationLockSupport()
+        // Configure AVAudioSession
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording)
+            try AVAudioSession.sharedInstance().setActive(true)
+            logger.info("Successfully configured AVAudioSession")
+        } catch {
+            logger.error("Failed to configure AVAudioSession: \(error.localizedDescription)")
+        }
         
-        // Remove debug observer for orientation (if this was specific to the old setup)
-        // NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+        // Request camera permissions early
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            if granted {
+                self.logger.info("Camera access granted")
+            } else {
+                self.logger.error("Camera access denied")
+            }
+        }
+        
+        // Request microphone permissions early
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            if granted {
+                self.logger.info("Microphone access granted")
+            } else {
+                self.logger.error("Microphone access denied")
+            }
+        }
+        
+        #if canImport(DockKit)
+        if #available(iOS 18.0, *) {
+            // Initialize DockKit early if available
+            logger.info("iOS 18.0+ detected, DockKit initialization available")
+        }
+        #endif
         
         return true
     }
@@ -118,6 +140,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Default to portrait only
         // logger.info("    [Orientation] Defaulting to Portrait only.")
         return .portrait
+    }
+    
+    // MARK: UISceneSession Lifecycle
+    
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        return UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
+    }
+    
+    func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
+        logger.info("Scene sessions discarded")
     }
 }
 

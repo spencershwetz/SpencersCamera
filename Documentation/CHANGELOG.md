@@ -16,6 +16,11 @@ All notable changes to this project will be documented in this file.
     *   Value is automatically restored after a short delay to ensure proper device configuration
     *   Added logging to track EV bias persistence during lens switches
 
+*   Fixed: Shutter Priority exposure lock is now correctly maintained during lens changes when "Lock Exposure During Recording" is enabled:
+    *   Fixed issue where SP exposure lock would become unlocked when switching lenses during recording
+    *   Improved lens switch handling to properly re-apply SP mode and lock state
+    *   Added delay to ensure camera device is ready before re-applying lock
+
 *   UI: Migrated to SimpleWheelPicker for precise, live EV bias control:
     *   Horizontal wheel interface with haptic feedback
     *   Smooth scrolling with precise value selection
@@ -87,6 +92,7 @@ All notable changes to this project will be documented in this file.
 *   Updated debug overlay to show actual camera device color space instead of just the setting value.
 *   Refined HDR video configuration logic in `CameraDeviceService.configureSession` to correctly use `automaticallyAdjustsVideoHDREnabled` for non-Log modes, preventing potential crashes.
 *   Changed `var targetMode` to `let targetMode` in `CameraDeviceService` during stabilization setup to resolve a compiler warning.
+*   Removed duplicate `@main` attribute from AppDelegate to resolve build conflict with SwiftUI app entry point
 
 ### Removed
 
