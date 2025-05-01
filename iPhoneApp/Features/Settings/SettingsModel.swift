@@ -16,6 +16,8 @@ extension Notification.Name {
     static let selectedFrameRateChanged = Notification.Name("selectedFrameRateChanged")
     static let isDebugEnabledChanged = Notification.Name("isDebugEnabledChanged")
     static let videoStabilizationSettingChanged = Notification.Name("videoStabilizationSettingChanged")
+    static let evBiasVisibilityChanged = Notification.Name("evBiasVisibilityChanged")
+    static let debugOverlayVisibilityChanged = Notification.Name("debugOverlayVisibilityChanged")
     // Add notifications for function button changes if needed later
 }
 
@@ -109,6 +111,22 @@ class SettingsModel: ObservableObject {
         }
     }
     
+    @Published var isEVBiasVisible: Bool {
+        didSet {
+            UserDefaults.standard.set(isEVBiasVisible, forKey: Keys.isEVBiasVisible)
+            NotificationCenter.default.post(name: .evBiasVisibilityChanged, object: nil)
+            print("EV Bias Visible: \(isEVBiasVisible)")
+        }
+    }
+    
+    @Published var isDebugOverlayVisible: Bool {
+        didSet {
+            UserDefaults.standard.set(isDebugOverlayVisible, forKey: Keys.isDebugOverlayVisible)
+            NotificationCenter.default.post(name: .debugOverlayVisibilityChanged, object: nil)
+            print("Debug Overlay Visible: \(isDebugOverlayVisible)")
+        }
+    }
+    
     // MARK: - Function Button Assignments
     @Published var functionButton1Ability: FunctionButtonAbility {
         didSet {
@@ -164,6 +182,10 @@ class SettingsModel: ObservableObject {
         let initialFrameRate = UserDefaults.standard.double(forKey: Keys.selectedFrameRate)
         let initialDebugEnabled = UserDefaults.standard.object(forKey: Keys.isDebugEnabled) != nil ? UserDefaults.standard.bool(forKey: Keys.isDebugEnabled) : true
         let initialStabilizationEnabled = UserDefaults.standard.object(forKey: Keys.isVideoStabilizationEnabled) != nil ? UserDefaults.standard.bool(forKey: Keys.isVideoStabilizationEnabled) : false
+        
+        // Visibility settings
+        let initialEVBiasVisible = UserDefaults.standard.object(forKey: Keys.isEVBiasVisible) != nil ? UserDefaults.standard.bool(forKey: Keys.isEVBiasVisible) : false
+        let initialDebugOverlayVisible = UserDefaults.standard.object(forKey: Keys.isDebugOverlayVisible) != nil ? UserDefaults.standard.bool(forKey: Keys.isDebugOverlayVisible) : false
 
         // 2. Determine final initial values, applying defaults
         var finalFlashlightIntensity = initialFlashlightIntensity
@@ -217,6 +239,10 @@ class SettingsModel: ObservableObject {
         self.isDebugEnabled = initialDebugEnabled
         self.isVideoStabilizationEnabled = initialStabilizationEnabled
 
+        // Initialize visibility settings
+        self.isEVBiasVisible = initialEVBiasVisible
+        self.isDebugOverlayVisible = initialDebugOverlayVisible
+        
         // 4. Write back defaults if they were applied
         if shouldWriteFlashlightDefault {
             UserDefaults.standard.set(finalFlashlightIntensity, forKey: Keys.flashlightIntensity)
@@ -249,6 +275,14 @@ class SettingsModel: ObservableObject {
             UserDefaults.standard.set(initialStabilizationEnabled, forKey: Keys.isVideoStabilizationEnabled)
         }
 
+        // Write defaults if needed
+        if UserDefaults.standard.object(forKey: Keys.isEVBiasVisible) == nil {
+            UserDefaults.standard.set(false, forKey: Keys.isEVBiasVisible)
+        }
+        if UserDefaults.standard.object(forKey: Keys.isDebugOverlayVisible) == nil {
+            UserDefaults.standard.set(false, forKey: Keys.isDebugOverlayVisible)
+        }
+
         print("SettingsModel initialized:")
         print("- Apple Log: \(isAppleLogEnabled)")
         print("- Flashlight: \(isFlashlightEnabled)")
@@ -279,5 +313,7 @@ class SettingsModel: ObservableObject {
         static let selectedFrameRate = "selectedFrameRate"
         static let isDebugEnabled = "isDebugEnabled"
         static let isVideoStabilizationEnabled = "isVideoStabilizationEnabled"
+        static let isEVBiasVisible = "isEVBiasVisible"
+        static let isDebugOverlayVisible = "isDebugOverlayVisible"
     }
 }

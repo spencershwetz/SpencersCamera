@@ -24,14 +24,23 @@ struct CameraView: View {
     @State private var statusBarHidden = true
     @State private var focusSquarePosition: CGPoint? = nil
     @State private var lastFocusPoint: CGPoint? = nil // Normalized 0-1 point
-    @State private var showExposureSlider: Bool = true
-    @State private var showDebugOverlay: Bool = true
     @State private var lastTapLocation: CGPoint = .zero
     @State private var isFocusLocked: Bool = false
     
     // State for the temporary SimpleWheelPicker test - REMOVED
     // @State private var testWheelValue: CGFloat = 0
     // @State private var testWheelConfig: SimpleWheelPicker.Config = .init(count: 20, steps: 5, spacing: 8, multiplier: 1, showsText: true)
+
+    // Remove the local state variables and use the settings model instead
+    private var showExposureSlider: Bool {
+        get { settings.isEVBiasVisible }
+        set { settings.isEVBiasVisible = newValue }
+    }
+    
+    private var showDebugOverlay: Bool {
+        get { settings.isDebugOverlayVisible }
+        set { settings.isDebugOverlayVisible = newValue }
+    }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraView")
 
@@ -223,7 +232,7 @@ struct CameraView: View {
         )
         .overlay(
             Group {
-                if showExposureSlider {
+                if settings.isEVBiasVisible {
                     VStack {
                         Spacer()
                         
@@ -256,19 +265,6 @@ struct CameraView: View {
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.5))
                         .padding(.bottom, 20)
-                        // ----------------------------------------------
-
-                        // --- SimpleWheelPicker for Haptic Test --- - REMOVED
-                        /*
-                        Divider().background(Color.white)
-                        Text("Test Wheel: \(testWheelValue, specifier: "%.1f")")
-                            .foregroundColor(.white)
-                            .font(.caption)
-                        SimpleWheelPicker(config: testWheelConfig, value: $testWheelValue)
-                            .frame(height: 60)
-                            .background(Color.red.opacity(0.3)) // Make it visible
-                        */
-                        // ---------------------------------
                     }
                     .padding(.trailing, 10) 
                     .transition(.opacity) 
@@ -278,7 +274,7 @@ struct CameraView: View {
                     }
                 }
             }
-            .animation(.easeInOut, value: showExposureSlider),
+            .animation(.easeInOut, value: settings.isEVBiasVisible),
             alignment: .trailing // Align the overlay to the trailing edge
         )
         // Add swipe gesture to the preview area
@@ -299,14 +295,14 @@ struct CameraView: View {
                         if verticalAmount < -40 { // Swipe Up
                             logger.debug("[SwipeGesture] Detected Swipe Up. Showing overlays.")
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                showExposureSlider = true
-                                showDebugOverlay = true
+                                settings.isEVBiasVisible = true
+                                settings.isDebugOverlayVisible = true
                             }
                         } else if verticalAmount > 40 { // Swipe Down
                             logger.debug("[SwipeGesture] Detected Swipe Down. Hiding overlays.")
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                showExposureSlider = false
-                                showDebugOverlay = false
+                                settings.isEVBiasVisible = false
+                                settings.isDebugOverlayVisible = false
                             }
                         } else {
                             logger.debug("[SwipeGesture] Vertical swipe detected, but below threshold (40). No action.")
@@ -317,7 +313,7 @@ struct CameraView: View {
                 }
         )
         .overlay(alignment: .topLeading) {
-            if settings.isDebugEnabled && showDebugOverlay {
+            if settings.isDebugEnabled && settings.isDebugOverlayVisible {
                 debugOverlay
                     .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
                     .padding(.leading, 20)
