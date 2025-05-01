@@ -17,6 +17,10 @@ struct SimpleWheelPicker: View {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "SimpleWheelPicker")
     // Debounce drag end
     @State private var dragEndWorkItem: DispatchWorkItem?
+    // Timer to debounce scroll end and commit the value
+    @State private var scrollEndDebounce: Timer?
+    // Track the last scroll position for debounce
+    @State private var lastScrollPosition: Int? = nil
 
     // Calculate the total number of finest steps based on range and steps per unit
     private var totalNumberOfSteps: Int {
@@ -87,14 +91,22 @@ struct SimpleWheelPicker: View {
                             onEditingChanged?(false)
                         }
                         dragEndWorkItem = workItem
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
                         // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
                         logger.trace("Haptic triggered for position \(newPosition), intermediateValue \(newValue, format: .fixed(precision: 2))")
                         intermediateValue = newValue
-                        value = newValue // Update binding live
+                        value = newValue // Always update binding live
                         logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2)), binding value updated live.")
+                        // Debounce only the onEditingChanged(false) event
+                        lastScrollPosition = newPosition
+                        scrollEndDebounce?.invalidate()
+                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: false) { _ in
+                            if lastScrollPosition == newPosition {
+                                onEditingChanged?(false)
+                                logger.info("Editing ended after scroll settled.")
+                            }
+                        }
                     }
                 }
             }))
