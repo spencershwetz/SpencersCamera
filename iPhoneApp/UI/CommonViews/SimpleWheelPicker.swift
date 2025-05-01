@@ -7,12 +7,16 @@ struct SimpleWheelPicker: View {
     /// Config
     var config: Config
     @Binding var value: CGFloat
+    /// Optional closure called when editing starts/ends (true = start, false = end)
+    var onEditingChanged: ((Bool) -> Void)? = nil
     /// View Properties
     @State private var isLoaded: Bool = false
     // Local state to track the value *during* scrolling, avoiding immediate binding updates.
     @State private var intermediateValue: CGFloat = 0.0
     // Logger for debugging
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "SimpleWheelPicker")
+    // Debounce drag end
+    @State private var dragEndWorkItem: DispatchWorkItem?
 
     // Calculate the total number of finest steps based on range and steps per unit
     private var totalNumberOfSteps: Int {
@@ -75,6 +79,15 @@ struct SimpleWheelPicker: View {
                     logger.trace("ScrollPosition SET: newPosition = \(newPosition), calculated newValue = \(newValue, format: .fixed(precision: 2))")
                     // Check if the intermediate value actually changed
                     if abs(newValue - intermediateValue) > 0.001 { // Use a small tolerance
+                        // Call onEditingChanged(true) on drag start
+                        onEditingChanged?(true)
+                        // Debounce drag end: cancel previous, schedule new
+                        dragEndWorkItem?.cancel()
+                        let workItem = DispatchWorkItem {
+                            onEditingChanged?(false)
+                        }
+                        dragEndWorkItem = workItem
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
                         // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
