@@ -297,13 +297,17 @@ struct CameraView: View {
                     
                     if isVerticalSwipe {
                         if verticalAmount < -40 { // Swipe Up
-                            logger.debug("[SwipeGesture] Detected Swipe Up. Showing EV slider.")
-                            // Swipe up: show slider
-                            showExposureSlider = true
+                            logger.debug("[SwipeGesture] Detected Swipe Up. Showing overlays.")
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showExposureSlider = true
+                                showDebugOverlay = true
+                            }
                         } else if verticalAmount > 40 { // Swipe Down
-                            logger.debug("[SwipeGesture] Detected Swipe Down. Hiding EV slider.")
-                            // Swipe down: hide slider
-                            showExposureSlider = false
+                            logger.debug("[SwipeGesture] Detected Swipe Down. Hiding overlays.")
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showExposureSlider = false
+                                showDebugOverlay = false
+                            }
                         } else {
                             logger.debug("[SwipeGesture] Vertical swipe detected, but below threshold (40). No action.")
                         }
@@ -317,11 +321,6 @@ struct CameraView: View {
                 debugOverlay
                     .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
                     .padding(.leading, 20)
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showDebugOverlay.toggle()
-                        }
-                    }
             }
         }
         .overlay {
