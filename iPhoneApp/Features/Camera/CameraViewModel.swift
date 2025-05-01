@@ -363,6 +363,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @Published var lastLensSwitchTimestamp = Date()
     @Published var exposureBias: Float = 0.0
+    private var lastExposureBias: Float = 0.0  // Store last EV bias value
     var minExposureBias: Float { device?.minExposureTargetBias ?? -2.0 }
     var maxExposureBias: Float { device?.maxExposureTargetBias ?? 2.0 }
     
@@ -619,7 +620,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func switchToLens(_ lens: CameraLens) {
-        // Remove isRecording argument
+        // Store current EV bias before lens switch
+        lastExposureBias = exposureBias
         
         // Temporarily disable LUT preview during switch to prevent flash
         logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
@@ -640,7 +642,16 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.lutManager.currentLUTFilter = storedFilter
             self.tempLUTFilter = nil // Clear temporary storage
         } else {
-             self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+            self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+        }
+        
+        // After a short delay to ensure the device is ready, restore the EV bias
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            if self.lastExposureBias != 0.0 {
+                self.logger.info("🔄 Restoring EV bias after lens switch: \(self.lastExposureBias)")
+                self.setExposureBias(self.lastExposureBias)
+            }
         }
     }
     

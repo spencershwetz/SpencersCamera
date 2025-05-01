@@ -11,6 +11,11 @@ All notable changes to this project will be documented in this file.
     *   Debug overlay visibility state is now preserved between app launches
     *   States are managed through SettingsModel using UserDefaults
 
+*   UI: Enhanced EV bias functionality:
+    *   EV bias value is now preserved when switching between lenses
+    *   Value is automatically restored after a short delay to ensure proper device configuration
+    *   Added logging to track EV bias persistence during lens switches
+
 *   UI: Migrated to SimpleWheelPicker for precise, live EV bias control:
     *   Horizontal wheel interface with haptic feedback
     *   Smooth scrolling with precise value selection
