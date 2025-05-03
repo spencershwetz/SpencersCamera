@@ -1207,11 +1207,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Session Control
     /// Start the AVCaptureSession on the dedicated queue and update state
     func startSession() {
-        // ADD GUARD: Check if session is already running
         guard !isSessionRunning else {
-            logger.info("[SessionControl] Start session requested, but session is already running.")
-            // Optionally re-ensure observers are attached here if needed, but be cautious of redundancy
-            // Example: self.exposureService.setDevice(self.device)
+            logger.info("[SessionControl] Start session requested, but session is already running. Re-applying video stabilization setting.")
+            // Reapply stabilization setting on existing session
+            self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
             return
         }
         
@@ -1228,6 +1227,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
             
             self.logger.info("[SessionControl] Attempting to start session...")
+            // Reapply video stabilization setting before starting session
+            self.setupUnifiedVideoOutput(enableStabilization: self.settingsModel.isVideoStabilizationEnabled)
             self.session.startRunning()
             DispatchQueue.main.async {
                 // Verify session is ACTUALLY running after startRunning call
@@ -1244,24 +1245,26 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                         // --- Ensure Apple Log (or selected color space) is re-applied after session start ---
                         if self.isAppleLogEnabled && self.isAppleLogSupported {
                             self.logger.info("[SessionControl] Re-applying Apple Log color space after session start...")
-                            self.videoFormatService.setAppleLogEnabled(true)
                             Task {
                                 do {
                                     try await self.videoFormatService.configureAppleLog()
                                     try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
                                     self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
+                                    // Reapply video stabilization setting after AppleLog reconfiguration
+                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
                                 } catch {
                                     self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \(error)")
                                 }
                             }
                         } else if !self.isAppleLogEnabled {
                             self.logger.info("[SessionControl] Re-applying Rec. 709 / P3 color space after session start...")
-                            self.videoFormatService.setAppleLogEnabled(false)
                             Task {
                                 do {
                                     try await self.videoFormatService.resetAppleLog()
                                     try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
                                     self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
+                                    // Reapply video stabilization setting after Rec.709 reconfiguration
+                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
                                 } catch {
                                     self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \(error)")
                                 }
@@ -1271,6 +1274,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     } else {
                         self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
                     }
+                    // Reapply video stabilization setting after session start
+                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
                 } else {
                     self.error = CameraError.sessionFailedToStart
                     self.logger.error("[SessionControl] Session failed to start (isSessionRunning is false after startRunning call). Setting status to failed.")

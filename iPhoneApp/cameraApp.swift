@@ -14,13 +14,17 @@ struct cameraApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     // Create a StateObject for the CameraViewModel
-    @StateObject private var cameraViewModel = CameraViewModel()
-    @StateObject private var settingsModel = SettingsModel() // Create SettingsModel instance
+    @StateObject private var settingsModel: SettingsModel
+    @StateObject private var cameraViewModel: CameraViewModel
     
     // Get the scene phase
     @Environment(\.scenePhase) private var scenePhase
     
     init() {
+        // Initialize SettingsModel and CameraViewModel with same instance
+        let sm = SettingsModel()
+        _settingsModel = StateObject(wrappedValue: sm)
+        _cameraViewModel = StateObject(wrappedValue: CameraViewModel(settingsModel: sm))
         // REMOVED: Redundant appearance settings, handled by WindowGroup content and modifiers.
         /*
         // Set background color for the entire app to black

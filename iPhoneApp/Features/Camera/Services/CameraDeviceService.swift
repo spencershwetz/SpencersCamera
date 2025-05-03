@@ -592,29 +592,20 @@ class CameraDeviceService {
             logger.info("⚙️ Committing session configuration block.")
             session.commitConfiguration()
 
-            // *** REMOVE code setting data output orientation here ***
-            // We now handle orientation purely based on device/interface orientation during recording
-            // or based on UI orientation for the preview layer.
-
-            // TODO: Evaluate if setting rotation angle here is still needed or causes issues.
-            // If connection supports rotation, set it to 90 degrees (Portrait default).
-            // This might be needed initially before the UI orientation takes over?
-            /* // Removed redundant orientation setting
-            if connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90
-                logger.info("🔄 Set default video rotation angle to 90 degrees (Portrait).")
-            } else {
-                logger.warning("🔄 Video rotation angle 90 degrees not supported.")
+            // Reapply video stabilization setting after reconfiguration
+            if let videoDataOutput = session.outputs.first(where: { $0 is AVCaptureVideoDataOutput }) as? AVCaptureVideoDataOutput,
+               let connection = videoDataOutput.connection(with: .video),
+               connection.isVideoStabilizationSupported {
+                let isEnabled = delegate?.isVideoStabilizationCurrentlyEnabled ?? false
+                let mode: AVCaptureVideoStabilizationMode = isEnabled ? .standard : .off
+                if connection.preferredVideoStabilizationMode != mode {
+                    connection.preferredVideoStabilizationMode = mode
+                    logger.info("✅ Reconfiguration: Applied video stabilization mode: \(mode.rawValue)")
+                } else {
+                    logger.info("ℹ️ Reconfiguration: Video stabilization mode already \(mode.rawValue)")
+                }
             }
-            */ // End removed redundant orientation setting
 
-            logger.info("🔄 [reconfigureSessionForCurrentDevice] Skipping explicit VideoDataOutput connection angle setting.") // Add log indicating skip
-            // *** End removal ***
-
-            // Re-apply color space just in case (redundant if called by ViewModel, but safe)
-            logger.info("🎨 Re-applying color space settings after reconfiguration...")
-            try videoFormatService.reapplyColorSpaceSettings()
-            
             if wasRunning {
                 logger.info("▶️ Restarting session after reconfiguration...")
                 session.startRunning()
