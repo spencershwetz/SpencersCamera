@@ -112,12 +112,10 @@ struct SimpleWheelPicker: View {
             .scrollPosition(id: .init(get: {
                 // Read from the intermediate value while scrolling
                 let position: Int? = isLoaded ? index(for: intermediateValue) : nil
-                logger.trace("ScrollPosition GET: intermediateValue = \(intermediateValue, format: .fixed(precision: 2)), position = \(position ?? -1)")
                 return position
             }, set: { newPosition in
                 if let newPosition {
                     let newValue = value(for: newPosition).clamped(to: config.min...config.max)
-                    logger.trace("ScrollPosition SET: newPosition = \(newPosition), calculated newValue = \(newValue, format: .fixed(precision: 2))")
                     // Check if the intermediate value actually changed significantly
                     if abs(newValue - intermediateValue) > 0.001 { // Use a small tolerance
                         // Signal editing started if it hasn't already
@@ -131,11 +129,9 @@ struct SimpleWheelPicker: View {
                         // Create and trigger haptic feedback *locally*
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
-                        logger.trace("Haptic triggered for position \(newPosition), newValue \(newValue, format: .fixed(precision: 2))")
 
                         // --- Update ONLY intermediate value during scroll ---
                         intermediateValue = newValue
-                        // value = newValue // <--- REMOVED: Do not update binding live
                         logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2))")
 
                         // --- Debounce the FINAL value commit and editing end signal ---
@@ -144,7 +140,6 @@ struct SimpleWheelPicker: View {
                         scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [finalValue = intermediateValue, finalPosition = newPosition] _ in
                             // Check if the position is still the same after the delay
                             if self.lastScrollPosition == finalPosition {
-                                logger.info("Scroll settled at position \(finalPosition). Committing final value.")
                                 // --- Commit the final value to the binding ---
                                 self.value = finalValue
                                 logger.debug("Final binding value committed: \(finalValue, format: .fixed(precision: 2))")

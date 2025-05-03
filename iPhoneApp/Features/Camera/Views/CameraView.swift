@@ -314,9 +314,14 @@ struct CameraView: View {
         )
         .overlay(alignment: .topLeading) {
             if settings.isDebugEnabled && settings.isDebugOverlayVisible {
-                debugOverlay
-                    .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
-                    .padding(.leading, 20)
+                VStack {
+                    RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+                        debugOverlay
+                    }
+                }
+                .padding(.top, geometry.safeAreaInsets.top + 70)
+                .padding(.leading, 20)
+                .allowsHitTesting(false) // Ensure overlay doesn't interfere with gestures
             }
         }
         .overlay {

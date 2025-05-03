@@ -7,27 +7,50 @@
 		<key>CaptureExtension.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>3</integer>
+			<integer>2</integer>
 		</dict>
 		<key>SC Watch App.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>0</integer>
+			<integer>1</integer>
 		</dict>
 		<key>Spencer's Camera.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>1</integer>
+			<integer>3</integer>
 		</dict>
 		<key>WidgetExtension.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
-			<integer>2</integer>
+			<integer>0</integer>
 		</dict>
 		<key>camera.xcscheme_^#shared#^_</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>094C22B72DC6939F0023DC87</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>094C22D72DC693B40023DC87</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>09562D7B2D18A1EC009A9B07</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>0998FA212DA22D02000AB0DD</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>
