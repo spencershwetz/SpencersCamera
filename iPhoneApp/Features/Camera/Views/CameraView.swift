@@ -315,8 +315,9 @@ struct CameraView: View {
         .overlay(alignment: .topLeading) {
             if settings.isDebugEnabled && settings.isDebugOverlayVisible {
                 debugOverlay
-                    .padding(.top, geometry.safeAreaInsets.top + 70) // Adjust padding if needed due to aspect ratio
+                    .padding(.top, geometry.safeAreaInsets.top + 70)
                     .padding(.leading, 20)
+                    .animation(.easeInOut(duration: 0.3), value: orientationViewModel.rotationAngle)
             }
         }
         .overlay {
@@ -343,34 +344,38 @@ struct CameraView: View {
     }
     
     private var debugOverlay: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Resolution: \(viewModel.selectedResolution.rawValue)")
-            Text("FPS: \(String(format: "%.2f", viewModel.selectedFrameRate))")
-            Text("Codec: \(viewModel.selectedCodec.rawValue)")
-            Text("ISO: \(String(format: "%.0f", viewModel.iso))")
-            Text("WB: \(String(format: "%.0fK", viewModel.whiteBalance))")
-            Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
-            Text("Shutter: \(formatShutterSpeed(viewModel.shutterSpeed))")
-            Text("EV Bias: \(String(format: "%.1f", viewModel.exposureBias))")
-            Text("Stabilization: \(settings.isVideoStabilizationEnabled ? "On ✓" : "Off ✗")")
-            
-            // Check the actual activeColorSpace from the device to display the correct value
-            if let device = viewModel.currentCameraDevice {
-                let actualColorSpace = device.activeColorSpace
-                if actualColorSpace == .appleLog {
-                    Text("Color: Apple Log 📱")
+        RotatingView(orientationViewModel: orientationViewModel, invertRotation: true) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Resolution: \(viewModel.selectedResolution.rawValue)")
+                Text("FPS: \(String(format: "%.2f", viewModel.selectedFrameRate))")
+                Text("Codec: \(viewModel.selectedCodec.rawValue)")
+                Text("ISO: \(String(format: "%.0f", viewModel.iso))")
+                Text("WB: \(String(format: "%.0fK", viewModel.whiteBalance))")
+                Text("Tint: \(String(format: "%.1f", viewModel.currentTint))")
+                Text("Shutter: \(formatShutterSpeed(viewModel.shutterSpeed))")
+                Text("EV Bias: \(String(format: "%.1f", viewModel.exposureBias))")
+                Text("Stabilization: \(settings.isVideoStabilizationEnabled ? "On ✓" : "Off ✗")")
+                
+                // Check the actual activeColorSpace from the device to display the correct value
+                if let device = viewModel.currentCameraDevice {
+                    let actualColorSpace = device.activeColorSpace
+                    if actualColorSpace == .appleLog {
+                        Text("Color: Apple Log 📱")
+                    } else {
+                        Text("Color: Rec.709 🎬")
+                    }
                 } else {
-                    Text("Color: Rec.709 🎬")
+                    Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
                 }
-            } else {
-                Text("Color: \(viewModel.isAppleLogEnabled ? "Apple Log" : "Rec.709")")
             }
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(6)
+            .background(Color.black.opacity(0.5))
+            .cornerRadius(6)
+            .animation(.easeInOut(duration: 0.3), value: orientationViewModel.rotationAngle)
         }
-        .font(.system(size: 10, weight: .medium, design: .monospaced))
-        .foregroundColor(.white)
-        .padding(6)
-        .background(Color.black.opacity(0.5))
-        .cornerRadius(6)
+        .transition(.opacity)
     }
     
     private var videoLibraryButton: some View {
