@@ -7,10 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		094C22BB2DC6939F0023DC87 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 094C22BA2DC6939F0023DC87 /* WidgetKit.framework */; };
+		094C22BD2DC6939F0023DC87 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 094C22BC2DC6939F0023DC87 /* SwiftUI.framework */; };
+		094C22CE2DC693A00023DC87 /* WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 094C22B82DC6939F0023DC87 /* WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		094C22E12DC693B40023DC87 /* CaptureExtension.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 094C22D82DC693B40023DC87 /* CaptureExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0998FA2D2DA22D03000AB0DD /* SC Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 0998FA222DA22D02000AB0DD /* SC Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		094C22CC2DC693A00023DC87 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 09562D742D18A1EC009A9B07 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 094C22B72DC6939F0023DC87;
+			remoteInfo = WidgetExtension;
+		};
+		094C22DF2DC693B40023DC87 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 09562D742D18A1EC009A9B07 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 094C22D72DC693B40023DC87;
+			remoteInfo = CaptureExtension;
+		};
 		0998FA2A2DA22D03000AB0DD /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 09562D742D18A1EC009A9B07 /* Project object */;
@@ -21,6 +39,28 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		094C22CF2DC693A00023DC87 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				094C22CE2DC693A00023DC87 /* WidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		094C22E62DC693B40023DC87 /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				094C22E12DC693B40023DC87 /* CaptureExtension.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		0998FA2C2DA22D03000AB0DD /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -35,11 +75,29 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		094C22B82DC6939F0023DC87 /* WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		094C22BA2DC6939F0023DC87 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		094C22BC2DC6939F0023DC87 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		094C22D82DC693B40023DC87 /* CaptureExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = CaptureExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		09562D7C2D18A1EC009A9B07 /* Spencer's Camera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Spencer's Camera.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0998FA222DA22D02000AB0DD /* SC Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "SC Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		094C22D32DC693A00023DC87 /* Exceptions for "Widget" folder in "WidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 094C22B72DC6939F0023DC87 /* WidgetExtension */;
+		};
+		094C22E52DC693B40023DC87 /* Exceptions for "CaptureExtension" folder in "CaptureExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 094C22D72DC693B40023DC87 /* CaptureExtension */;
+		};
 		0998FA1D2DA22CD7000AB0DD /* Exceptions for "iPhoneApp" folder in "Spencer's Camera" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -57,6 +115,22 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		094C22BE2DC6939F0023DC87 /* Widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				094C22D32DC693A00023DC87 /* Exceptions for "Widget" folder in "WidgetExtension" target */,
+			);
+			path = Widget;
+			sourceTree = "<group>";
+		};
+		094C22D92DC693B40023DC87 /* CaptureExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				094C22E52DC693B40023DC87 /* Exceptions for "CaptureExtension" folder in "CaptureExtension" target */,
+			);
+			path = CaptureExtension;
+			sourceTree = "<group>";
+		};
 		09562D7E2D18A1EC009A9B07 /* iPhoneApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -81,6 +155,22 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		094C22B52DC6939F0023DC87 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				094C22BD2DC6939F0023DC87 /* SwiftUI.framework in Frameworks */,
+				094C22BB2DC6939F0023DC87 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		094C22D52DC693B40023DC87 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		09562D792D18A1EC009A9B07 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -98,12 +188,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		094C22B92DC6939F0023DC87 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				094C22BA2DC6939F0023DC87 /* WidgetKit.framework */,
+				094C22BC2DC6939F0023DC87 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		09562D732D18A1EC009A9B07 = {
 			isa = PBXGroup;
 			children = (
 				09E5DE512DA97F8F00A47E95 /* Documentation */,
 				09562D7E2D18A1EC009A9B07 /* iPhoneApp */,
 				0998FA232DA22D02000AB0DD /* SC Watch App */,
+				094C22BE2DC6939F0023DC87 /* Widget */,
+				094C22D92DC693B40023DC87 /* CaptureExtension */,
+				094C22B92DC6939F0023DC87 /* Frameworks */,
 				09562D7D2D18A1EC009A9B07 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -113,6 +215,8 @@
 			children = (
 				09562D7C2D18A1EC009A9B07 /* Spencer's Camera.app */,
 				0998FA222DA22D02000AB0DD /* SC Watch App.app */,
+				094C22B82DC6939F0023DC87 /* WidgetExtension.appex */,
+				094C22D82DC693B40023DC87 /* CaptureExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -120,6 +224,50 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		094C22B72DC6939F0023DC87 /* WidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 094C22D22DC693A00023DC87 /* Build configuration list for PBXNativeTarget "WidgetExtension" */;
+			buildPhases = (
+				094C22B42DC6939F0023DC87 /* Sources */,
+				094C22B52DC6939F0023DC87 /* Frameworks */,
+				094C22B62DC6939F0023DC87 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				094C22BE2DC6939F0023DC87 /* Widget */,
+			);
+			name = WidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = WidgetExtension;
+			productReference = 094C22B82DC6939F0023DC87 /* WidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		094C22D72DC693B40023DC87 /* CaptureExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 094C22E22DC693B40023DC87 /* Build configuration list for PBXNativeTarget "CaptureExtension" */;
+			buildPhases = (
+				094C22D42DC693B40023DC87 /* Sources */,
+				094C22D52DC693B40023DC87 /* Frameworks */,
+				094C22D62DC693B40023DC87 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				094C22D92DC693B40023DC87 /* CaptureExtension */,
+			);
+			name = CaptureExtension;
+			packageProductDependencies = (
+			);
+			productName = CaptureExtension;
+			productReference = 094C22D82DC693B40023DC87 /* CaptureExtension.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
 		09562D7B2D18A1EC009A9B07 /* Spencer's Camera */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 09562D8F2D18A1EE009A9B07 /* Build configuration list for PBXNativeTarget "Spencer's Camera" */;
@@ -128,11 +276,15 @@
 				09562D792D18A1EC009A9B07 /* Frameworks */,
 				09562D7A2D18A1EC009A9B07 /* Resources */,
 				0998FA2C2DA22D03000AB0DD /* Embed Watch Content */,
+				094C22CF2DC693A00023DC87 /* Embed Foundation Extensions */,
+				094C22E62DC693B40023DC87 /* Embed ExtensionKit Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				0998FA2B2DA22D03000AB0DD /* PBXTargetDependency */,
+				094C22CD2DC693A00023DC87 /* PBXTargetDependency */,
+				094C22E02DC693B40023DC87 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				09562D7E2D18A1EC009A9B07 /* iPhoneApp */,
@@ -177,6 +329,12 @@
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
+					094C22B72DC6939F0023DC87 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					094C22D72DC693B40023DC87 = {
+						CreatedOnToolsVersion = 16.3;
+					};
 					09562D7B2D18A1EC009A9B07 = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -201,11 +359,27 @@
 			targets = (
 				09562D7B2D18A1EC009A9B07 /* Spencer's Camera */,
 				0998FA212DA22D02000AB0DD /* SC Watch App */,
+				094C22B72DC6939F0023DC87 /* WidgetExtension */,
+				094C22D72DC693B40023DC87 /* CaptureExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		094C22B62DC6939F0023DC87 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		094C22D62DC693B40023DC87 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		09562D7A2D18A1EC009A9B07 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -223,6 +397,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		094C22B42DC6939F0023DC87 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		094C22D42DC693B40023DC87 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		09562D782D18A1EC009A9B07 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -240,6 +428,16 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		094C22CD2DC693A00023DC87 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 094C22B72DC6939F0023DC87 /* WidgetExtension */;
+			targetProxy = 094C22CC2DC693A00023DC87 /* PBXContainerItemProxy */;
+		};
+		094C22E02DC693B40023DC87 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 094C22D72DC693B40023DC87 /* CaptureExtension */;
+			targetProxy = 094C22DF2DC693B40023DC87 /* PBXContainerItemProxy */;
+		};
 		0998FA2B2DA22D03000AB0DD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 0998FA212DA22D02000AB0DD /* SC Watch App */;
@@ -248,6 +446,110 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		094C22D02DC693A00023DC87 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Widget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.Widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		094C22D12DC693A00023DC87 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Widget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.Widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		094C22E32DC693B40023DC87 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CaptureExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CaptureExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.CaptureExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		094C22E42DC693B40023DC87 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CaptureExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CaptureExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spencershwetz.spencerscamera.CaptureExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		09562D8D2D18A1EE009A9B07 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -508,6 +810,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		094C22D22DC693A00023DC87 /* Build configuration list for PBXNativeTarget "WidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				094C22D02DC693A00023DC87 /* Debug */,
+				094C22D12DC693A00023DC87 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		094C22E22DC693B40023DC87 /* Build configuration list for PBXNativeTarget "CaptureExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				094C22E32DC693B40023DC87 /* Debug */,
+				094C22E42DC693B40023DC87 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		09562D772D18A1EC009A9B07 /* Build configuration list for PBXProject "Spencer's Camera" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
