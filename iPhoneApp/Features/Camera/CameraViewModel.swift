@@ -1661,6 +1661,51 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         let newBias = exposureBias + delta
         exposureService.updateExposureTargetBias(newBias)
     }
+
+    // MARK: - Shutter Priority Re-application (NEW)
+    /// Re-applies Shutter Priority using the *current* device frame-rate.
+    /// - Parameters:
+    ///   - delay: Optional delay before applying, useful if the device needs a brief moment after re-configuration.
+    ///   - lockIfRecording: If `true` and the app is currently recording *and* the "Lock Exposure During Recording" setting is enabled, the exposure will be locked after SP is re-enabled.
+    private func reapplyShutterPriority(after delay: TimeInterval = 0.0,
+                                        lockIfRecording: Bool = true) {
+        guard isShutterPriorityEnabled else { return }
+        guard let device = self.device else {
+            logger.error("[SP-Reapply] No active device – cannot re-apply Shutter Priority.")
+            return
+        }
+
+        let applyBlock = { [weak self] in
+            guard let self = self else { return }
+            // Determine the *actual* current frame-rate from the device if possible.
+            let actualFrameRate: Double
+            if device.activeVideoMaxFrameDuration.isValid,
+               device.activeVideoMaxFrameDuration.timescale != 0 {
+                actualFrameRate = 1.0 / device.activeVideoMaxFrameDuration.seconds
+            } else {
+                actualFrameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0
+            }
+
+            let targetDurationSeconds = 1.0 / (actualFrameRate * 2.0)
+            let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
+            self.logger.info("[SP-Reapply] Applying 180° shutter (1/\(actualFrameRate * 2) ≈ \(String(format: "%.5f", targetDurationSeconds))s) to device.")
+            self.exposureService.enableShutterPriority(duration: targetDuration)
+
+            // Apply recording lock if requested & appropriate.
+            if lockIfRecording && self.isRecording && self.settingsModel.isExposureLockEnabledDuringRecording {
+                self.logger.info("[SP-Reapply] Re-locking SP exposure for ongoing recording after delay.")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    self?.exposureService.lockShutterPriorityExposureForRecording()
+                }
+            }
+        }
+
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: applyBlock)
+        } else {
+            DispatchQueue.main.async(execute: applyBlock)
+        }
+    }
 }
 
 // MARK: - VideoFormatServiceDelegate
@@ -1719,11 +1764,19 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         } catch {
             logger.error("Failed to set initial exposure mode: \(error.localizedDescription)")
         }
+
+        // Re-apply Shutter Priority if it was enabled before (e.g., after app relaunch / background)
+        reapplyShutterPriority(after: 0.1, lockIfRecording: false)
     }
     
     func didStartRunning(_ isRunning: Bool) {
         DispatchQueue.main.async {
             self.isSessionRunning = isRunning
+
+            if isRunning {
+                // Ensure SP is re-applied when session restarts (e.g., coming back from background)
+                self.reapplyShutterPriority(after: 0.1, lockIfRecording: true)
+            }
         }
     }
 }
@@ -1804,26 +1857,9 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             
             // FIX: Re-apply exposure lock and shutter priority after lens switch if needed.
             if self.isShutterPriorityEnabled {
-                self.logger.info("🔄 [didUpdateCurrentLens] Re-applying Shutter Priority mode after lens switch.")
-                // Always recalculate 180° shutter duration for current frame rate
-                let frameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0 // fallback
-                let durationSeconds = 1.0 / (frameRate * 2.0)
-                let duration = CMTimeMakeWithSeconds(durationSeconds, preferredTimescale: 1_000_000)
-                self.logger.info("🔄 [didUpdateCurrentLens] Calculated 180° shutter duration: \(String(format: "%.5f", durationSeconds))s for frameRate \(frameRate)")
-                
-                // First, re-enable Shutter Priority mode
-                self.exposureService?.enableShutterPriority(duration: duration)
-                
-                // Check if we need to lock exposure (either recording or manual lock)
-                if self.isRecording && self.settingsModel.isExposureLockEnabledDuringRecording {
-                    self.logger.info("🔄 [didUpdateCurrentLens] Re-applying Shutter Priority recording lock after lens switch")
-                    // Add a short delay to ensure device is ready before locking
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                        guard let self = self else { return }
-                        self.logger.info("🔄 [didUpdateCurrentLens] Locking Shutter Priority exposure after lens switch (delayed)")
-                        self.exposureService?.lockShutterPriorityExposureForRecording()
-                    }
-                }
+                // Centralized helper will handle recalculation & optional recording lock.
+                self.logger.info("🔄 [didUpdateCurrentLens] Invoking SP reapply helper after lens switch.")
+                self.reapplyShutterPriority()
             } else if self.isExposureLocked {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")
                 self.exposureService?.setExposureLock(locked: true)
