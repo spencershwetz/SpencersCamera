@@ -207,3 +207,12 @@ This document provides a detailed overview of key classes, components, and their
         *   Uses `AVCaptureDevice.focusMode` transitions: `.continuousAutoFocus` -> `.autoFocus` -> `.locked`.
         *   Coordinate transformation handles device orientation for accurate focus point mapping.
         *   Focus UI handled by `FocusSquare` view with lock state visualization.
+*   **Camera Control**: 
+    *   Uses `AVCaptureSession` managed primarily within `CameraViewModel` and configured by `CameraSetupService`.
+    *   Session start/stop is handled by `startSession`/`stopSession` in `CameraViewModel`, triggered by `CameraView`'s `onAppear`/`onDisappear` and the `AppLifecycleObserver`'s `didBecomeActivePublisher`.
+    *   **Session Interruption Handling**:
+        *   Handles `.videoDeviceNotAvailableInBackground` interruption gracefully without showing error
+        *   Shows user-friendly `.sessionInterrupted` message for other interruption types
+        *   Clears interruption errors automatically when session resumes
+        *   Properly coordinates with `AppLifecycleObserver` for background/foreground transitions
+    *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.

@@ -1317,30 +1317,38 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @objc private func sessionInterrupted(_ notification: Notification) {
         // Remove observers IMMEDIATELY upon interruption notification
         exposureService.removeDeviceObservers()
-        logger.warning("[SessionControl] ExposureService observers removed due to session interruption.") // Added log
+        logger.warning("[SessionControl] ExposureService observers removed due to session interruption.")
 
-        logger.warning("[SessionControl] Session interrupted: \\(notification.userInfo ?? [:])")
+        logger.warning("[SessionControl] Session interrupted: \(notification.userInfo ?? [:])")
         // Check the reason for interruption
         if let reasonValue = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
-           let _ = AVCaptureSession.InterruptionReason(rawValue: reasonValue) {
-            // Use rawValue for logging instead of description
-            logger.warning("[SessionControl] Interruption Reason Raw Value: \\(reasonValue)")
-        } else {
-            logger.warning("[SessionControl] Interruption Reason: Could not determine reason.")
+           let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) {
+            logger.warning("[SessionControl] Interruption Reason: \(String(describing: reason))")
+            
+            // Only show error for non-background interruptions
+            if reason != .videoDeviceNotAvailableInBackground {
+                DispatchQueue.main.async {
+                    self.error = .sessionInterrupted
+                }
+            }
         }
         
         // Update session state immediately
         DispatchQueue.main.async {
             self.isSessionRunning = false
-            // Optionally stop recording if interrupted - Add check if recording
-            // if self.isRecording { Task { await self.stopRecording() } } // Consider if this is needed
         }
-        // No need to call stopSession() explicitly here? The session is already interrupted by the system.
-        // Let's rely on the state update and the interruption ended handler.
     }
 
     @objc private func sessionInterruptionEnded(_ notification: Notification) {
-        logger.info("[SessionControl] Session interruption ended. Checking app state...") // Modified log
+        logger.info("[SessionControl] Session interruption ended. Checking app state...")
+        
+        // Clear any existing session interruption error
+        DispatchQueue.main.async {
+            if case .sessionInterrupted = self.error {
+                self.error = nil
+            }
+        }
+        
         // Only attempt restart if the app is currently active
         if isAppCurrentlyActive {
             logger.info("[SessionControl] App is active. Requesting session restart.")

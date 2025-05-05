@@ -25,9 +25,13 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
     *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.
     *   `didBecomeActive` is managed by `AppLifecycleObserver` (used as `@StateObject` in `CameraView`), which publishes an event triggering `startSession` in `CameraView` to ensure the session restarts correctly after backgrounding.
-
-## Core Features & Implementation Details
-
+    *   **Session Interruption Handling**:
+        *   Uses `AVCaptureSessionWasInterrupted` and `AVCaptureSessionInterruptionEnded` notifications
+        *   Differentiates between background transitions (`.videoDeviceNotAvailableInBackground`) and other interruptions
+        *   Manages error state via new `.sessionInterrupted` error type
+        *   Coordinates with `AppLifecycleObserver` to avoid duplicate session restarts
+        *   Removes `ExposureService` observers immediately on interruption to prevent KVO issues
+        *   Restores observers and clears errors when interruption ends
 *   **Camera Control**: 
     *   Uses `AVCaptureSession` managed primarily within `CameraViewModel` and configured by `CameraSetupService`.
     *   Session start/stop is handled by `startSession`/`stopSession` in `CameraViewModel`, triggered by `CameraView`'s `onAppear`/`onDisappear` and the `AppLifecycleObserver`'s `didBecomeActivePublisher`.

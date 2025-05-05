@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Fixed: Improved session interruption handling when returning from background:
+    *   Added proper handling of `.videoDeviceNotAvailableInBackground` interruption reason
+    *   Added new `.sessionInterrupted` error type with user-friendly message
+    *   Suppressed unnecessary error messages during background/foreground transitions
+    *   Properly clears interruption errors when session resumes
+
 *   UI: Added persistent storage for visibility states:
     *   EV bias wheel visibility state is now preserved between app launches
     *   Debug overlay visibility state is now preserved between app launches

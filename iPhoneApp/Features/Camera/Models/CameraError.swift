@@ -14,6 +14,7 @@ enum CameraError: Error, Identifiable {
     case custom(message: String)
     case mediaServicesWereReset
     case sessionRuntimeError(code: Int)
+    case sessionInterrupted
     
     var id: String { description }
     
@@ -45,6 +46,8 @@ enum CameraError: Error, Identifiable {
             return "Media services were reset. Please try restarting the app."
         case .sessionRuntimeError(let code):
             return "An unexpected session runtime error occurred (Code: \(code))."
+        case .sessionInterrupted:
+            return "Camera session was interrupted. Please wait..."
         }
     }
 }
