@@ -623,6 +623,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Store current EV bias before lens switch
         lastExposureBias = exposureBias
         
+        // Track shutter priority state
+        let wasShutterPriorityEnabled = isShutterPriorityEnabled
+        
         // Temporarily disable LUT preview during switch to prevent flash
         logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
         self.tempLUTFilter = lutManager.currentLUTFilter // Store current filter
@@ -645,12 +648,20 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
         }
         
-        // After a short delay to ensure the device is ready, restore the EV bias
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // After a short delay to ensure the device is ready, restore settings
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self = self else { return }
+            
+            // Restore EV bias first
             if self.lastExposureBias != 0.0 {
                 self.logger.info("🔄 Restoring EV bias after lens switch: \(self.lastExposureBias)")
                 self.setExposureBias(self.lastExposureBias)
+            }
+            
+            // Re-apply shutter priority if it was active
+            if wasShutterPriorityEnabled {
+                self.logger.info("🔄 [switchToLens] Re-applying shutter priority after lens switch")
+                self.ensureShutterPriorityConsistency()
             }
         }
     }
@@ -1353,6 +1364,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         if isAppCurrentlyActive {
             logger.info("[SessionControl] App is active. Requesting session restart.")
             startSession() // Attempt restart
+            
+            // Re-apply shutter priority if needed
+            if isShutterPriorityEnabled {
+                logger.info("[SessionControl] Ensuring shutter priority is reapplied after interruption")
+                // Using longer delay to ensure the session is fully running
+                reapplyShutterPriority(after: 0.5, lockIfRecording: isRecording) 
+            }
         } else {
             logger.info("[SessionControl] App is not active. Deferring session restart to AppLifecycleObserver.")
             // Do nothing, let AppLifecycleObserver handle it when app becomes active
@@ -1685,33 +1703,56 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         let applyBlock = { [weak self] in
             guard let self = self else { return }
-            // Determine the *actual* current frame-rate from the device if possible.
-            let actualFrameRate: Double
-            if device.activeVideoMaxFrameDuration.isValid,
-               device.activeVideoMaxFrameDuration.timescale != 0 {
-                actualFrameRate = 1.0 / device.activeVideoMaxFrameDuration.seconds
-            } else {
-                actualFrameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0
-            }
-
-            let targetDurationSeconds = 1.0 / (actualFrameRate * 2.0)
-            let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
-            self.logger.info("[SP-Reapply] Applying 180° shutter (1/\(actualFrameRate * 2) ≈ \(String(format: "%.5f", targetDurationSeconds))s) to device.")
-            self.exposureService.enableShutterPriority(duration: targetDuration)
-
-            // Apply recording lock if requested & appropriate.
-            if lockIfRecording && self.isRecording && self.settingsModel.isExposureLockEnabledDuringRecording {
-                self.logger.info("[SP-Reapply] Re-locking SP exposure for ongoing recording after delay.")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                    self?.exposureService.lockShutterPriorityExposureForRecording()
-                }
-            }
+            // Use our new method for consistency
+            self.ensureShutterPriorityConsistency()
         }
 
         if delay > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: applyBlock)
         } else {
             DispatchQueue.main.async(execute: applyBlock)
+        }
+    }
+
+    // MARK: - Shutter Priority Consistency
+    /// Ensures shutter priority is correctly applied with 180° shutter angle.
+    /// This method is called after lens switches, background returns, and other events
+    /// where shutter priority settings might need to be re-applied.
+    func ensureShutterPriorityConsistency() {
+        guard isShutterPriorityEnabled, let device = self.device else {
+            logger.debug("[ensureShutterPriorityConsistency] Shutter priority not enabled or no device available")
+            return
+        }
+        
+        logger.info("[ensureShutterPriorityConsistency] Ensuring 180° shutter is correctly applied")
+        
+        // Get the actual frame rate from the device if possible, otherwise use selected value
+        let actualFrameRate: Double
+        if device.activeVideoMaxFrameDuration.isValid,
+           device.activeVideoMaxFrameDuration.timescale != 0 {
+            actualFrameRate = 1.0 / device.activeVideoMaxFrameDuration.seconds
+            logger.info("[ensureShutterPriorityConsistency] Using device frame rate: \(String(format: "%.2f", actualFrameRate)) fps")
+        } else {
+            actualFrameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0
+            logger.info("[ensureShutterPriorityConsistency] Using selected frame rate: \(String(format: "%.2f", actualFrameRate)) fps")
+        }
+        
+        // Calculate 180° shutter duration
+        let targetDurationSeconds = 1.0 / (actualFrameRate * 2.0)
+        let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
+        
+        logger.info("[ensureShutterPriorityConsistency] Applying 180° shutter duration: \(String(format: "%.5f", targetDurationSeconds))s")
+        
+        // Apply shutter priority with the calculated duration
+        exposureService.enableShutterPriority(duration: targetDuration)
+        
+        // If currently recording and exposure lock is enabled during recording, re-lock
+        if isRecording && settingsModel.isExposureLockEnabledDuringRecording {
+            logger.info("[ensureShutterPriorityConsistency] Re-locking exposure for ongoing recording")
+            // Apply after a short delay to ensure device is ready
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.exposureService.lockShutterPriorityExposureForRecording()
+            }
         }
     }
 }
@@ -1865,9 +1906,9 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             
             // FIX: Re-apply exposure lock and shutter priority after lens switch if needed.
             if self.isShutterPriorityEnabled {
-                // Centralized helper will handle recalculation & optional recording lock.
-                self.logger.info("🔄 [didUpdateCurrentLens] Invoking SP reapply helper after lens switch.")
-                self.reapplyShutterPriority()
+                // Use the new consistency method for more reliable application
+                self.logger.info("🔄 [didUpdateCurrentLens] Ensuring shutter priority consistency after lens switch.")
+                self.ensureShutterPriorityConsistency()
             } else if self.isExposureLocked {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")
                 self.exposureService?.setExposureLock(locked: true)

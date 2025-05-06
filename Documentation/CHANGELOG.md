@@ -12,6 +12,13 @@ All notable changes to this project will be documented in this file.
     *   Suppressed unnecessary error messages during background/foreground transitions
     *   Properly clears interruption errors when session resumes
 
+*   Enhanced: Improved 180° shutter priority robustness:
+    *   Added new `ensureShutterPriorityConsistency()` method to centralize and improve reliability
+    *   Enhanced resilience during app backgrounding and session interruptions
+    *   Improved recovery after camera access by other apps
+    *   Added additional verification and logging for debugging shutter angle issues
+    *   Shortened restoration delay timers for more responsive experience
+
 *   UI: Added persistent storage for visibility states:
     *   EV bias wheel visibility state is now preserved between app launches
     *   Debug overlay visibility state is now preserved between app launches

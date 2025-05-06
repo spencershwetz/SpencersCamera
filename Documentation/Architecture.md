@@ -139,10 +139,12 @@ The project is organized into the following main components:
     *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
     *   **Exposure Lock & Shutter Priority Lens Switch Handling:**
         *   When both "Lock Exposure During Recording" and "Shutter Priority" are enabled, `CameraViewModel` ensures that after a lens change, the correct exposure lock is restored.
-        *   **Robust Shutter Priority Logic (2025-04-28):** After every lens switch, the 180° shutter duration is recalculated based on the *current* frame rate and immediately applied via `ExposureService.enableShutterPriority(duration:)`. This prevents stale or incorrect shutter angles (e.g., 144°, 216°) and guarantees consistent 180° exposure regardless of previous state or lens.
-        *   A helper method computes the correct 180° duration using `duration = 1.0 / (2 * frameRate)`, ensuring the logic is always up to date with the selected frame rate.
+        *   **Robust Shutter Priority Logic (2025-05-01):** The app implements a highly consistent 180° shutter angle system with improved reliability through the new `ensureShutterPriorityConsistency()` method.
+        *   After every lens switch, app backgrounding, or session interruption, 180° shutter duration is recalculated based on the *current* frame rate and immediately applied via `ExposureService.enableShutterPriority(duration:)`. 
+        *   A helper computes the correct 180° duration using `duration = 1.0 / (2 * frameRate)`, ensuring the logic is always up-to-date with the selected frame rate.
         *   After a short delay (to guarantee the camera device is fully ready), `CameraViewModel` re-applies the shutter priority exposure lock if required. This prevents ISO from drifting after lens switches during recording.
-        *   Logging is added to confirm the calculated duration and application of shutter priority after each lens switch.
+        *   Enhanced logging confirms the calculated duration and application of shutter priority after each event that might affect camera state.
+        *   Improved session interruption handling ensures shutter priority settings are properly restored after temporary camera access by other apps.
     *   `DockControlService` manages DockKit accessory interactions, handling tracking, framing, and camera control events. It communicates with `CameraViewModel` through the `CameraCaptureDelegate` protocol.
     *   `DockKitIntegration` extends `CameraViewModel` to conform to `CameraCaptureDelegate`, enabling DockKit accessory control of camera functions.
 
