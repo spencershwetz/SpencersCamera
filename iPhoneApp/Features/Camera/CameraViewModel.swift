@@ -1255,6 +1255,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 
                 if sessionSuccessfullyStarted {
                     self.logger.info("[SessionControl] Session started successfully: \(self.isSessionRunning)")
+                    // Clear any previous error if session is running
+                    self.error = nil
                     // Re-attach KVO observers AFTER session is confirmed running
                     if let currentDevice = self.device {
                         self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")

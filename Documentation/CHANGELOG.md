@@ -75,6 +75,8 @@ All notable changes to this project will be documented in this file.
     *   Enhanced error recovery with automatic state restoration
     *   Improved lens switch handling with state preservation
 
+*   Fixed: Stale camera session error alerts (e.g., "failed to start camera session") are now cleared as soon as the session starts successfully. Users will no longer see an error dialog after returning from the lock screen or background if the camera is running fine. This prevents incorrect error UI and improves user experience.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
