@@ -224,13 +224,12 @@ struct CameraView: View {
             .padding(.top, geometry.safeAreaInsets.top + 25)
             .frame(maxWidth: .infinity)
 
-            // Red recording border overlay, perfectly matching the preview
-            RoundedRectangle(cornerRadius: 12)
+            // Red recording border with sharp corners, framing the preview
+            Rectangle()
                 .stroke(Color.red, lineWidth: 4)
                 .aspectRatio(9.0/16.0, contentMode: .fit)
-                .scaleEffect(0.9)
-                .clipped()
-                .padding(.top, geometry.safeAreaInsets.top + 25)
+                .scaleEffect(0.9 + 0.04) // Slightly larger than preview
+                .padding(.top, geometry.safeAreaInsets.top + 25 - 4) // Move up to frame preview
                 .frame(maxWidth: .infinity)
                 .opacity(viewModel.isRecording ? 1 : 0)
                 .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)

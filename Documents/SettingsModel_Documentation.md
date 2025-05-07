@@ -16,3 +16,4 @@
 ## Changelog
 
 - **2024-06-10**: Fixed the red recording border in CameraView to perfectly align with the camera preview by using a ZStack and matching all layout modifiers. No more misalignment on any device or orientation. 
+- **2024-06-10**: Updated the red recording border to have sharp corners and frame the preview from the outside, not overlapping it, for a cleaner look. 
