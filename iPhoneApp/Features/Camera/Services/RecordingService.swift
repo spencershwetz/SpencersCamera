@@ -178,7 +178,13 @@ class RecordingService: NSObject {
         do {
             // Create temporary URL for recording
             let tempDir = FileManager.default.temporaryDirectory
-            let fileName = "recording_\(Date().timeIntervalSince1970).mov"
+            // Use a persistent counter in UserDefaults to mimic native camera naming
+            let defaults = UserDefaults.standard
+            let counterKey = "spencersCameraVideoFileCounter"
+            var fileNumber = defaults.integer(forKey: counterKey)
+            fileNumber += 1
+            defaults.set(fileNumber, forKey: counterKey)
+            let fileName = String(format: "IMG_%04d.MOV", fileNumber)
             let tempURL = tempDir.appendingPathComponent(fileName)
             currentRecordingURL = tempURL
             
