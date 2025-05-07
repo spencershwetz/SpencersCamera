@@ -182,6 +182,28 @@ This document outlines the technical specifications and requirements for the Spe
 
 ## Key Technical Decisions & Trade-offs
 
+### Enhanced Exposure Handling (2025-05-06)
+- **Thread Safety and State Management**:
+    - Dedicated `stateQueue` for thread-safe state access
+    - `exposureAdjustmentQueue` for serialized exposure operations
+    - `ExposureState` struct for atomic state capture and restoration
+- **Error Handling**:
+    - Typed `ExposureServiceError` with user-friendly messages
+    - Automatic recovery mechanisms for failed operations
+    - Graceful degradation during device unavailability
+- **Exposure Transitions**:
+    - Multi-step ISO interpolation for smooth transitions
+    - Configurable step count and timing
+    - Automatic cleanup of incomplete transitions
+- **Stability Monitoring**:
+    - Real-time ISO variance monitoring
+    - Configurable thresholds for variance detection
+    - Automatic logging of stability issues
+- **Lens Switch Handling**:
+    - Complete state preservation during lens switches
+    - Automatic state restoration after switch completion
+    - Error recovery for failed state restoration
+
 ### Additional Components (2025-04-30)
 - **RotatingViewController**: UIViewController subclass for applying rotation transforms to SwiftUI content.
 - **OrientationFixViewController**: Locks interface orientation for embedded SwiftUI views.

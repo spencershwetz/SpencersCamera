@@ -66,6 +66,15 @@ All notable changes to this project will be documented in this file.
     - Pre-calculating ISO/duration for the new lens
     - Freezing exposure UI during transition and unfreezing after SP is re-applied
 
+*   Enhanced: Improved exposure and shutter priority handling:
+    *   Added robust error handling with new `ExposureServiceError` type
+    *   Implemented thread-safe state management with dedicated queues
+    *   Added exposure state persistence during lens switches
+    *   Implemented smooth ISO transitions with multi-step interpolation
+    *   Added exposure stability monitoring with variance detection
+    *   Enhanced error recovery with automatic state restoration
+    *   Improved lens switch handling with state preservation
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:

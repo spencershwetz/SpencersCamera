@@ -10,6 +10,23 @@ protocol ExposureServiceDelegate: AnyObject {
     func didUpdateExposureTargetBias(_ bias: Float)
 }
 
+// Add at the top after imports
+enum ExposureServiceError: Error {
+    case deviceUnavailable
+    case invalidState
+    case transitionFailed
+    case lockFailed
+    
+    var userMessage: String {
+        switch self {
+        case .deviceUnavailable: return "Camera device unavailable"
+        case .invalidState: return "Invalid camera state"
+        case .transitionFailed: return "Failed to change exposure settings"
+        case .lockFailed: return "Failed to lock exposure"
+        }
+    }
+}
+
 // Inherit from NSObject to support KVO
 class ExposureService: NSObject {
     /// Optional closure to query if video stabilization is currently enabled.
@@ -21,7 +38,10 @@ class ExposureService: NSObject {
     private var isAutoExposureEnabled = true
     
     // --- Shutter Priority State ---
-    private var isShutterPriorityActive: Bool = false
+    private var isShutterPriorityActive: Bool {
+        get { stateQueue.sync { _isShutterPriorityActive } }
+        set { stateQueue.sync { _isShutterPriorityActive = newValue } }
+    }
     private var targetShutterDuration: CMTime?
     private var exposureTargetOffsetObservation: NSKeyValueObservation?
     private var lastIsoAdjustmentTime: Date = .distantPast // For rate limiting
@@ -43,6 +63,11 @@ class ExposureService: NSObject {
     private var whiteBalanceGainsObservation: NSKeyValueObservation?
     // Observation for exposure target bias
     private var exposureBiasObservation: NSKeyValueObservation?
+    
+    // Add new properties
+    private let stateQueue = DispatchQueue(label: "com.camera.exposureState", qos: .userInitiated)
+    private var _isShutterPriorityActive: Bool = false
+    private var lastKnownGoodState: ExposureState?
     
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
@@ -905,5 +930,107 @@ class ExposureService: NSObject {
             logger.error("[ExposureBias] Failed to set exposure bias: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure bias: \(error.localizedDescription)"))
         }
+    }
+
+    // Add new methods before MARK: - Shutter Priority Recording Lock
+    private func recoverFromFailedExposureOperation() {
+        exposureAdjustmentQueue.async { [weak self] in
+            guard let self = self, let device = self.device else { return }
+            do {
+                try device.lockForConfiguration()
+                // Attempt to restore last known good state
+                if self.isShutterPriorityActive {
+                    self.enableShutterPriority(duration: self.targetShutterDuration ?? device.exposureDuration)
+                } else {
+                    device.exposureMode = .continuousAutoExposure
+                }
+                device.unlockForConfiguration()
+            } catch {
+                self.logger.error("Recovery failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func prepareForLensSwitch() {
+        guard let device = device else { return }
+        lastKnownGoodState = ExposureState.capture(from: device)
+    }
+
+    func restoreAfterLensSwitch() {
+        guard let state = lastKnownGoodState,
+              let device = device else { return }
+        
+        exposureAdjustmentQueue.async {
+            do {
+                try device.lockForConfiguration()
+                if state.isShutterPriority {
+                    self.enableShutterPriority(duration: state.duration, initialISO: state.iso)
+                } else if state.isLocked {
+                    device.setExposureModeCustom(duration: state.duration, iso: state.iso)
+                }
+                device.unlockForConfiguration()
+            } catch {
+                self.logger.error("Restore after lens switch failed: \(error)")
+            }
+        }
+    }
+
+    private func smoothTransitionToNewExposure(targetISO: Float, duration: CMTime) {
+        guard let device = device else { return }
+        
+        let steps = 5
+        let currentISO = device.iso
+        let isoStep = (targetISO - currentISO) / Float(steps)
+        
+        for i in 1...steps {
+            let intermediateISO = currentISO + (isoStep * Float(i))
+            exposureAdjustmentQueue.asyncAfter(deadline: .now() + 0.05 * Double(i)) {
+                try? device.lockForConfiguration()
+                device.setExposureModeCustom(duration: duration, iso: intermediateISO)
+                device.unlockForConfiguration()
+            }
+        }
+    }
+
+    private func monitorExposureStability() {
+        var samples = [Float]()
+        let stabilityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  let device = self.device,
+                  self.isShutterPriorityActive else { return }
+            
+            samples.append(device.iso)
+            if samples.count > 10 {
+                samples.removeFirst()
+                let variance = self.calculateVariance(samples)
+                if variance > 100 {
+                    self.logger.warning("High ISO variance detected: \(variance)")
+                }
+            }
+        }
+        stabilityTimer.tolerance = 0.01
+    }
+
+    private func calculateVariance(_ samples: [Float]) -> Float {
+        let mean = samples.reduce(0, +) / Float(samples.count)
+        let sumSquaredDiff = samples.reduce(0) { $0 + pow($1 - mean, 2) }
+        return sumSquaredDiff / Float(samples.count)
+    }
+}
+
+// Add after class ExposureService: NSObject {
+private struct ExposureState {
+    let iso: Float
+    let duration: CMTime
+    let isLocked: Bool
+    let isShutterPriority: Bool
+    
+    static func capture(from device: AVCaptureDevice) -> ExposureState {
+        return ExposureState(
+            iso: device.iso,
+            duration: device.exposureDuration,
+            isLocked: device.exposureMode == .locked,
+            isShutterPriority: device.exposureMode == .custom
+        )
     }
 } 
