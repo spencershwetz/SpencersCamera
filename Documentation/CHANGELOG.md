@@ -54,6 +54,13 @@ All notable changes to this project will be documented in this file.
     *   Improved layout of EV value display above the wheel
     *   Enhanced visual hierarchy with semi-transparent backgrounds and proper spacing
 
+*   Improved: Shutter Priority and lens switching robustness:
+    *   Debounced and atomic shutter priority re-application after lens switches to prevent race conditions and state drift.
+    *   Added device readiness check before re-applying shutter priority after lens switch.
+    *   Cached and restored last ISO value for Shutter Priority mode across lens switches to prevent exposure jumps.
+    *   All KVO and device property changes for exposure are now performed on a serial queue for thread safety.
+    *   Improved user experience and reliability when rapidly switching lenses or toggling Shutter Priority.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:

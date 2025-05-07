@@ -379,6 +379,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var wbPollingTimerCancellable: AnyCancellable?
     private let wbPollingInterval: TimeInterval = 0.5 // Poll every 0.5 seconds
 
+    // --- Shutter Priority Debounce State ---
+    private var shutterPriorityReapplyTask: Task<Void, Never>? = nil
+    private var lastSPISO: Float? = nil // Cache last ISO for SP
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -1723,9 +1727,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             logger.debug("[ensureShutterPriorityConsistency] Shutter priority not enabled or no device available")
             return
         }
-        
+        // Device readiness check
+        guard session.isRunning else {
+            logger.warning("[ensureShutterPriorityConsistency] Session not running, skipping SP re-apply.")
+            return
+        }
         logger.info("[ensureShutterPriorityConsistency] Ensuring 180° shutter is correctly applied")
-        
         // Get the actual frame rate from the device if possible, otherwise use selected value
         let actualFrameRate: Double
         if device.activeVideoMaxFrameDuration.isValid,
@@ -1736,24 +1743,30 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             actualFrameRate = self.selectedFrameRate > 0 ? self.selectedFrameRate : 24.0
             logger.info("[ensureShutterPriorityConsistency] Using selected frame rate: \(String(format: "%.2f", actualFrameRate)) fps")
         }
-        
+        // Cache last ISO before re-applying SP
+        if let iso = self.iso as Float? { self.lastSPISO = iso }
         // Calculate 180° shutter duration
         let targetDurationSeconds = 1.0 / (actualFrameRate * 2.0)
         let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
-        
         logger.info("[ensureShutterPriorityConsistency] Applying 180° shutter duration: \(String(format: "%.5f", targetDurationSeconds))s")
-        
-        // Apply shutter priority with the calculated duration
-        exposureService.enableShutterPriority(duration: targetDuration)
-        
+        // Apply shutter priority with the calculated duration and cached ISO if available
+        if let lastISO = lastSPISO {
+            exposureService.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
+        } else {
+            exposureService.enableShutterPriority(duration: targetDuration)
+        }
         // If currently recording and exposure lock is enabled during recording, re-lock
         if isRecording && settingsModel.isExposureLockEnabledDuringRecording {
             logger.info("[ensureShutterPriorityConsistency] Re-locking exposure for ongoing recording")
-            // Apply after a short delay to ensure device is ready
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 self?.exposureService.lockShutterPriorityExposureForRecording()
             }
         }
+    }
+
+    private func cancelPendingShutterPriorityReapply() {
+        shutterPriorityReapplyTask?.cancel()
+        shutterPriorityReapplyTask = nil
     }
 }
 
@@ -1903,12 +1916,16 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             self.currentLens = lens
             self.lastLensSwitchTimestamp = Date() // Trigger preview update
             self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
-            
-            // FIX: Re-apply exposure lock and shutter priority after lens switch if needed.
+            // Debounce SP re-application
+            self.cancelPendingShutterPriorityReapply()
             if self.isShutterPriorityEnabled {
-                // Use the new consistency method for more reliable application
-                self.logger.info("🔄 [didUpdateCurrentLens] Ensuring shutter priority consistency after lens switch.")
-                self.ensureShutterPriorityConsistency()
+                self.logger.info("🔄 [didUpdateCurrentLens] Debounced SP re-apply after lens switch.")
+                self.shutterPriorityReapplyTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 200_000_000) // 200ms debounce
+                    await MainActor.run {
+                        self?.ensureShutterPriorityConsistency()
+                    }
+                }
             } else if self.isExposureLocked {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")
                 self.exposureService?.setExposureLock(locked: true)

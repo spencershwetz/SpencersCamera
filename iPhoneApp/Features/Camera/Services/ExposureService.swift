@@ -112,15 +112,8 @@ class ExposureService: NSObject {
         // Observe exposure duration (shutter speed) changes
         exposureDurationObservation = device.observe(\.exposureDuration, options: [.new]) { [weak self] device, change in
             guard let self = self, let newDuration = change.newValue else { return }
-            if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked || device.exposureMode == .custom {
-                // Calculate frame rate
-                let frameRate = device.activeVideoMinFrameDuration.timescale > 0 ? 
-                    Float64(device.activeVideoMinFrameDuration.timescale) / Float64(device.activeVideoMinFrameDuration.value) : 
-                    24.0 // Fallback to 24fps if can't determine
-                
-                // Log shutter angle change
-                self.logShutterAngleChange(duration: newDuration, frameRate: frameRate, context: "Exposure Duration Changed")
-                
+            if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
+                // logger.debug("[KVO] Exposure duration changed to: \(CMTimeGetSeconds(newDuration))")
                 DispatchQueue.main.async {
                     self.delegate?.didUpdateShutterSpeed(newDuration)
                 }
@@ -625,67 +618,54 @@ class ExposureService: NSObject {
         return tempAndTint.temperature
     }
 
-    // MARK: - Shutter Priority Methods
-    func enableShutterPriority(duration: CMTime) {
+    // --- Shutter Priority Methods ---
+    /// Enables Shutter Priority mode with a fixed duration and optionally an initial ISO.
+    /// - Parameters:
+    ///   - duration: The shutter duration to use (typically 180°).
+    ///   - initialISO: Optional ISO value to set immediately (used after lens switch).
+    func enableShutterPriority(duration: CMTime, initialISO: Float? = nil) {
         guard let device = device else {
             logger.error("SP Enable: No device available.")
             return
         }
-
-        // Get current frame rate for shutter angle calculation
-        let frameRate = device.activeVideoMinFrameDuration.timescale > 0 ? 
-            Float64(device.activeVideoMinFrameDuration.timescale) / Float64(device.activeVideoMinFrameDuration.value) : 
-            24.0 // Fallback to 24fps if can't determine
-        
-        // Log initial shutter angle
-        logShutterAngleChange(duration: duration, frameRate: frameRate, context: "Enabling Shutter Priority")
-
         // Clamp the requested duration just in case
         let minDuration = device.activeFormat.minExposureDuration
         let maxDuration = device.activeFormat.maxExposureDuration
         let clampedDuration = CMTimeClampToRange(duration, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
-
-        // Log if duration was clamped
-        if clampedDuration != duration {
-            logShutterAngleChange(duration: clampedDuration, frameRate: frameRate, context: "Clamped Shutter Priority")
-        }
-
         self.targetShutterDuration = clampedDuration
         self.isShutterPriorityActive = true
         self.isTemporarilyLockedForRecording = false // Ensure recording lock is off when enabling/re-enabling
         self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", clampedDuration.seconds))s")
-
         // Perform initial mode set on the adjustment queue
         exposureAdjustmentQueue.async { [weak self] in
-             guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
-
-            let currentISO = currentDevice.iso
+            guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
             let minISO = currentDevice.activeFormat.minISO
             let maxISO = currentDevice.activeFormat.maxISO
-            let clampedISO = min(max(currentISO, minISO), maxISO)
-
+            let isoToSet: Float
+            if let initialISO = initialISO {
+                isoToSet = min(max(initialISO, minISO), maxISO)
+            } else {
+                isoToSet = min(max(currentDevice.iso, minISO), maxISO)
+            }
             do {
                 try currentDevice.lockForConfiguration()
-                // Set the mode to custom with the fixed duration and current ISO
-                currentDevice.setExposureModeCustom(duration: clampedDuration, iso: clampedISO) { [weak self] _ in
-                    // Report initial values immediately after setting
-                     DispatchQueue.main.async {
-                         self?.delegate?.didUpdateShutterSpeed(clampedDuration)
-                         self?.delegate?.didUpdateISO(clampedISO)
-                         self?.logger.info("SP Enabled: Initial ISO set to \(String(format: "%.1f", clampedISO))")
-                     }
+                // Set the mode to custom with the fixed duration and ISO
+                currentDevice.setExposureModeCustom(duration: clampedDuration, iso: isoToSet) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                        self?.delegate?.didUpdateISO(isoToSet)
+                        self?.logger.info("SP Enabled: Initial ISO set to \(String(format: "%.1f", isoToSet))")
+                    }
                 }
                 currentDevice.unlockForConfiguration()
             } catch {
                 self.logger.error("SP Enable: Error setting initial custom exposure: \(error.localizedDescription)")
-                 // Attempt to unlock configuration if lock failed during change
-                 currentDevice.unlockForConfiguration()
-                 // Revert state if failed
-                 DispatchQueue.main.async {
-                     self.isShutterPriorityActive = false
-                     self.targetShutterDuration = nil
-                     self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
-                 }
+                currentDevice.unlockForConfiguration()
+                DispatchQueue.main.async {
+                    self.isShutterPriorityActive = false
+                    self.targetShutterDuration = nil
+                    self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
+                }
             }
         }
     }
@@ -818,14 +798,6 @@ class ExposureService: NSObject {
             let currentISO = device.iso
             let currentDuration = device.exposureDuration
             
-            // Get current frame rate for shutter angle calculation
-            let frameRate = device.activeVideoMinFrameDuration.timescale > 0 ? 
-                Float64(device.activeVideoMinFrameDuration.timescale) / Float64(device.activeVideoMinFrameDuration.value) : 
-                24.0 // Fallback to 24fps if can't determine
-            
-            // Log shutter angle before locking
-            logShutterAngleChange(duration: currentDuration, frameRate: frameRate, context: "Locking SP for Recording")
-            
             // Set to locked mode with current values
             if device.isExposureModeSupported(.locked) {
                 device.exposureMode = .locked
@@ -933,17 +905,5 @@ class ExposureService: NSObject {
             logger.error("[ExposureBias] Failed to set exposure bias: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure bias: \(error.localizedDescription)"))
         }
-    }
-
-    // MARK: - Shutter Angle Helpers
-    private func calculateShutterAngle(duration: CMTime, frameRate: Float64) -> Float {
-        let durationSeconds = CMTimeGetSeconds(duration)
-        let frameRateSeconds = 1.0 / frameRate
-        return Float(360.0 * (durationSeconds / frameRateSeconds))
-    }
-
-    private func logShutterAngleChange(duration: CMTime, frameRate: Float64, context: String) {
-        let angle = calculateShutterAngle(duration: duration, frameRate: frameRate)
-        logger.info("📸 [ShutterAngle] \(context): \(String(format: "%.1f", angle))° (Duration: \(String(format: "%.5f", CMTimeGetSeconds(duration)))s, FPS: \(String(format: "%.3f", frameRate)))")
     }
 } 

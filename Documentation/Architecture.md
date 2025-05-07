@@ -145,6 +145,7 @@ The project is organized into the following main components:
         *   After a short delay (to guarantee the camera device is fully ready), `CameraViewModel` re-applies the shutter priority exposure lock if required. This prevents ISO from drifting after lens switches during recording.
         *   Enhanced logging confirms the calculated duration and application of shutter priority after each event that might affect camera state.
         *   Improved session interruption handling ensures shutter priority settings are properly restored after temporary camera access by other apps.
+        *   **New (2025-05-02):** Shutter Priority re-application after lens switches is now debounced and atomic, with device readiness checks and ISO caching to prevent exposure jumps and race conditions. All KVO and device property changes for exposure are now performed on a serial queue for thread safety.
     *   `DockControlService` manages DockKit accessory interactions, handling tracking, framing, and camera control events. It communicates with `CameraViewModel` through the `CameraCaptureDelegate` protocol.
     *   `DockKitIntegration` extends `CameraViewModel` to conform to `CameraCaptureDelegate`, enabling DockKit accessory control of camera functions.
 

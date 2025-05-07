@@ -153,6 +153,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Handles the "Lock Exposure During Recording" setting: If enabled, it stores the previous exposure state before recording. If Shutter Priority is *not* active, it calls `ExposureService.setExposureLock(locked: true)`. If Shutter Priority *is* active, it calls `ExposureService.lockShutterPriorityExposureForRecording()` to initiate the SP-specific lock. On stop, it calls the corresponding unlock/restore methods (`ExposureService.unlockShutterPriorityExposureAfterRecording()` or standard restore logic). Logic is designed to prevent conflicts between the standard AE lock (`isExposureLocked` state) and the internal SP recording lock.
         *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
         *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
+        *   **New (2025-05-02):** Implements debounced and atomic shutter priority re-application after lens switches, with device readiness checks and ISO caching for SP mode to prevent exposure jumps and race conditions.
     *   **`CameraView` (`CameraView.swift`)**: 
         *   Main UI. Observes `CameraViewModel` and `DeviceOrientationViewModel`.
         *   Uses `@StateObject` to manage an instance of `AppLifecycleObserver`, ensuring its lifecycle is tied to the view.
@@ -183,6 +184,7 @@ This document provides a detailed overview of key classes, components, and their
                 *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
                 *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
                 *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true`
+            *   **New (2025-05-02):** All KVO and device property changes are now performed on a serial queue for thread safety. Supports initialISO parameter for SP mode to restore last ISO after lens switch.
     *   **`DockKitIntegration` (`DockKitIntegration.swift`)**:
         *   Extension to `CameraViewModel` implementing `CameraCaptureDelegate`.
         *   Handles DockKit-initiated camera actions:
@@ -216,3 +218,5 @@ This document provides a detailed overview of key classes, components, and their
         *   Clears interruption errors automatically when session resumes
         *   Properly coordinates with `AppLifecycleObserver` for background/foreground transitions
     *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
+    *   **Lens Switching**:
+        *   Lens switching now triggers a debounced, atomic re-application of shutter priority with device readiness checks and ISO caching for SP mode.
