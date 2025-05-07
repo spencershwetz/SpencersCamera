@@ -228,8 +228,9 @@ struct CameraView: View {
             Rectangle()
                 .stroke(Color.red, lineWidth: 4)
                 .aspectRatio(9.0/16.0, contentMode: .fit)
-                .scaleEffect(0.9 + 0.04) // Slightly larger than preview
-                .padding(.top, geometry.safeAreaInsets.top + 25 - 4) // Move up to frame preview
+                .scaleEffect(0.9)
+                .padding(.top, geometry.safeAreaInsets.top + 25 - 2) // Subtract half border width
+                .padding(-2) // Negative padding to hug the preview
                 .frame(maxWidth: .infinity)
                 .opacity(viewModel.isRecording ? 1 : 0)
                 .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)
