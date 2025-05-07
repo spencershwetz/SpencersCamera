@@ -383,6 +383,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private var shutterPriorityReapplyTask: Task<Void, Never>? = nil
     private var lastSPISO: Float? = nil // Cache last ISO for SP
 
+    @Published var isExposureUIFrozen: Bool = false // NEW: Freeze UI during lens switch/SP re-apply
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -1911,20 +1913,28 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
     
     func didUpdateCurrentLens(_ lens: CameraLens) {
         logger.debug("🔄 Delegate: didUpdateCurrentLens called with \(lens.rawValue)x")
-        // Update properties on the main thread
         DispatchQueue.main.async {
             self.currentLens = lens
-            self.lastLensSwitchTimestamp = Date() // Trigger preview update
+            self.lastLensSwitchTimestamp = Date()
             self.logger.debug("🔄 Delegate: Updated currentLens to \(lens.rawValue)x and lastLensSwitchTimestamp.")
-            // Debounce SP re-application
             self.cancelPendingShutterPriorityReapply()
             if self.isShutterPriorityEnabled {
-                self.logger.info("🔄 [didUpdateCurrentLens] Debounced SP re-apply after lens switch.")
-                self.shutterPriorityReapplyTask = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 200_000_000) // 200ms debounce
-                    await MainActor.run {
-                        self?.ensureShutterPriorityConsistency()
-                    }
+                // --- Freeze UI ---
+                self.isExposureUIFrozen = true
+                // --- Pre-calculate ISO/duration for new lens ---
+                if let device = self.device, let supportedRange = device.activeFormat.videoSupportedFrameRateRanges.first {
+                    let frameRate = supportedRange.maxFrameRate
+                    let targetDurationSeconds = 1.0 / (frameRate * 2.0)
+                    let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
+                    let lastISO = device.iso
+                    self.logger.info("[didUpdateCurrentLens] Pre-calc for SP: frameRate=\(frameRate), duration=\(targetDurationSeconds)s, ISO=\(lastISO)")
+                    self.exposureService.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
+                }
+                // --- Apply SP ASAP (no debounce, call synchronously) ---
+                self.ensureShutterPriorityConsistency()
+                // --- Unfreeze UI after short delay to allow SP to settle ---
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.isExposureUIFrozen = false
                 }
             } else if self.isExposureLocked {
                 self.logger.info("🔄 [didUpdateCurrentLens] Re-applying standard AE exposure lock after lens switch.")

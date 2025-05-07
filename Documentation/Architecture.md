@@ -169,3 +169,8 @@ The project is organized into the following main components:
     *   `CameraViewModel` observes notifications or directly uses `SettingsModel` state to configure services (e.g., `RecordingService` for bake-in LUT state).
 *   **Watch Connectivity**: 
     *   `CameraViewModel` acts as `WCSessionDelegate`
+
+- ExposureService and CameraViewModel now coordinate to minimize exposure flicker when switching lenses with Shutter Priority enabled by:
+  - Applying SP immediately after device switch
+  - Pre-calculating ISO/duration
+  - Freezing/unfreezing exposure UI during transition

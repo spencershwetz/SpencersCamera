@@ -204,4 +204,10 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
 *   **DockKit Integration**: Implemented as a separate actor service with conditional compilation (`canImport(DockKit)`) to maintain compatibility with simulators and older iOS versions. Uses delegate pattern for camera control to keep core camera logic independent of DockKit availability.
 
+## Exposure Flicker Minimization During Lens Switch (Shutter Priority)
+
+- Shutter Priority is now applied immediately after a new device is set and the session is running.
+- The target ISO and shutter duration for the new lens are pre-calculated and set as soon as possible.
+- The exposure UI is frozen during the transition and unfrozen after Shutter Priority is re-applied, minimizing visible flicker.
+
 *(This specification includes deeper implementation details.)*

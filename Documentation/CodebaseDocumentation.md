@@ -220,3 +220,11 @@ This document provides a detailed overview of key classes, components, and their
     *   Device discovery and switching handled by `CameraDeviceService` using `AVCaptureDevice.DiscoverySession`.
     *   **Lens Switching**:
         *   Lens switching now triggers a debounced, atomic re-application of shutter priority with device readiness checks and ISO caching for SP mode.
+*   **Exposure Flicker Minimization (Shutter Priority)**
+
+    When switching lenses with Shutter Priority enabled, the app now:
+    - Applies Shutter Priority immediately after the new device is set and the session is running
+    - Pre-calculates and sets the target ISO and shutter duration for the new lens as soon as possible
+    - Freezes the exposure UI during the transition to suppress flicker, unfreezing after Shutter Priority is re-applied
+
+    This minimizes visible exposure flicker for users during lens switches.

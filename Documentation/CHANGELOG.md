@@ -61,6 +61,11 @@ All notable changes to this project will be documented in this file.
     *   All KVO and device property changes for exposure are now performed on a serial queue for thread safety.
     *   Improved user experience and reliability when rapidly switching lenses or toggling Shutter Priority.
 
+*   Minimized exposure flicker when switching lenses with Shutter Priority enabled by:
+    - Applying Shutter Priority as soon as possible after lens switch
+    - Pre-calculating ISO/duration for the new lens
+    - Freezing exposure UI during transition and unfreezing after SP is re-applied
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
