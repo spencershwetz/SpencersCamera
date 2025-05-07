@@ -201,32 +201,40 @@ struct CameraView: View {
     // Helper function extracted to avoid duplication
     @ViewBuilder
     private func liveCameraPreview(geometry: GeometryProxy) -> some View {
-        // Keep CameraPreviewView always in the hierarchy
-        CameraPreviewView(
-            session: viewModel.session,
-            lutManager: viewModel.lutManager,
-            viewModel: viewModel,
-            onTap: { tapLocation, isLongPress in
-                lastTapLocation = tapLocation
-                let point = locationInPreview(tapLocation, geometry: geometry)
-                
-                if isLongPress {
-                    // Long press always sets focus and locks
-                    isFocusLocked = true
-                    focus(at: point, lock: true)
-                } else {
-                    // Regular tap always sets continuous auto-focus
-                    isFocusLocked = false
-                    focus(at: point, lock: false)
+        ZStack {
+            CameraPreviewView(
+                session: viewModel.session,
+                lutManager: viewModel.lutManager,
+                viewModel: viewModel,
+                onTap: { tapLocation, isLongPress in
+                    lastTapLocation = tapLocation
+                    let point = locationInPreview(tapLocation, geometry: geometry)
+                    if isLongPress {
+                        isFocusLocked = true
+                        focus(at: point, lock: true)
+                    } else {
+                        isFocusLocked = false
+                        focus(at: point, lock: false)
+                    }
                 }
-            }
-        )
-        .aspectRatio(9.0/16.0, contentMode: .fit)
-        .scaleEffect(0.9)
-        .clipped()
-        .padding(.top, geometry.safeAreaInsets.top + 10)
-        .frame(maxWidth: .infinity)
-        
+            )
+            .aspectRatio(9.0/16.0, contentMode: .fit)
+            .scaleEffect(0.9)
+            .clipped()
+            .padding(.top, geometry.safeAreaInsets.top + 25)
+            .frame(maxWidth: .infinity)
+
+            // Red recording border overlay, perfectly matching the preview
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.red, lineWidth: 4)
+                .aspectRatio(9.0/16.0, contentMode: .fit)
+                .scaleEffect(0.9)
+                .clipped()
+                .padding(.top, geometry.safeAreaInsets.top + 25)
+                .frame(maxWidth: .infinity)
+                .opacity(viewModel.isRecording ? 1 : 0)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)
+        }
         .overlay(
             focusSquare
         )
@@ -235,21 +243,15 @@ struct CameraView: View {
                 if settings.isEVBiasVisible {
                     VStack {
                         Spacer()
-                        
-                        // --- Use SimpleWheelPicker for Exposure Bias ---
                         VStack(spacing: 4) {
-                            // Display current EV value above the picker
                             Text(String(format: "%+.1f EV", viewModel.exposureBias))
                                 .font(.caption)
                                 .foregroundColor(.white)
                                 .padding(.top, 4)
-                            
-                            // Create a Binding<CGFloat> that converts to/from Binding<Float>
                             let exposureBiasBinding = Binding<CGFloat>(
                                 get: { CGFloat(viewModel.exposureBias) },
                                 set: { viewModel.exposureBias = Float($0) }
                             )
-                            
                             SimpleWheelPicker(
                                 config: .init(
                                     min: CGFloat(viewModel.minExposureBias),
@@ -268,37 +270,32 @@ struct CameraView: View {
                     }
                     .padding(.trailing, 10) 
                     .transition(.opacity) 
-                    .zIndex(200) // Ensure it appears above other overlays
+                    .zIndex(200)
                     .onChange(of: viewModel.exposureBias) { _, newValue in
                         viewModel.setExposureBias(newValue)
                     }
                 }
             }
             .animation(.easeInOut, value: settings.isEVBiasVisible),
-            alignment: .trailing // Align the overlay to the trailing edge
+            alignment: .trailing
         )
-        // Add swipe gesture to the preview area
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 30, coordinateSpace: .local)
                 .onEnded { value in
-                    // Detect vertical swipes primarily
                     let horizontalAmount = value.translation.width
                     let verticalAmount = value.translation.height
                     logger.debug("[SwipeGesture] Ended: H=\(horizontalAmount, format: .fixed(precision: 1)), V=\(verticalAmount, format: .fixed(precision: 1))")
-                    
-                    // Check if vertical movement is greater than horizontal movement
                     let isVerticalSwipe = abs(verticalAmount) > abs(horizontalAmount)
                     logger.debug("[SwipeGesture] Is Vertical Swipe? \(isVerticalSwipe)")
-                    
                     if isVerticalSwipe {
-                        if verticalAmount < -40 { // Swipe Up
+                        if verticalAmount < -40 {
                             logger.debug("[SwipeGesture] Detected Swipe Up. Showing overlays.")
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 settings.isEVBiasVisible = true
                                 settings.isDebugOverlayVisible = true
                             }
-                        } else if verticalAmount > 40 { // Swipe Down
+                        } else if verticalAmount > 40 {
                             logger.debug("[SwipeGesture] Detected Swipe Down. Hiding overlays.")
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 settings.isEVBiasVisible = false
@@ -321,19 +318,17 @@ struct CameraView: View {
                 }
                 .padding(.top, geometry.safeAreaInsets.top + 70)
                 .padding(.leading, 20)
-                .allowsHitTesting(false) // Ensure overlay doesn't interfere with gestures
+                .allowsHitTesting(false)
             }
         }
         .overlay {
-            // Overlay a placeholder or loading indicator if the session is not running
             if !viewModel.isSessionRunning {
                 ZStack {
-                    Color.black // Background for the placeholder text
+                    Color.black
                     VStack {
                         Text("Starting camera...")
                             .font(.headline)
                             .foregroundColor(.white)
-                        
                         if viewModel.status == .failed, let error = viewModel.error {
                             Text("Error: \(error.description)")
                                 .font(.subheadline)
@@ -342,7 +337,7 @@ struct CameraView: View {
                         }
                     }
                 }
-                .transition(.opacity) // Optional animation
+                .transition(.opacity)
             }
         }
     }
@@ -555,7 +550,7 @@ struct CameraView: View {
         // Account for the 0.9 scale effect and top padding
         let scaledWidth = previewFrame.width * 0.9
         let scaledHeight = previewFrame.height * 0.9
-        let topPadding = geometry.safeAreaInsets.top + 10
+        let topPadding = geometry.safeAreaInsets.top + 25
         print("📍 [CameraView.locationInPreview] Scaled dimensions - width: \(scaledWidth), height: \(scaledHeight), topPadding: \(topPadding)")
         
         // Calculate the actual preview bounds

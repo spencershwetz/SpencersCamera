@@ -12,3 +12,7 @@
 - **Persistence**: Uses `@AppStorage` with the key `"selectedFrameRate"`.
 - **Default Value**: `30.0` (fps)
 - **Usage**: This value is read by `CameraViewModel` to configure the `AVCaptureDevice` and `RecordingService` for the desired frame rate during video recording. 
+
+## Changelog
+
+- **2024-06-10**: Fixed the red recording border in CameraView to perfectly align with the camera preview by using a ZStack and matching all layout modifiers. No more misalignment on any device or orientation. 
