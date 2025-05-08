@@ -54,11 +54,18 @@ struct CameraPreviewView: UIViewRepresentable {
         // Store reference to parent for callback
         context.coordinator.onTap = onTap
         
+        // Set up volume button handler
+        viewModel.setPreviewView(mtkView)
+        
         return mtkView
     }
 
     func updateUIView(_ uiView: MTKView, context: Context) {
         // Only update if needed
+    }
+    
+    static func dismantleUIView(_ uiView: MTKView, coordinator: Coordinator) {
+        coordinator.parent.viewModel.removePreviewView()
     }
     
     func makeCoordinator() -> Coordinator {

@@ -77,6 +77,12 @@ All notable changes to this project will be documented in this file.
 
 *   Fixed: Stale camera session error alerts (e.g., "failed to start camera session") are now cleared as soon as the session starts successfully. Users will no longer see an error dialog after returning from the lock screen or background if the camera is running fine. This prevents incorrect error UI and improves user experience.
 
+*   Added: Volume button controls for camera capture using AVCaptureEventInteraction (iOS 17.2+):
+    *   Both volume up and volume down buttons can start/stop recording
+    *   Proper actor isolation for thread safety
+    *   Automatic cleanup when view is dismantled
+    *   Debounce protection to prevent rapid toggling
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
@@ -132,6 +138,8 @@ All notable changes to this project will be documented in this file.
     *   Improved lockShutterPriorityExposureForRecording to properly lock exposure values
     *   Enhanced unlockShutterPriorityExposureAfterRecording to restore Shutter Priority state
     *   Added proper state management for recording lock in ExposureService
+*   Fixed crash in Apple Log color space configuration by properly checking format support and using correct device properties
+*   Improved error handling for unsupported color space configurations
 
 ### Removed
 

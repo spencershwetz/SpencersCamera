@@ -25,6 +25,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Add property to track the view containing the camera preview
     weak var owningView: UIView?
     
+    // Add volume button handler
+    private var volumeButtonHandler: VolumeButtonHandler?
+    
     // Combine cancellables
     var cancellables = Set<AnyCancellable>()
     
@@ -950,8 +953,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func setCamera(_ device: AVCaptureDevice?) {
         Task {
-            _ = device?.localizedName ?? "nil" // Assign unused deviceName to _
-//            logger.trace("Setting camera device: \(deviceName)")
+            guard self.device != nil else { return }
             // ... other logic
         }
     }
@@ -1771,6 +1773,32 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private func cancelPendingShutterPriorityReapply() {
         shutterPriorityReapplyTask?.cancel()
         shutterPriorityReapplyTask = nil
+    }
+
+    @MainActor
+    func setPreviewView(_ view: UIView) {
+        owningView = view
+        if #available(iOS 17.2, *) {
+            // Create and attach volume button handler
+            Task { @MainActor in
+                volumeButtonHandler = VolumeButtonHandler(viewModel: self)
+                volumeButtonHandler?.attachToView(view)
+            }
+        }
+    }
+    
+    @MainActor
+    func removePreviewView() {
+        if #available(iOS 17.2, *) {
+            // Detach volume button handler
+            if let view = owningView {
+                Task { @MainActor in
+                    volumeButtonHandler?.detachFromView(view)
+                    volumeButtonHandler = nil
+                }
+            }
+        }
+        owningView = nil
     }
 }
 

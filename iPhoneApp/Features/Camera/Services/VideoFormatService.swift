@@ -459,14 +459,15 @@ class VideoFormatService {
 
             // Configure color space through device configuration
             logger.info("🎨 [configureAppleLog] Configuring Apple Log color space...")
-            guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
+            let supportedColorSpaces = selectedFormat.supportedColorSpaces
+            guard supportedColorSpaces.contains(.appleLog) else {
                 logger.error("❌ [configureAppleLog] Selected format does not support Apple Log color space")
                 throw CameraError.configurationFailed(message: "Selected format does not support Apple Log color space")
             }
             
             do {
                 try device.lockForConfiguration()
-                device.activeColorSpace = AVCaptureColorSpace.appleLog
+                device.activeColorSpace = .appleLog
                 device.unlockForConfiguration()
                 logger.info("✅ [configureAppleLog] Successfully configured Apple Log color space")
             } catch {
@@ -558,6 +559,12 @@ class VideoFormatService {
             
             // Explicitly set the color space to standard
             logger.info("🎨 [resetAppleLog] Setting activeColorSpace to standard...")
+            let supportedColorSpaces = selectedFormat.supportedColorSpaces
+            guard supportedColorSpaces.contains(.sRGB) else {
+                logger.error("❌ [resetAppleLog] Selected format does not support sRGB color space")
+                throw CameraError.configurationFailed(message: "Format does not support sRGB color space")
+            }
+            
             device.activeColorSpace = .sRGB
             
             // Verify the color space was reset
