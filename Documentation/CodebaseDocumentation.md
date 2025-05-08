@@ -228,3 +228,12 @@ This document provides a detailed overview of key classes, components, and their
     - Freezes the exposure UI during the transition to suppress flicker, unfreezing after Shutter Priority is re-applied
 
     This minimizes visible exposure flicker for users during lens switches.
+
+### Adjustment Controls Redesign (2025-05-08)
+- **ZoomSliderView (`ZoomSliderView.swift`)** now hosts four base buttons and dynamic menus:
+    - **Lens**: Buttons for 0.5× / 1× / 2× / 5×, device-aware.
+    - **Shutter**: Auto or 180° (Shutter Priority toggle).
+    - **ISO**: "Auto" toggle wired to `isAutoExposureEnabled`; Manual ISO wheel (`SimpleWheelPicker`) spanning `minISO…maxISO`.
+    - **WB**: "Auto" toggle wired to new `isWhiteBalanceAuto`; Kelvin wheel 2 500 K – 10 000 K.
+- Menus animate in above the control row and share EV-wheel haptics, alignment & bounce-free scroll behaviour.
+- Added `ExposureService.setAutoWhiteBalanceEnabled(_:)` and `CameraViewModel.setWhiteBalanceAuto(_:)` for WB automation.

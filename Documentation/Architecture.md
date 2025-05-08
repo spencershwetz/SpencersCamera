@@ -38,6 +38,12 @@ The application primarily follows the **MVVM (Model-View-ViewModel)** architectu
 *   **Models (`Struct`, `Enum`)**: Represent data structures (e.g., `CameraLens`, `CameraError`, `VideoAsset`, `SettingsModel`). Value types are preferred.
 *   **Services**: Encapsulate specific functionalities, often interacting with system frameworks (AVFoundation, Metal, Photos, WatchConnectivity, DockKit). They communicate back to ViewModels typically via delegate protocols or Combine publishers.
 *   **UI Components**: Reusable SwiftUI views like `SimpleWheelPicker` (handles its own state for smooth interaction, updates binding on scroll settle).
+*   **Adjustment Controls (2025-05-08)**:
+        * Replaces legacy lens button row with `ZoomSliderView` redesign.
+        * Base row now has four buttons: **Lens**, **Shutter**, **ISO**, **WB**.
+        * Selecting a button reveals a horizontal menu directly above:
+            * **Lens**: 0.5× / 1× / 2× / 5× buttons (filtered by `CameraLens.availableLenses()`).
+            * **Shutter**: Auto (disables SP) or 180° (enables SP via `toggleShutterPriority()`).
 
 ## Directory Structure
 

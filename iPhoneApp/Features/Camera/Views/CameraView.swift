@@ -71,7 +71,7 @@ struct CameraView: View {
                 
                 // Lens selection buttons
                 if !viewModel.availableLenses.isEmpty {
-                    ZoomSliderView(viewModel: viewModel, availableLenses: viewModel.availableLenses)
+                    ZoomSliderView(viewModel: viewModel)
                         .padding(.vertical, 10)
                         .background(Color.black)
                 }

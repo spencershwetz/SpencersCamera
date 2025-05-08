@@ -156,6 +156,15 @@ This document outlines the technical specifications and requirements for the Spe
         *   Transforms between UI and device coordinate spaces
         *   Accounts for device orientation and preview scaling
         *   Maintains accuracy across all device orientations
+*   **Adjustment Controls (Lens/Shutter/ISO/WB)**:
+    *   Base row with four buttons replaces legacy lens buttons.
+    *   Each button reveals a horizontal menu:
+        *   Lens buttons (0.5×, 1×, 2×, 5×).
+        *   Shutter options (Auto, 180°) toggling shutter priority.
+        *   ISO wheel (`SimpleWheelPicker`) with auto toggle.
+        *   Kelvin wheel (`SimpleWheelPicker`) with auto white-balance toggle (2500–10000 K).
+    *   Wheels inherit EV bias picker behaviour: view-aligned, haptic feedback, bounce-free.
+    *   Newly added `ExposureService.setAutoWhiteBalanceEnabled` supports WB automation.
 
 ## Technical Requirements & Dependencies
 

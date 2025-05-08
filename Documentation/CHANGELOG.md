@@ -104,6 +104,15 @@ All notable changes to this project will be documented in this file.
     *   Implemented two-step focus lock process (auto-focus then lock)
     *   Added visual lock indicator with SF Symbol
     *   Focus square remains visible when locked
+*   UI: Added new Adjustment Controls replacing lens buttons:
+    *   Four buttons (Lens, Shutter, ISO, WB) now appear where lens buttons were.
+    *   Tapping a button reveals a horizontal menu above:
+        *   Lens: 0.5×, 1×, 2×, 5× (device-dependent)
+        *   Shutter: Auto or 180° (Shutter Priority)
+        *   ISO: "Auto" toggle + swipeable ISO wheel (min → max)
+        *   WB: "Auto" toggle + swipeable Kelvin wheel (2500–10000 K)
+    *   ISO & WB wheels reuse SimpleWheelPicker for haptic, bounce-free scrolling.
+    *   Added manual ISO and Kelvin bindings to ExposureService; new auto white-balance support.
 
 ### Changed
 

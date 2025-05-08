@@ -1016,6 +1016,45 @@ class ExposureService: NSObject {
         let sumSquaredDiff = samples.reduce(0) { $0 + pow($1 - mean, 2) }
         return sumSquaredDiff / Float(samples.count)
     }
+
+    // MARK: - White Balance Auto Mode Handling
+    /// Enables or disables automatic white balance. When `enabled` is true the device white balance mode is set to
+    /// `.continuousAutoWhiteBalance` (if supported). When false, the mode is switched to `.locked` so that subsequent
+    /// manual temperature updates via `updateWhiteBalance(_:)` take effect.
+    /// The delegate is notified of the current temperature & tint after the change so that the UI stays in sync.
+    func setAutoWhiteBalanceEnabled(_ enabled: Bool) {
+        guard let device = device else {
+            logger.error("No camera device available – cannot change white-balance mode.")
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            if enabled {
+                if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    device.whiteBalanceMode = .continuousAutoWhiteBalance
+                    logger.info("Set white-balance mode to continuousAutoWhiteBalance")
+                } else {
+                    logger.warning("continuousAutoWhiteBalance not supported on current device")
+                }
+            } else {
+                if device.isWhiteBalanceModeSupported(.locked) {
+                    device.whiteBalanceMode = .locked
+                    logger.info("Set white-balance mode to locked for manual adjustment")
+                }
+            }
+            device.unlockForConfiguration()
+
+            // Notify delegate of the current WB state so UI can update immediately.
+            let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
+            DispatchQueue.main.async { [weak self] in
+                self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint)
+            }
+        } catch {
+            logger.error("Failed to change white-balance mode: \(error.localizedDescription)")
+            delegate?.didEncounterError(.configurationFailed)
+        }
+    }
 }
 
 // Add after class ExposureService: NSObject {

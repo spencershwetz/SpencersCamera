@@ -388,6 +388,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     @Published var isExposureUIFrozen: Bool = false // NEW: Freeze UI during lens switch/SP re-apply
 
+    @Published var isWhiteBalanceAuto: Bool = true
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -597,7 +599,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func updateWhiteBalance(_ temperature: Float) {
+        isWhiteBalanceAuto = false // Switching to manual WB
         exposureService.updateWhiteBalance(temperature)
+    }
+
+    /// Enables or disables automatic white-balance.
+    func setWhiteBalanceAuto(_ enabled: Bool) {
+        isWhiteBalanceAuto = enabled
+        exposureService.setAutoWhiteBalanceEnabled(enabled)
     }
     
     func updateISO(_ iso: Float) {
