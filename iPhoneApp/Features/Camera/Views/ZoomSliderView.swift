@@ -12,12 +12,19 @@ struct ZoomSliderView: View {
     
     // MARK: - Body
     var body: some View {
-        VStack(spacing: 8) {
+        // Replace VStack with ZStack + overlay to maintain stable layout
+        ZStack {
+            // Main buttons row
+            baseControls
+        }
+        .overlay(alignment: .top) {
+            // Show menu above the buttons when active
             if let activeMenu {
                 menuContent(for: activeMenu)
+                    .padding(.bottom, 8) // Space between menu and buttons
                     .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(10) // Ensure menu is above buttons
             }
-            baseControls
         }
         .animation(.easeInOut(duration: 0.25), value: activeMenu)
     }
@@ -56,15 +63,29 @@ struct ZoomSliderView: View {
     // MARK: - Menus
     @ViewBuilder
     private func menuContent(for type: MenuType) -> some View {
-        switch type {
-        case .lens:
-            lensMenu
-        case .shutter:
-            shutterMenu
-        case .iso:
-            isoMenu
-        case .wb:
-            wbMenu
+        VStack {
+            // Menu content in a fixed-size container with background
+            HStack {
+                Spacer(minLength: 0)
+                
+                switch type {
+                case .lens:
+                    lensMenu
+                case .shutter:
+                    shutterMenu
+                case .iso:
+                    isoMenu
+                case .wb:
+                    wbMenu
+                }
+                
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.8))
+            )
         }
     }
     

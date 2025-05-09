@@ -15,6 +15,8 @@ class MetalFrameProcessor {
     private var textureCache: CVMetalTextureCache?
     
     var lutTexture: MTLTexture? // Publicly settable LUT texture
+    private var outputPixelBufferPool: CVPixelBufferPool?
+    private var outputPoolAttributes: [String: Any]? // To check if pool needs recreation
 
     init?() {
         guard let defaultDevice = MTLCreateSystemDefaultDevice() else {
@@ -263,17 +265,42 @@ class MetalFrameProcessor {
         // --- Prepare Output Texture (Always BGRA) ---
         var outputPixelBuffer: CVPixelBuffer?
         // Ensure Metal compatibility for the output buffer
-        let outputAttributes: [String: Any] = [
+        let currentOutputAttributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: width,
             kCVPixelBufferHeightKey as String: height,
-            kCVPixelBufferIOSurfacePropertiesKey as String: [:], // Enable IOSurface backing
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as CFDictionary, // Enable IOSurface backing
             kCVPixelBufferMetalCompatibilityKey as String: true // Explicitly request Metal compatibility
         ]
 
-        var status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA, outputAttributes as CFDictionary, &outputPixelBuffer)
+        // Check if pool needs to be (re)created
+        if outputPixelBufferPool == nil || !NSDictionary(dictionary: currentOutputAttributes).isEqual(to: outputPoolAttributes ?? [:]) {
+            logger.info("Creating or recreating CVPixelBufferPool for output. Width: \(width), Height: \(height)")
+            outputPixelBufferPool = nil // Release old pool if any
+            var pool: CVPixelBufferPool?
+            // Add a minimum buffer count, e.g., 3, for smoother operation
+            let poolAttributes = [kCVPixelBufferPoolMinimumBufferCountKey as String: 3] as CFDictionary
+            let pixelBufferAttributes = currentOutputAttributes as CFDictionary
+            
+            let status = CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttributes, pixelBufferAttributes, &pool)
+            if status != kCVReturnSuccess {
+                logger.error("Failed to create CVPixelBufferPool: \(status)")
+                CVMetalTextureCacheFlush(cache, 0)
+                return nil
+            }
+            outputPixelBufferPool = pool
+            outputPoolAttributes = currentOutputAttributes
+        }
+        
+        guard let pool = outputPixelBufferPool else {
+            logger.error("Output pixel buffer pool is nil after attempting creation.")
+            CVMetalTextureCacheFlush(cache, 0)
+            return nil
+        }
+
+        var status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outputPixelBuffer)
         guard status == kCVReturnSuccess, let outPixelBuffer = outputPixelBuffer else {
-             logger.error("Failed to create output BGRA pixel buffer: \(status)")
+             logger.error("Failed to create output BGRA pixel buffer from pool: \(status)")
              CVMetalTextureCacheFlush(cache, 0)
              return nil
         }
