@@ -80,7 +80,7 @@ struct SimpleWheelPicker: View {
             let horizontalPadding = size.width / 2
             
             ScrollView(.horizontal) {
-                HStack(spacing: config.spacing) {
+                LazyHStack(spacing: config.spacing) {
                     ForEach(0...totalNumberOfSteps, id: \.self) { index in
                         // Determine if this is a major tick (representing a whole number or significant fraction)
                         // A major tick occurs every `config.stepsPerUnit` steps.

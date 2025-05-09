@@ -12,19 +12,18 @@ struct ZoomSliderView: View {
     
     // MARK: - Body
     var body: some View {
-        // Replace VStack with ZStack + overlay to maintain stable layout
-        ZStack {
-            // Main buttons row
-            baseControls
-        }
-        .overlay(alignment: .top) {
+        // Replace ZStack with VStack and manage menu visibility directly
+        VStack(spacing: 0) { // Added spacing: 0, can adjust if needed
             // Show menu above the buttons when active
             if let activeMenu {
                 menuContent(for: activeMenu)
                     .padding(.bottom, 8) // Space between menu and buttons
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(10) // Ensure menu is above buttons
+                    .transition(.move(edge: .bottom).combined(with: .opacity)) // Adjusted transition edge
+                    .zIndex(10) // Keep zIndex in case of overlapping animations
             }
+
+            // Main buttons row
+            baseControls
         }
         .animation(.easeInOut(duration: 0.25), value: activeMenu)
     }
@@ -178,10 +177,10 @@ struct ZoomSliderView: View {
     
     private var wbWheelConfig: SimpleWheelPicker.Config {
         SimpleWheelPicker.Config(
-            min: 2500,
-            max: 10000,
-            stepsPerUnit: 10, // 10 steps per 1K -> 100 K increments
-            spacing: 6,
+            min: 25, // Represents 2500K
+            max: 100, // Represents 10000K
+            stepsPerUnit: 1, // 1 step per 100K unit
+            spacing: 8, // Increased spacing a bit due to fewer ticks
             showsText: true
         )
     }
@@ -197,9 +196,9 @@ struct ZoomSliderView: View {
     
     private var wbBinding: Binding<CGFloat> {
         Binding<CGFloat>(
-            get: { CGFloat(viewModel.whiteBalance) },
-            set: { newVal in
-                viewModel.updateWhiteBalance(Float(newVal))
+            get: { CGFloat(viewModel.whiteBalance / 100.0) }, // Divide by 100
+            set: { newValInHundredKelvinUnits in
+                viewModel.updateWhiteBalance(Float(newValInHundredKelvinUnits * 100.0)) // Multiply by 100
             }
         )
     }

@@ -609,8 +609,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         exposureService.setAutoWhiteBalanceEnabled(enabled)
     }
     
-    func updateISO(_ iso: Float) {
-        exposureService.updateISO(iso)
+    func updateISO(_ isoValue: Float) {
+        // If auto exposure is on, trying to set ISO manually should turn it off.
+        if self.isAutoExposureEnabled {
+            self.isAutoExposureEnabled = false
+            logger.info("ISO updated manually, disabling isAutoExposureEnabled.")
+        }
+        exposureService.updateISO(isoValue)
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
@@ -1150,6 +1155,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 
     private func pollCurrentWhiteBalance() {
+        guard self.isWhiteBalanceAuto else {
+            // If not in auto WB mode, don't let polling override manual settings.
+            // logger.trace("WB Poll: Manual WB mode active, skipping poll update.") // Optional: for debugging
+            return
+        }
+
         guard let currentTemperature = exposureService.getCurrentWhiteBalanceTemperature() else {
             // logger.trace("WB Poll: Exposure service returned nil, skipping update.")
             return
@@ -1887,17 +1898,62 @@ extension CameraViewModel: CameraSetupServiceDelegate {
 // MARK: - ExposureServiceDelegate
 
 extension CameraViewModel: ExposureServiceDelegate {
-    func didUpdateWhiteBalance(_ temperature: Float, tint: Float) {
-        // Log entry
-        self.logger.debug("[TEMP DEBUG] ViewModel Delegate: didUpdateWhiteBalance Entered. Temp: \(temperature), Tint: \(tint)")
-        self.whiteBalance = temperature
-        self.currentTint = tint
+    func didUpdateWhiteBalance(_ temperatureFromDevice: Float, tint: Float) {
+        DispatchQueue.main.async {
+            self.logger.debug("didUpdateWhiteBalance: Device Temp=\(temperatureFromDevice), Tint=\(tint). AutoWB=\(self.isWhiteBalanceAuto)")
+
+            // Always update tint as it's coupled and not directly set by a separate picker here
+            if abs(self.currentTint - tint) > 0.01 { // Only update if meaningfully different
+                 self.currentTint = tint
+            }
+
+            if self.isWhiteBalanceAuto {
+                // Auto WB mode: Device is authoritative.
+                let tolerance: Float = 1.0 // Kelvin
+                if abs(self.whiteBalance - temperatureFromDevice) > tolerance {
+                    self.whiteBalance = temperatureFromDevice
+                    self.logger.debug("didUpdateWhiteBalance (Auto Mode): Updated self.whiteBalance to \(temperatureFromDevice)")
+                }
+            } else {
+                // Manual WB mode: Picker is trying to set the value.
+                // Avoid fighting the picker over minor discrepancies from KVO.
+                let tolerance: Float = 10.0 // Kelvin - allow larger tolerance for manual mode feedback
+                if abs(self.whiteBalance - temperatureFromDevice) > tolerance {
+                    // If device value is significantly different, update UI to reflect reality.
+                    self.whiteBalance = temperatureFromDevice
+                    self.logger.debug("didUpdateWhiteBalance (Manual Mode): Device temp \(temperatureFromDevice) significantly different from target \(self.whiteBalance). Updated self.whiteBalance.")
+                }
+            }
+        }
     }
     
-    func didUpdateISO(_ iso: Float) {
+    func didUpdateISO(_ isoFromDevice: Float) {
         DispatchQueue.main.async {
-            // self.logger.debug("[ViewModel Delegate] didUpdateISO called with: \(iso)") // REMOVED
-            self.iso = iso
+            if self.isAutoExposureEnabled {
+                // If auto exposure is enabled, the device is driving the ISO, so update our state.
+                if abs(self.iso - isoFromDevice) > 0.01 { // Update only if meaningfully different
+                    self.iso = isoFromDevice
+                    self.logger.debug("didUpdateISO (Auto Mode): Updated self.iso to \(isoFromDevice) from device.")
+                }
+            } else {
+                // Manual ISO mode (isAutoExposureEnabled is false)
+                // This means the user is controlling ISO, likely via SimpleWheelPicker.
+                // We should be careful not to fight with the picker.
+                let tolerance: Float = 0.5 // Tolerance for ISO comparison
+
+                if abs(self.iso - isoFromDevice) > tolerance {
+                    // The device ISO is significantly different from our target manual ISO.
+                    // This could happen if the device couldn't achieve the target.
+                    // Update self.iso to reflect reality; this might make the picker adjust.
+                    self.logger.debug("didUpdateISO (Manual Mode): Device ISO \(isoFromDevice) is significantly different from target \(self.iso). Updating self.iso.")
+                    self.iso = isoFromDevice
+                } else {
+                    // Device ISO is close enough to our target. Don't update self.iso.
+                    // This prevents self.iso from being jittery due to minor KVO fluctuations
+                    // if self.iso was recently set by the picker.
+                    self.logger.debug("didUpdateISO (Manual Mode): Device ISO \(isoFromDevice) is close to target \(self.iso). No update to self.iso.")
+                }
+            }
         }
     }
     
