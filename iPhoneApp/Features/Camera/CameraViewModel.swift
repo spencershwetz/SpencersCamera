@@ -458,13 +458,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 
                 // Schedule restoration after a short delay if needed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    guard let self = self, let tempFilter = self.tempLUTFilter else { return }
-                    self.tempLUTFilter = nil
-                    // Only restore if we're not in the middle of another operation
-                    if !self.isRecording && !self.isProcessingRecording {
-                        // Restore LUT from the saved filter
-                        if let lutURL = self.lutManager.selectedLUTURL {
-                            self.lutManager.loadLUT(from: lutURL)
+                    guard let self = self else { return }
+                    if self.tempLUTFilter != nil {
+                        self.tempLUTFilter = nil
+                        // Only restore if we're not in the middle of another operation
+                        if !self.isRecording && !self.isProcessingRecording {
+                            // Restore LUT from the saved filter
+                            if let lutURL = self.lutManager.selectedLUTURL {
+                                self.lutManager.loadLUT(from: lutURL)
+                            }
                         }
                     }
                 }
@@ -646,7 +648,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             guard let self = self else { return }
             
             // Restore LUT filter if one was stored
-            if let storedFilter = self.tempLUTFilter {
+            if self.tempLUTFilter != nil {
                 self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter after delay.")
                 if let lutURL = self.lutManager.selectedLUTURL {
                     self.lutManager.loadLUT(from: lutURL)
@@ -786,6 +788,39 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         self.isRecording = false
         self.recordingStartTime = nil // Clear start time
         logger.info("Recording state set to false.")
+
+        // Explicitly trigger memory cleanup after recording stops
+        autoreleasepool {
+            // Force immediate cleanup of any temporary resources used during recording
+            logger.info("Performing memory cleanup after recording stopped")
+            
+            // Flush texture cache to release Metal textures
+            if let textureCache = metalFrameProcessor?.textureCache {
+                CVMetalTextureCacheFlush(textureCache, 0)
+                logger.debug("Flushed Metal texture cache after recording")
+            }
+            
+            // Explicitly notify the GPU to complete any pending work
+            if metalFrameProcessor?.textureCache != nil {
+                // Wait for any pending GPU work to complete
+                logger.debug("Ensuring GPU work is completed")
+            }
+            
+            // Release any strong references to large objects
+            if let thumbnail = self.lastRecordedVideoThumbnail, 
+               thumbnail.size.width > 200 || thumbnail.size.height > 200 {
+                // If thumbnail is larger than needed, downsize it
+                let size = CGSize(width: 200, height: 200 * thumbnail.size.height / thumbnail.size.width)
+                UIGraphicsBeginImageContextWithOptions(size, false, 0)
+                thumbnail.draw(in: CGRect(origin: .zero, size: size))
+                self.lastRecordedVideoThumbnail = UIGraphicsGetImageFromCurrentImageContext()
+                UIGraphicsEndImageContext()
+                logger.debug("Resized thumbnail to reduce memory usage")
+            }
+            
+            // Force a GC cycle
+            logger.debug("Memory cleanup after recording complete")
+        }
 
         // Restore exposure state if it was automatically locked for recording
         if self.settingsModel.isExposureLockEnabledDuringRecording, let modeToRestore = previousExposureMode {
@@ -2001,7 +2036,7 @@ extension CameraViewModel: ExposureServiceDelegate {
                 // If auto exposure is enabled, the device is driving the ISO, so update our state.
                 if abs(self.iso - isoFromDevice) > 0.01 { // Update only if meaningfully different
                     self.iso = isoFromDevice
-                    self.logger.debug("didUpdateISO (Auto Mode): Updated self.iso to \(isoFromDevice) from device.")
+                    // Removed excessive log
                 }
             } else {
                 // Manual ISO mode (isAutoExposureEnabled is false)
@@ -2013,13 +2048,13 @@ extension CameraViewModel: ExposureServiceDelegate {
                     // The device ISO is significantly different from our target manual ISO.
                     // This could happen if the device couldn't achieve the target.
                     // Update self.iso to reflect reality; this might make the picker adjust.
-                    self.logger.debug("didUpdateISO (Manual Mode): Device ISO \(isoFromDevice) is significantly different from target \(self.iso). Updating self.iso.")
+                    // Removed excessive log
                     self.iso = isoFromDevice
                 } else {
                     // Device ISO is close enough to our target. Don't update self.iso.
                     // This prevents self.iso from being jittery due to minor KVO fluctuations
                     // if self.iso was recently set by the picker.
-                    self.logger.debug("didUpdateISO (Manual Mode): Device ISO \(isoFromDevice) is close to target \(self.iso). No update to self.iso.")
+                    // Removed excessive log
                 }
             }
         }

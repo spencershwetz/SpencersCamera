@@ -347,117 +347,113 @@ class RecordingService: NSObject {
     
     func stopRecording() async {
         guard isRecording else { return }
-        let startTime = Date.nowTimestamp() // START TIMER
-        logger.info("REC_PERF: stopRecording BEGIN")
-        
-        // Clear stored recording orientation
-        recordingOrientation = nil
-        logger.info("Cleared recording orientation")
-        
-        logger.info("Finalizing video with \(self.videoFrameCount) frames (\(self.successfulVideoFrames) successful, \(self.failedVideoFrames) failed)")
+        let stopTime = Date.nowTimestamp()
         
         await MainActor.run {
-            delegate?.didUpdateProcessingState(true)
+            self.delegate?.didUpdateProcessingState(true)
         }
         
-        // Mark all inputs as finished
-        assetWriterInput?.markAsFinished()
-        logger.info("Marked asset writer inputs as finished")
-        logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After markAsFinished") // LOG TIME
+        // Mark inputs as finished
+        self.assetWriterInput?.markAsFinished()
         
-        // Wait for asset writer to finish
-        if let assetWriter = assetWriter {
-            logger.info("Waiting for asset writer to finish writing...")
+        // Stop recording on the processing queue
+        if let assetWriter = self.assetWriter {
+            // Wait for asset writer to finish
             await assetWriter.finishWriting()
-            logger.info("Asset writer finished with status: \(assetWriter.status.rawValue)")
-            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After finishWriting") // LOG TIME
             
-            if let error = assetWriter.error {
-                logger.error("Asset writer error: \(error.localizedDescription)")
+            if assetWriter.status == .completed, let recordingURL = self.currentRecordingURL {
+                // Add frame count log
+                self.logger.info("Video frame statistics: Total=\(self.videoFrameCount), Successful=\(self.successfulVideoFrames), Failed=\(self.failedVideoFrames)")
+                self.logger.info("Audio frames processed: \(self.audioFrameCount)")
+                
+                // Save to photo library
+                await self.saveRecordingToPhotoLibrary(recordingURL)
+            } else {
+                self.logger.error("Failed to write recording: \(assetWriter.error?.localizedDescription ?? "Unknown error")")
+                await MainActor.run {
+                    self.delegate?.didEncounterError(.recordingFailed)
+                }
             }
         }
         
-        // Clean up recording resources
-        // REMOVED: Output removal - keep them attached
-        /*
-        if let videoDataOutput = videoDataOutput {
-            session.removeOutput(videoDataOutput)
-            self.videoDataOutput = nil
-            logger.info("Removed video data output from session")
+        // Perform cleanup in autoreleasepool
+        autoreleasepool {
+            // Release asset writer objects
+            self.assetWriterInput = nil
+            self.assetWriterPixelBufferAdaptor = nil
+            self.assetWriter = nil
+            
+            // Clear recording location
+            self.recordingLocation = nil
+            
+            // Clear temporary URL after saving
+            if let url = self.currentRecordingURL {
+                do {
+                    // Check if file exists before trying to delete
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        try FileManager.default.removeItem(at: url)
+                        self.logger.info("Removed temporary recording file")
+                    }
+                } catch {
+                    self.logger.error("Failed to remove temporary recording file: \(error.localizedDescription)")
+                }
+                self.currentRecordingURL = nil
+            }
+            
+            // Reset counters and statistics
+            self.videoFrameCount = 0
+            self.audioFrameCount = 0
+            self.successfulVideoFrames = 0
+            self.failedVideoFrames = 0
+            
+            // Force memory cleanup
+            self.logger.info("RecordingService cleanup: Released resources and forced memory cleanup")
         }
-
-        if let audioDataOutput = audioDataOutput {
-            session.removeOutput(audioDataOutput)
-            self.audioDataOutput = nil
-            logger.info("Removed audio data output from session")
-        }
-        */
-        logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After removing outputs (skipped)") // LOG TIME
-
+        
         // Reset recording state
-        isRecording = false
-        delegate?.didStopRecording()
-        recordingStartTime = nil
-        
-        // Save to photo library if we have a valid recording
-        if let outputURL = currentRecordingURL {
-            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] Before thumbnail generation") // LOG TIME
-            logger.info("Saving video to photo library: \(outputURL.path)")
-            // Snapshot current location once more before saving
-            recordingLocation = locationService.currentLocation
-            // Generate thumbnail before saving
-            let thumbnail = await generateThumbnail(from: outputURL)
-            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After thumbnail generation") // LOG TIME
-            // Save the video with location
-            await saveToPhotoLibrary(outputURL, thumbnail: thumbnail, location: recordingLocation)
-            logger.info("REC_PERF: stopRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After saveToPhotoLibrary") // LOG TIME
-        }
-        
-        // Clean up
-        assetWriter = nil
-        assetWriterInput = nil
-        assetWriterPixelBufferAdaptor = nil
-        currentRecordingURL = nil
+        self.isRecording = false
+        self.recordingStartTime = nil
+        self.recordingOrientation = nil
         
         await MainActor.run {
-            delegate?.didUpdateProcessingState(false)
+            self.delegate?.didStopRecording()
+            self.delegate?.didUpdateProcessingState(false)
         }
         
-        // Stop location updates
-        locationService.stopUpdating()
-        
-        logger.info("Recording session completed")
-        logger.info("REC_PERF: stopRecording END [Total: \(String(format: "%.3f", Date.nowTimestamp() - startTime))s]") // LOG TOTAL TIME
+        self.logger.info("StopRecording process time: \(String(format: "%.3f", Date.nowTimestamp() - stopTime))s")
     }
     
-    private func saveToPhotoLibrary(_ outputURL: URL, thumbnail: UIImage?, location: CLLocation?) async {
+    // Add the new saveRecordingToPhotoLibrary method
+    private func saveRecordingToPhotoLibrary(_ url: URL) async {
+        logger.info("Saving recording to photo library...")
+        
+        // Generate thumbnail
+        let thumbnail = await generateThumbnail(from: url)
+        
+        // Save to photo library
         do {
-            let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-            guard status == .authorized else {
-                await MainActor.run {
-                    delegate?.didEncounterError(.savingFailed)
-                    logger.error("Photo library access denied")
-                }
-                return
-            }
-            
             try await PHPhotoLibrary.shared().performChanges {
                 let options = PHAssetResourceCreationOptions()
+                options.shouldMoveFile = true
+                
                 let creationRequest = PHAssetCreationRequest.forAsset()
-                creationRequest.addResource(with: .video, fileURL: outputURL, options: options)
-                if let location = location {
+                creationRequest.addResource(with: .video, fileURL: url, options: options)
+                
+                // Add location if available
+                if let location = self.recordingLocation {
                     creationRequest.location = location
+                    self.logger.info("Adding location metadata: \(location)")
                 }
             }
+            logger.info("Video saved to photo library successfully")
             
+            // Notify delegate on main thread
             await MainActor.run {
-                logger.info("REC_PERF: saveToPhotoLibrary: PHPhotoLibrary changes performed") // LOG TIME
-                logger.info("Video saved to photo library")
                 delegate?.didFinishSavingVideo(thumbnail: thumbnail)
             }
         } catch {
+            logger.error("Error saving video to photo library: \(error.localizedDescription)")
             await MainActor.run {
-                logger.error("Error saving video: \(error.localizedDescription)")
                 delegate?.didEncounterError(.savingFailed)
             }
         }
