@@ -12,7 +12,12 @@ class MetalFrameProcessor {
     private let commandQueue: MTLCommandQueue
     private var computePipelineStateRGB: MTLComputePipelineState?
     private var computePipelineStateYUV: MTLComputePipelineState?
-    private var textureCache: CVMetalTextureCache?
+    private var _textureCache: CVMetalTextureCache?
+    
+    // Add public access to texture cache for management
+    var textureCache: CVMetalTextureCache? {
+        return _textureCache
+    }
     
     var lutTexture: MTLTexture? // Publicly settable LUT texture
     private var outputPixelBufferPool: CVPixelBufferPool?
@@ -37,7 +42,7 @@ class MetalFrameProcessor {
             logger.error("Failed to create Metal texture cache.")
             return nil
         }
-        textureCache = cache
+        _textureCache = cache
         
         // Load the compute kernels
         do {
@@ -79,11 +84,14 @@ class MetalFrameProcessor {
         guard lutTexture != nil || bakeInLUT else {
             return nil // Nothing to do – let caller use the original pixel buffer
         }
-        guard let cache = textureCache else {
+        guard let cache = _textureCache else {
             logger.error("Texture cache is not available.")
             return nil
         }
 
+        // Flush the cache at the beginning of each frame processing to release previous textures
+        CVMetalTextureCacheFlush(cache, 0)
+        
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
         let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
@@ -375,6 +383,10 @@ class MetalFrameProcessor {
             return nil
         }
 
+        // Manually release textures after usage
+        inputTextureY = nil
+        inputTextureCbCr = nil
+        
         // Flush the cache before returning the processed buffer
         CVMetalTextureCacheFlush(cache, 0)
 
@@ -388,10 +400,10 @@ class MetalFrameProcessor {
 
     deinit {
         logger.info("MetalFrameProcessor DEINIT")
-        if let cache = textureCache {
+        if let cache = _textureCache {
             CVMetalTextureCacheFlush(cache, 0)
             logger.info("Flushed CVMetalTextureCache in MetalFrameProcessor deinit.")
-            textureCache = nil // Release the cache object itself
+            _textureCache = nil // Release the cache object itself
         }
         outputPixelBufferPool = nil // Release the pool
         logger.info("MetalFrameProcessor deinitialization complete.")

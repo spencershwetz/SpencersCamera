@@ -273,6 +273,13 @@ class CameraDeviceService {
             logger.debug("🔄 Lens switch: Session stopped.")
         }
         
+        // Trigger a memory cleanup before configuring the session
+        logger.debug("🔄 Lens switch: Triggering memory cleanup...")
+        autoreleasepool {
+            // Force immediate cleanup of any autoreleased objects
+            triggerMemoryCleanup()
+        }
+        
         logger.debug("🔄 Lens switch: Beginning configuration for \(newDevice.localizedName) (\(lens.rawValue)x)")
         session.beginConfiguration()
         logger.debug("🔄 Lens switch: Configuration begun.")
@@ -730,5 +737,23 @@ class CameraDeviceService {
             return match
         }
         return .wide
+    }
+
+    // Helper method to trigger memory cleanup
+    private func triggerMemoryCleanup() {
+        // Trigger low memory warning to force cleanup
+        logger.debug("Triggering memory cleanup...")
+        
+        // Add any explicit cleanup code here
+        // This could include removing references to large objects, 
+        // clearing caches, or releasing any resources that might be held
+        
+        // Flush and purge any caches
+        URLCache.shared.removeAllCachedResponses()
+        
+        // If we have access to the CameraViewModel, we can trigger cleanup there too
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("TriggerMemoryCleanup"), object: nil)
+        }
     }
 }

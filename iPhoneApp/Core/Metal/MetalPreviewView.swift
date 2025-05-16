@@ -54,6 +54,9 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     // Track previously bound LUT texture to reduce logging
     private var previouslyBoundLUTTexture: MTLTexture?
     
+    // Frame counter for texture cache management
+    private var frameCounter = 0
+    
     init(mtkView: MTKView, lutManager: LUTManager) {
         self.lutManager = lutManager
         super.init()
@@ -174,9 +177,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             }
             
             let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+            // Always flush the texture cache when the format changes
             if pixelFormat != self.currentPixelFormat {
                 CVMetalTextureCacheFlush(self.textureCache, 0)
                 self.currentPixelFormat = pixelFormat
+            } else {
+                // Periodically flush cache even when format doesn't change (every 30 frames)
+                self.frameCounter += 1
+                if self.frameCounter >= 30 {
+                    CVMetalTextureCacheFlush(self.textureCache, 0)
+                    self.frameCounter = 0
+                }
             }
             
             // Lock the pixel buffer for reading

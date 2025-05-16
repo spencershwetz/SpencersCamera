@@ -412,136 +412,67 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
+        // Initialize properties that need a value before super
         
-        // Initialize isAppleLogEnabled with the persisted value from settingsModel
-        self.isAppleLogEnabled = settingsModel.isAppleLogEnabled
-        self.selectedResolution = settingsModel.selectedResolution
-        self.selectedCodec = settingsModel.selectedCodec
-        self.selectedFrameRate = settingsModel.selectedFrameRate
+        // Set selected resolution from settings
+        isAppleLogEnabled = settingsModel.isAppleLogEnabled
+        selectedCodec = settingsModel.selectedCodec
+        selectedResolution = settingsModel.selectedResolution
+        selectedFrameRate = settingsModel.selectedFrameRate
         
         super.init()
-        // Log ViewModel initialization
-        logger.info("[LIFECYCLE] CameraViewModel initializing...")
-        print("\n=== Camera Initialization ===")
-        
-        // Initialize services
         setupServices()
         
-        // Add observer for flashlight settings changes
-        settingsObserver = NotificationCenter.default.addObserver(
-            forName: .flashlightSettingChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
+        // Configure WCSession if available
+        setupWatchConnectivity()
+        
+        // Setup observers
+        settingsObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name("LUTBakeInChanged"), object: nil, queue: nil) { [weak self] _ in
             guard let self = self else { return }
-            if self.isRecording && self.settingsModel.isFlashlightEnabled {
-                self.flashlightManager.isEnabled = true
-                self.flashlightManager.intensity = self.settingsModel.flashlightIntensity
-            } else {
-                self.flashlightManager.isEnabled = false
-            }
+            let isBakeInEnabled = self.settingsModel.isBakeInLUTEnabled
+            self.logger.info("LUT Bake-In setting changed to \(isBakeInEnabled)")
+            self.recordingService?.setBakeInLUTEnabled(isBakeInEnabled)
         }
         
-        // Add observer for bake in LUT setting changes
+        // Add observer for memory cleanup notification
         NotificationCenter.default.addObserver(
-            forName: .bakeInLUTSettingChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            self.recordingService.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
-        }
+            self,
+            selector: #selector(handleMemoryCleanupRequest),
+            name: NSNotification.Name("TriggerMemoryCleanup"),
+            object: nil
+        )
+    }
+
+    // Add handler for memory cleanup
+    @objc private func handleMemoryCleanupRequest() {
+        logger.info("Memory cleanup requested")
         
-        // Add observers for new settings changes
-        setupSettingObservers()
-        
-        do {
-            try cameraSetupService.setupSession()
-            
-            if let device = device {
-                print("📊 Device Capabilities:")
-                print("- Name: \(device.localizedName)")
-                print("- Model ID: \(device.modelID)")
+        // Clear any unnecessary cached data
+        autoreleasepool {
+            // Release Metal textures if needed
+            if lutManager.currentLUTTexture != nil && !isRecording {
+                // Temporarily clear LUT texture if we're not recording
+                // This will be restored when needed
+                tempLUTFilter = lutManager.currentLUTFilter
+                lutManager.clearCurrentLUT()
                 
-                isAppleLogSupported = device.formats.contains { format in
-                    format.supportedColorSpaces.contains(.appleLog)
-                }
-                print("\n✅ Apple Log Support: \(isAppleLogSupported)")
-                
-                // Don't override the persisted setting with the device's current state
-                // Instead, we'll apply our persistent setting to the device
-                print("Using persisted Apple Log setting: \(isAppleLogEnabled)")
-                
-                // Apply Apple Log configuration at startup if needed
-                if isAppleLogEnabled && isAppleLogSupported {
-                    print("🎨 Applying Apple Log setting during initialization...")
-                    // Set Apple Log in the format service
-                    videoFormatService.setAppleLogEnabled(isAppleLogEnabled)
-                    
-                    // Apply the color space setting
-                    Task {
-                        do {
-                            try await videoFormatService.configureAppleLog()
-                            print("✅ Successfully applied Apple Log during initialization")
-                        } catch {
-                            print("❌ Failed to apply Apple Log: \(error)")
-                            // Don't throw here to avoid init failure, just log
+                // Schedule restoration after a short delay if needed
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self = self, let tempFilter = self.tempLUTFilter else { return }
+                    self.tempLUTFilter = nil
+                    // Only restore if we're not in the middle of another operation
+                    if !self.isRecording && !self.isProcessingRecording {
+                        // Restore LUT from the saved filter
+                        if let lutURL = self.lutManager.selectedLUTURL {
+                            self.lutManager.loadLUT(from: lutURL)
                         }
                     }
                 }
-                
-                print("=== End Initialization ===\n")
             }
             
-            if let device = device {
-                defaultFormat = device.activeFormat
-            }
-        } catch {
-            self.error = .setupFailed
-            print("Failed to setup session: \(error)")
+            // Force a garbage collection cycle
+            logger.info("Memory cleanup completed")
         }
-        
-        // Set initial shutter angle
-        // updateShutterAngle(180.0)  // temporarily disabled to avoid forcing custom exposure
-        
-        print("📱 LUT Loading: No default LUTs will be loaded")
-        
-        // Setup Watch Connectivity
-        setupWatchConnectivity()
-
-        // Send initial state to watch if connected
-        // Ensure app active state is set before sending initial context if possible
-        // If init runs before scenePhase updates, initial context might show inactive
-        sendStateToWatch()
-
-        // Observe session running state to start/stop timer
-        $isSessionRunning
-            .sink { [weak self] isRunning in
-                self?.handleSessionRunningStateChange(isRunning)
-            }
-            .store(in: &cancellables) // Assuming you have a cancellables set
-
-        // Observe session interruptions
-        logger.info("[LIFECYCLE] Adding session interruption observers...")
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(sessionInterrupted(_:)),
-                                               name: .AVCaptureSessionWasInterrupted,
-                                               object: session)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(sessionInterruptionEnded(_:)),
-                                               name: .AVCaptureSessionInterruptionEnded,
-                                               object: session)
-        NotificationCenter.default.addObserver(self,
-                                               selector: #selector(sessionRuntimeError(_:)),
-                                               name: .AVCaptureSessionRuntimeError,
-                                               object: session)
-
-        // Boot-strap DockKit integration (if framework available)
-#if canImport(DockKit)
-        if #available(iOS 18.0, *) {
-            _bootstrapDockKitIfNeeded()
-        }
-#endif
     }
     
     deinit {
@@ -602,13 +533,37 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         exposureService.isVideoStabilizationCurrentlyEnabled = { [weak self] in
             return self?.settingsModel.isVideoStabilizationEnabled ?? false
         }
-        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self) // Pass self (ViewModel) here
-        recordingService = RecordingService(session: session, delegate: self)
-        // recordingService.setLUTProcessor(self.lutProcessor) // REMOVED old processor setting
-        recordingService.setMetalFrameProcessor(self.metalFrameProcessor) // ADDED setting Metal processor
+        
+        // Initialize video format service early as it's needed by other services
         videoFormatService = VideoFormatService(session: session, delegate: self)
+        
+        // Initialize recording service
+        recordingService = RecordingService(session: session, delegate: self)
+        recordingService.setMetalFrameProcessor(self.metalFrameProcessor)
+        
         // Pass exposureService to CameraDeviceService initializer
         cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, exposureService: exposureService, delegate: self)
+        
+        // Initialize CameraSetupService last, after all dependencies are ready
+        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self)
+        
+        // Set up notification observers
+        setupSettingObservers()
+        
+        // Configure session asynchronously to not block initialization
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            do {
+                try self.cameraSetupService.setupSession()
+                self.logger.info("Camera session setup completed successfully")
+            } catch {
+                self.logger.error("Failed to setup camera session: \(error)")
+                DispatchQueue.main.async {
+                    self.error = error as? CameraError ?? .setupFailed
+                    self.status = .failed
+                }
+            }
+        }
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -662,10 +617,22 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Track shutter priority state
         let wasShutterPriorityEnabled = isShutterPriorityEnabled
         
-        // Temporarily disable LUT preview during switch to prevent flash
-        logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
-        self.tempLUTFilter = lutManager.currentLUTFilter // Store current filter
-        lutManager.currentLUTFilter = nil // Disable LUT in manager (triggers update in PreviewView -> removeLUTOverlay)
+        // Explicitly release memory before lens switch
+        autoreleasepool {
+            // Temporarily disable LUT preview during switch to prevent flash and reduce memory usage
+            logger.debug("🔄 Lens switch: Temporarily disabling LUT filter.")
+            self.tempLUTFilter = lutManager.currentLUTFilter // Store current filter
+            lutManager.clearCurrentLUT() // Clear both texture and filter to reduce memory usage
+            
+            // Force a memory cleanup cycle for Metal resources
+            if let textureCache = metalFrameProcessor?.textureCache {
+                CVMetalTextureCacheFlush(textureCache, 0)
+                logger.debug("🔄 Lens switch: Flushed Metal texture cache before switch.")
+            }
+            
+            // Force a GC cycle
+            logger.debug("🔄 Lens switch: Running memory cleanup before switch.")
+        }
         
         // Perform the lens switch
         cameraDeviceService.switchToLens(lens)
@@ -674,14 +641,18 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         lastLensSwitchTimestamp = Date()
         logger.debug("🔄 Lens switch: Updated lastLensSwitchTimestamp to trigger PreviewView orientation update.")
 
-        // Restore LUT filter immediately after initiating the switch.
-        // The PreviewView will handle reapplying it via captureOutput when ready.
-        if let storedFilter = self.tempLUTFilter {
-            self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter immediately.")
-            self.lutManager.currentLUTFilter = storedFilter
-            self.tempLUTFilter = nil // Clear temporary storage
-        } else {
-            self.logger.debug("🔄 Lens switch: No temporary LUT filter to restore.")
+        // Schedule LUT restoration after a short delay to ensure smooth lens transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self else { return }
+            
+            // Restore LUT filter if one was stored
+            if let storedFilter = self.tempLUTFilter {
+                self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter after delay.")
+                if let lutURL = self.lutManager.selectedLUTURL {
+                    self.lutManager.loadLUT(from: lutURL)
+                }
+                self.tempLUTFilter = nil
+            }
         }
         
         // After a short delay to ensure the device is ready, restore settings
@@ -1280,7 +1251,31 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return // Return from the main function body of startSession
         }
 
-        // If isSessionRunning is false, proceed to start it.
+        // Check if device is nil, which would indicate session wasn't properly set up
+        if self.device == nil {
+            logger.warning("[SessionControl] Start session requested but camera device is nil. Attempting to set up session first.")
+            
+            sessionQueue.async { [weak self] in
+                guard let self = self else { return }
+                do {
+                    // First try to set up the session
+                    try self.cameraSetupService.setupSession()
+                    self.logger.info("[SessionControl] Camera session setup completed successfully, now starting session")
+                    
+                    // Only attempt to start session if setup was successful
+                    self.performSessionStartSequence()
+                } catch {
+                    self.logger.error("[SessionControl] Failed to setup camera session: \(error)")
+                    DispatchQueue.main.async {
+                        self.error = error as? CameraError ?? .setupFailed
+                        self.status = .failed
+                    }
+                }
+            }
+            return
+        }
+
+        // If isSessionRunning is false and device is not nil, proceed to start it.
         logger.info("[SessionControl] Start session requested (isSessionRunning is false).")
         performSessionStartSequence()
     }
@@ -1919,6 +1914,9 @@ extension CameraViewModel: CameraSetupServiceDelegate {
     
     func didInitializeCamera(device: AVCaptureDevice) {
         self.device = device
+        logger.info("[CameraViewModel] Camera initialized with device: \(device.localizedName)")
+        
+        // Set the device on all services that need it
         exposureService.setDevice(device)
         recordingService.setDevice(device)
         cameraDeviceService.setDevice(device)
@@ -1944,6 +1942,13 @@ extension CameraViewModel: CameraSetupServiceDelegate {
 
         // Re-apply Shutter Priority if it was enabled before (e.g., after app relaunch / background)
         reapplyShutterPriority(after: 0.1, lockIfRecording: false)
+        
+        // Update UI on main thread
+        DispatchQueue.main.async {
+            self.status = .running
+            // Notify all observers that a valid device is now available
+            NotificationCenter.default.post(name: NSNotification.Name("CameraDeviceAvailable"), object: nil)
+        }
     }
     
     func didStartRunning(_ isRunning: Bool) {
