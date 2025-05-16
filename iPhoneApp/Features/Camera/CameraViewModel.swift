@@ -558,6 +558,22 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             do {
                 try self.cameraSetupService.setupSession()
                 self.logger.info("Camera session setup completed successfully")
+                // --- Ensure color space is set to user preference on initial boot ---
+                Task {
+                    do {
+                        if self.isAppleLogEnabled && self.isAppleLogSupported {
+                            self.logger.info("[Boot] Applying Apple Log color space after initial session setup...")
+                            try await self.videoFormatService.configureAppleLog()
+                        } else {
+                            self.logger.info("[Boot] Applying Rec. 709 / P3 color space after initial session setup...")
+                            try await self.videoFormatService.resetAppleLog()
+                        }
+                        self.logger.info("[Boot] Successfully applied color space after initial session setup.")
+                    } catch {
+                        self.logger.error("[Boot] Failed to apply color space after initial session setup: \(error)")
+                    }
+                }
+                // --- END color space boot logic ---
             } catch {
                 self.logger.error("Failed to setup camera session: \(error)")
                 DispatchQueue.main.async {

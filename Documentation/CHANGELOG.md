@@ -158,6 +158,7 @@ All notable changes to this project will be documented in this file.
     *   Added proper state management for recording lock in ExposureService
 *   Fixed crash in Apple Log color space configuration by properly checking format support and using correct device properties
 *   Improved error handling for unsupported color space configurations
+*   Fix: Ensure user-selected color space is respected on initial app boot by explicitly applying the color space after session setup in CameraViewModel. (Color space was not always respected until session restart or setting toggle)
 
 ### Removed
 
