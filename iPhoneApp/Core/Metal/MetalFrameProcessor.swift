@@ -385,4 +385,15 @@ class MetalFrameProcessor {
         self.lutTexture = texture
         logger.debug("LUT Texture \(texture == nil ? "cleared" : "set") on MetalFrameProcessor.")
     }
+
+    deinit {
+        logger.info("MetalFrameProcessor DEINIT")
+        if let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
+            logger.info("Flushed CVMetalTextureCache in MetalFrameProcessor deinit.")
+            textureCache = nil // Release the cache object itself
+        }
+        outputPixelBufferPool = nil // Release the pool
+        logger.info("MetalFrameProcessor deinitialization complete.")
+    }
 } 

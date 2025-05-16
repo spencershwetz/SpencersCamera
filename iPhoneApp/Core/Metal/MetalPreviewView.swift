@@ -449,6 +449,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     // ---> ADD DEINIT <--- 
     deinit {
         logger.info("MetalPreviewView DEINIT")
+        // Flush the texture cache to release all cached textures
+        if let cache = textureCache { // Ensure textureCache is not nil
+            CVMetalTextureCacheFlush(cache, 0)
+            logger.info("Flushed CVMetalTextureCache in deinit.")
+        }
+        // Any other cleanup if necessary
     }
     // ---> END DEINIT <--- 
 } 

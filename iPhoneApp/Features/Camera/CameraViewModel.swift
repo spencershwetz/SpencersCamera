@@ -554,6 +554,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         exposureService.removeDeviceObservers()
         logger.info("Explicitly removed ExposureService KVO observers in CameraViewModel deinit")
 
+        // Nil out delegates for AVCaptureOutputs to break potential retain cycles
+        if let videoOutput = self.unifiedVideoOutput {
+            videoOutput.setSampleBufferDelegate(nil, queue: nil)
+            logger.info("[LIFECYCLE] Nilled delegate for unifiedVideoOutput in deinit.")
+        }
+        // Assuming 'audioDataOutput' is the AVCaptureAudioDataOutput instance CameraViewModel itself might be a delegate for.
+        // If CameraViewModel doesn't actually create/manage its own audioDataOutput distinct from RecordingService's,
+        // this line might target a nil object or a misattributed one. Based on delegate conformance, it should have one.
+        if let audioOutput = self.audioDataOutput { // audioDataOutput is a property of CameraViewModel
+            audioOutput.setSampleBufferDelegate(nil, queue: nil)
+            logger.info("[LIFECYCLE] Nilled delegate for CameraViewModel's audioDataOutput in deinit.")
+        }
+
         // Ensure the session is stopped if running
         if session.isRunning {
             logger.info("Stopping session in deinit (asynchronously)")
@@ -1246,42 +1259,60 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Session Control
     /// Start the AVCaptureSession on the dedicated queue and update state
     func startSession() {
-        guard !isSessionRunning else {
-            logger.info("[SessionControl] Start session requested, but session is already running. Re-applying video stabilization setting.")
-            // Reapply stabilization setting on existing session
-            self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
-            return
+        // Check the @Published var first.
+        if isSessionRunning {
+            logger.info("[SessionControl] Start session requested (isSessionRunning is true). Verifying actual session state.")
+            sessionQueue.async { [weak self] in // Verify actual state on session queue
+                guard let self = self else { return }
+                if self.session.isRunning {
+                    self.logger.info("[SessionControl] Session is indeed physically running. No need to restart. Assuming configuration is correct. Stabilization updates should be event-driven from settings changes.")
+                    // Ensure @Published var is in sync if it wasn't
+                    DispatchQueue.main.async {
+                        if !self.isSessionRunning { self.isSessionRunning = true }
+                    }
+                } else {
+                    // isSessionRunning was true, but session.isRunning is false. This is an inconsistent state.
+                    self.logger.warning("[SessionControl] Inconsistent state: isSessionRunning true, but session.isRunning false. Proceeding to start.")
+                    DispatchQueue.main.async { self.isSessionRunning = false } // Correct the @Published var
+                    self.performSessionStartSequence() // Call the actual start logic
+                }
+            }
+            return // Return from the main function body of startSession
         }
-        
+
+        // If isSessionRunning is false, proceed to start it.
+        logger.info("[SessionControl] Start session requested (isSessionRunning is false).")
+        performSessionStartSequence()
+    }
+
+    private func performSessionStartSequence() {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-            // Check again inside async block in case state changed
+            // This guard protects against race conditions if performSessionStartSequence is called multiple times quickly.
             guard !self.session.isRunning else {
-                self.logger.info("[SessionControl] Session started running between guard check and async block.")
-                // Ensure main thread state matches
+                self.logger.info("[SessionControl] Session started running between initial check and performSessionStartSequence execution.")
                 DispatchQueue.main.async {
                     if !self.isSessionRunning { self.isSessionRunning = true }
                 }
                 return
             }
-            
-            self.logger.info("[SessionControl] Attempting to start session...")
+
+            self.logger.info("[SessionControl] Attempting to start session via performSessionStartSequence...")
             // Reapply video stabilization setting before starting session
+            // This is the correct place to set it up for a new session start.
             self.setupUnifiedVideoOutput(enableStabilization: self.settingsModel.isVideoStabilizationEnabled)
             self.session.startRunning()
             DispatchQueue.main.async {
-                // Verify session is ACTUALLY running after startRunning call
                 let sessionSuccessfullyStarted = self.session.isRunning
                 self.isSessionRunning = sessionSuccessfullyStarted
                 self.status = sessionSuccessfullyStarted ? .running : .failed
                 
                 if sessionSuccessfullyStarted {
-                    self.logger.info("[SessionControl] Session started successfully: \(self.isSessionRunning)")
-                    // Clear any previous error if session is running
+                    self.logger.info("[SessionControl] Session started successfully: \\(self.isSessionRunning)")
                     self.error = nil
                     // Re-attach KVO observers AFTER session is confirmed running
                     if let currentDevice = self.device {
-                        self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \(currentDevice.localizedName)")
+                        self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \\(currentDevice.localizedName)")
                         self.exposureService.setDevice(currentDevice)
                         // --- Ensure Apple Log (or selected color space) is re-applied after session start ---
                         if self.isAppleLogEnabled && self.isAppleLogSupported {
@@ -1291,10 +1322,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                                     try await self.videoFormatService.configureAppleLog()
                                     try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
                                     self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
-                                    // Reapply video stabilization setting after AppleLog reconfiguration
-                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
+                                    // Reapply video stabilization setting after AppleLog reconfiguration - ensure this doesn't cause another full output rebuild if not needed
+                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
                                 } catch {
-                                    self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \(error)")
+                                    self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \\(error)")
                                 }
                             }
                         } else if !self.isAppleLogEnabled {
@@ -1304,10 +1335,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                                     try await self.videoFormatService.resetAppleLog()
                                     try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
                                     self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
-                                    // Reapply video stabilization setting after Rec.709 reconfiguration
-                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
+                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
                                 } catch {
-                                    self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \(error)")
+                                    self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \\(error)")
                                 }
                             }
                         }
@@ -1316,7 +1346,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                         self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
                     }
                     // Reapply video stabilization setting after session start
-                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled)
+                    // Make this call conditional or ensure updateVideoStabilizationMode is smart
+                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: true) // Force reconfigure on new session
                 } else {
                     self.error = CameraError.sessionFailedToStart
                     self.logger.error("[SessionControl] Session failed to start (isSessionRunning is false after startRunning call). Setting status to failed.")
@@ -1461,11 +1492,43 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // DO NOT restart session here for generic errors
     }
 
-    func updateVideoStabilizationMode(enabled: Bool) { // Updated method
-        logger.info("Updating video stabilization mode setting to: \(enabled)")
+    func updateVideoStabilizationMode(enabled: Bool, forceReconfigure: Bool = true) {
+        logger.info("Updating video stabilization mode setting to: \\(enabled). Force reconfigure: \\(forceReconfigure)")
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-            // Pass the desired state directly
+
+            if !forceReconfigure {
+                // If not forcing reconfigure, just try to update the preferred mode on existing connection
+                if let connection = self.unifiedVideoOutput?.connection(with: .video), connection.isVideoStabilizationSupported {
+                    let newMode: AVCaptureVideoStabilizationMode
+                    if enabled {
+                        if let currentDevice = self.device {
+                            if currentDevice.activeFormat.isVideoStabilizationModeSupported(.standard) {
+                                newMode = .standard
+                            } else if currentDevice.activeFormat.isVideoStabilizationModeSupported(.auto) {
+                                newMode = .auto
+                            } else {
+                                newMode = .off
+                            }
+                        } else {
+                            newMode = .off // Fallback
+                        }
+                    } else {
+                        newMode = .off
+                    }
+
+                    if connection.preferredVideoStabilizationMode != newMode {
+                        connection.preferredVideoStabilizationMode = newMode
+                        self.logger.info("UNIFIED_VIDEO: Stabilization mode updated on existing connection to \\(newMode.rawValue) without full output reconfiguration.")
+                    } else {
+                         self.logger.info("UNIFIED_VIDEO: Stabilization mode already \\(newMode.rawValue). No change made to existing connection.")
+                    }
+                    return // Avoid full reconfiguration
+                }
+            }
+            
+            // Fallback to full reconfiguration if forced, or if connection update isn't possible/sufficient
+            self.logger.info("Proceeding with full video output reconfiguration for stabilization change.")
             self.setupUnifiedVideoOutput(enableStabilization: enabled)
         }
     }
@@ -1726,7 +1789,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     private func reapplyShutterPriority(after delay: TimeInterval = 0.0,
                                         lockIfRecording: Bool = true) {
         guard isShutterPriorityEnabled else { return }
-        guard let device = self.device else {
+        guard self.device != nil else {
             logger.error("[SP-Reapply] No active device – cannot re-apply Shutter Priority.")
             return
         }

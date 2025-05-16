@@ -551,6 +551,22 @@ class RecordingService: NSObject {
             }
         }
     }
+    
+    // MARK: - Deinitialization
+    deinit {
+        logger.info("RecordingService DEINIT triggered.")
+        // Nil out the delegate for the audioDataOutput it owns to break potential retain cycle
+        if let audioOutput = self.audioDataOutput {
+            audioOutput.setSampleBufferDelegate(nil, queue: nil)
+            logger.info("Nilled delegate for RecordingService's internal audioDataOutput.")
+            // Optional: Consider removing the audioOutput from the session if RecordingService
+            // is solely responsible for its lifecycle and it's not shared/expected elsewhere.
+            // self.session.removeOutput(audioOutput)
+            // logger.info("Removed RecordingService's internal audioDataOutput from session.")
+        }
+        // Any other cleanup specific to RecordingService if needed
+        logger.info("RecordingService deinitialization complete.")
+    }
 }
 
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate & AVCaptureAudioDataOutputSampleBufferDelegate
