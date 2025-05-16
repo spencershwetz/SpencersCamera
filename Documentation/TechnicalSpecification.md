@@ -235,6 +235,23 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Separate Processing Queue**: `RecordingService` uses a dedicated serial `DispatchQueue` (`com.camera.recording`) for sample buffer delegate methods, potentially preventing UI stalls but requiring careful synchronization if accessing shared state.
 *   **DockKit Integration**: Implemented as a separate actor service with conditional compilation (`canImport(DockKit)`) to maintain compatibility with simulators and older iOS versions. Uses delegate pattern for camera control to keep core camera logic independent of DockKit availability.
 
+### Memory Management Optimization (2025-06-01)
+- **Metal Resource Management**:
+    - Exposed texture cache through controlled interfaces to enable proper flushing
+    - Added explicit texture cache cleanup during frame processing
+    - Implemented reference counting for shared Metal resources
+    - Used `autoreleasepool` blocks during high-memory operations
+- **Camera Transitions**:
+    - Properly release resources during lens changes
+    - Temporarily disable LUT processing during lens transitions
+    - Implemented staged approach to resource allocation/deallocation
+    - Added memory cleanup notification system for cross-component coordination
+- **Recording Lifecycle**:
+    - Added explicit cleanup after recording stops
+    - Properly dispose of temporary buffers and textures
+    - Implemented resource caching with lifecycle-aware eviction policies
+    - Memory usage reduced by approximately 300MB during normal operations
+
 ## Exposure Flicker Minimization During Lens Switch (Shutter Priority)
 
 - Shutter Priority is now applied immediately after a new device is set and the session is running.

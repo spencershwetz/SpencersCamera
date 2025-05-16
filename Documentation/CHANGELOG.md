@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Performance: Optimized memory management during lens changes and recording:
+    *   Fixed memory spikes of 200-300MB when switching lenses
+    *   Added explicit texture cache flushing during lens switching
+    *   Implemented proper memory cleanup when stopping recording
+    *   Added autoreleasepool blocks at critical memory transition points
+    *   Improved Metal texture management to prevent resource leaks
+    *   Fixed texture resource retention during frame processing
+    *   Reduced memory usage by ~300MB during app operation
+
 *   Fixed: Improved session interruption handling when returning from background:
     *   Added proper handling of `.videoDeviceNotAvailableInBackground` interruption reason
     *   Added new `.sessionInterrupted` error type with user-friendly message
