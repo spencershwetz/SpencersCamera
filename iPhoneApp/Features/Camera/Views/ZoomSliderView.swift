@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import UIKit  // Add UIKit import for UIImpactFeedbackGenerator
 
 struct ZoomSliderView: View {
     @ObservedObject var viewModel: CameraViewModel
@@ -9,6 +10,8 @@ struct ZoomSliderView: View {
     }
     
     @State private var activeMenu: MenuType? = nil
+    // Track menu transitions to prevent haptic conflicts
+    @State private var isTransitioning = false
     
     // MARK: - Body
     var body: some View {
@@ -26,6 +29,16 @@ struct ZoomSliderView: View {
             baseControls
         }
         .animation(.easeInOut(duration: 0.25), value: activeMenu)
+        // Reset transition flag after animation completes
+        .onChange(of: activeMenu) { _ in
+            // Set transitioning flag
+            isTransitioning = true
+            
+            // Clear flag after animation duration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isTransitioning = false
+            }
+        }
     }
     
     // MARK: - Base Row
@@ -40,11 +53,17 @@ struct ZoomSliderView: View {
     
     private func baseButton(title: String, type: MenuType) -> some View {
         Button {
-            withAnimation {
-                if activeMenu == type {
-                    activeMenu = nil
-                } else {
-                    activeMenu = type
+            // Skip haptics if already transitioning
+            if !isTransitioning {
+                // Use HapticManager for reliable feedback
+                HapticManager.shared.lightImpact()
+                
+                withAnimation {
+                    if activeMenu == type {
+                        activeMenu = nil
+                    } else {
+                        activeMenu = type
+                    }
                 }
             }
         } label: {
@@ -57,6 +76,8 @@ struct ZoomSliderView: View {
                         .fill(Color.black.opacity(0.65))
                 )
         }
+        // Add a slight delay to button actions to improve haptic reliability
+        .buttonStyle(HapticButtonStyle())
     }
     
     // MARK: - Menus
@@ -93,6 +114,11 @@ struct ZoomSliderView: View {
         HStack(spacing: 14) {
             ForEach(viewModel.availableLenses, id: \.self) { lens in
                 Button {
+                    // Always trigger haptics for lens buttons
+                    DispatchQueue.main.async {
+                        HapticManager.shared.lightImpact()
+                    }
+                    
                     viewModel.switchToLens(lens)
                 } label: {
                     Text("\(lens.rawValue)×")
@@ -101,6 +127,7 @@ struct ZoomSliderView: View {
                         .frame(width: 36, height: 36)
                         .background(Circle().fill(Color.black.opacity(0.65)))
                 }
+                .buttonStyle(HapticButtonStyle())
             }
         }
     }
@@ -108,16 +135,26 @@ struct ZoomSliderView: View {
     private var shutterMenu: some View {
         HStack(spacing: 20) {
             Button("Auto") {
+                // Use HapticManager on main thread for reliability
+                DispatchQueue.main.async {
+                    HapticManager.shared.lightImpact()
+                }
+                
                 if viewModel.isShutterPriorityEnabled { viewModel.toggleShutterPriority() }
             }
             .foregroundColor(viewModel.isShutterPriorityEnabled ? .white : .yellow)
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
             
             Button("180°") {
+                // Use HapticManager on main thread for reliability
+                DispatchQueue.main.async {
+                    HapticManager.shared.lightImpact()
+                }
+                
                 if !viewModel.isShutterPriorityEnabled { viewModel.toggleShutterPriority() }
             }
             .foregroundColor(viewModel.isShutterPriorityEnabled ? .yellow : .white)
-            .buttonStyle(.plain)
+            .buttonStyle(HapticButtonStyle())
         }
     }
     
@@ -125,10 +162,15 @@ struct ZoomSliderView: View {
     private var isoMenu: some View {
         HStack(spacing: 12) {
             Button("Auto") {
+                // Use HapticManager on main thread for reliability
+                DispatchQueue.main.async {
+                    HapticManager.shared.lightImpact()
+                }
+                
                 viewModel.isAutoExposureEnabled = true
             }
             .foregroundColor(viewModel.isAutoExposureEnabled ? .yellow : .white)
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(HapticButtonStyle())
             
             SimpleWheelPicker(
                 config: isoWheelConfig,
@@ -145,10 +187,15 @@ struct ZoomSliderView: View {
     private var wbMenu: some View {
         HStack(spacing: 12) {
             Button("Auto") {
+                // Use HapticManager on main thread for reliability
+                DispatchQueue.main.async {
+                    HapticManager.shared.lightImpact()
+                }
+                
                 viewModel.setWhiteBalanceAuto(true)
             }
             .foregroundColor(viewModel.isWhiteBalanceAuto ? .yellow : .white)
-            .buttonStyle(PlainButtonStyle())
+            .buttonStyle(HapticButtonStyle())
             
             SimpleWheelPicker(
                 config: wbWheelConfig,
@@ -201,6 +248,15 @@ struct ZoomSliderView: View {
                 viewModel.updateWhiteBalance(Float(newValInHundredKelvinUnits * 100.0)) // Multiply by 100
             }
         )
+    }
+}
+
+// Custom button style to ensure haptic reliability
+struct HapticButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())  // Ensure the entire frame is tappable
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
     }
 }
 

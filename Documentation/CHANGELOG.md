@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Enhanced: Added haptic feedback to all adjustment controls:
+    *   Added tactile feedback to all lens selection buttons (0.5×, 1×, 2×, 5×)
+    *   Added haptic feedback to base menu buttons (Lens, Shutter, ISO, WB)
+    *   Added haptic feedback to shutter mode controls (Auto, 180°)
+    *   Added consistent feedback to Auto toggles in ISO and WB menus
+    *   Standardized UIImpactFeedbackGenerator(style: .light) across all control buttons
+    *   Matched the haptic feel of the existing SimpleWheelPicker implementation
+
 *   Performance: Optimized memory management during lens changes and recording:
     *   Fixed memory spikes of 200-300MB when switching lenses
     *   Added explicit texture cache flushing during lens switching

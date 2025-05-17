@@ -39,6 +39,18 @@ This document provides a detailed overview of key classes, components, and their
     *   Both overlays use smooth animations for transitions
     *   Layout maintains proper spacing and visual hierarchy
 - Gesture handling and layout management are implemented in `CameraView.swift`
+- **Haptic Feedback Implementation**:
+    *   All UI controls provide consistent haptic feedback:
+        *   Lens selection buttons (0.5×, 1×, 2×, 5×) provide tactile feedback on tap
+        *   Base menu buttons (Lens, Shutter, ISO, WB) include haptics when toggling menus
+        *   Shutter mode controls (Auto, 180°) provide feedback when switching modes
+        *   Auto toggles in ISO and WB menus include haptic response
+    *   All button feedback uses `UIImpactFeedbackGenerator(style: .light)`
+    *   SimpleWheelPicker components (EV, ISO, WB) provide consistent haptic feedback when scrolling
+    *   Implementation details:
+        *   Located in `ZoomSliderView.swift`
+        *   Uses local generator instantiation for each button action
+        *   Maintains consistent feel across all UI interaction points
 
 ### EV Compensation Slider Gesture
 - The EV compensation slider can be shown or hidden using a swipe gesture on the camera preview:

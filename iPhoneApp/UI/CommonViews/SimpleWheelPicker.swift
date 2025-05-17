@@ -58,6 +58,10 @@ struct SimpleWheelPicker: View {
     @State private var scrollEndDebounce: Timer?
     // Track the last scroll position for debounce
     @State private var lastScrollPosition: Int? = nil
+    // Track last haptic time to prevent too frequent feedback
+    @State private var lastHapticTime: TimeInterval = 0
+    // Minimum time between haptic feedback events
+    private let minHapticInterval: TimeInterval = 0.07
 
     // Calculate the total number of finest steps based on range and steps per unit
     private var totalNumberOfSteps: Int {
@@ -129,10 +133,14 @@ struct SimpleWheelPicker: View {
                         // Cancel any pending drag end signal
                         dragEndWorkItem?.cancel()
                         dragEndWorkItem = DispatchWorkItem { /* Only used for cancellation */ }
-
-                        // Create and trigger haptic feedback *locally*
-                        let impact = UIImpactFeedbackGenerator(style: .light)
-                        impact.impactOccurred()
+                        
+                        // Trigger haptics with rate limiting
+                        let now = Date().timeIntervalSince1970
+                        if now - lastHapticTime >= minHapticInterval {
+                            // Use the enhanced HapticManager instead of local generator
+                            HapticManager.shared.selectionChanged()
+                            lastHapticTime = now
+                        }
 
                         // --- Update intermediate value first, but only update binding on debounce ---
                         intermediateValue = newValue
@@ -155,6 +163,9 @@ struct SimpleWheelPicker: View {
                                     self.onEditingChanged?(false)
                                     self.dragEndWorkItem = nil // Reset drag tracking
                                     self.lastScrollPosition = nil // Reset position tracking
+                                    
+                                    // One final haptic when scroll settles
+                                    HapticManager.shared.lightImpact()
                                 }
                             }
                         }
@@ -189,7 +200,6 @@ struct SimpleWheelPicker: View {
                 logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
                 isLoaded = true
             }
-
         }
     }
     
