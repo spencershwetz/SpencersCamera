@@ -18,9 +18,14 @@ This document outlines the technical specifications and requirements for the Spe
     - SimpleWheelPicker component for precise, live EV bias control
     - Horizontal wheel interface with haptic feedback
     - Gesture-based interaction with smooth scrolling
-    - Maintains exact position when gesture ends (value committed via debounced binding update after scroll settles)
+    - Maintains exact position when gesture ends
     - Always initializes centered at 0 EV
-    - **Live updating:** The EV value updates continuously as you drag, with no debounce delay. (Note: Visual feedback is live, binding value committed on settle)
+    - **Real-time updates with performance optimization:**
+        - Updates EV bias in real-time as the user drags (not just on gesture end)
+        - Implements intelligent throttling (100ms intervals) to prevent GPU overload
+        - Uses threshold-based update detection to reduce unnecessary API calls
+        - Manages timers and pending updates to ensure latest value is always applied
+        - Balances responsiveness with system stability to prevent GPU timeouts
     - Show/hide with vertical swipe gestures on camera preview
 *   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
     *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.

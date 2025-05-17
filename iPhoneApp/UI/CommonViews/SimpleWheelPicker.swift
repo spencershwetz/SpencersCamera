@@ -138,17 +138,16 @@ struct SimpleWheelPicker: View {
                         // Store the last position to prevent feedback loops
                         lastScrollPosition = newPosition
                         
-                        // Debounce the actual binding update to prevent rapid fire updates
+                        // Update binding in real-time during scrolling with throttling
+                        if abs(self.value - newValue) > 0.03 { // Slightly higher threshold to reduce updates
+                            self.value = newValue  // Update binding immediately without debounce
+                        }
+                        
+                        // Still use debounce for editing ended callback
                         scrollEndDebounce?.invalidate()
-                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.075, repeats: false) { _ in
-                            // Only update the binding if we're not receiving multiple updates per frame
-                            if abs(self.value - newValue) > 0.02 { // Only update if the change is significant
-                                self.value = newValue  // Update binding with debounce
-                                // Removed high-frequency debug log that was causing rate limit warnings
-                            }
-                            
+                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
                             // Signal editing ended after a slight delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 // Only send editing ended if we haven't started a new edit
                                 if self.lastScrollPosition == newPosition {
                                     self.onEditingChanged?(false)

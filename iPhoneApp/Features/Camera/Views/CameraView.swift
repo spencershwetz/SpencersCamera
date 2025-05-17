@@ -249,17 +249,52 @@ struct CameraView: View {
                                 .foregroundColor(.white)
                                 .padding(.top, 4)
                                 .animatingEVValue(value: round(viewModel.exposureBias * 20) / 20) // Use rounded value to reduce animation triggers
-                            // Use a more efficient binding with a higher threshold to reduce update frequency
-                            let exposureBiasBinding = Binding<CGFloat>(
-                                get: { CGFloat(viewModel.exposureBias) },
-                                set: { newValue in
-                                    // Only update if change is significant (0.05 EV steps instead of continuous)
-                                    let rounded = round(newValue * 20) / 20 // Round to nearest 0.05
-                                    if abs(CGFloat(viewModel.exposureBias) - rounded) >= 0.05 {
-                                        viewModel.exposureBias = Float(rounded)
-                                    }
+                            // Use a binding with throttling to prevent GPU timeouts
+                            let exposureBiasBinding: Binding<CGFloat> = {
+                                // Throttling data
+                                class ThrottleData {
+                                    var lastUpdateTime = Date.distantPast
+                                    var pendingValue: CGFloat?
+                                    var timer: Timer?
                                 }
-                            )
+                                let throttleData = ThrottleData()
+                                let minTimeInterval: TimeInterval = 0.1 // 100ms between updates
+                                
+                                return Binding<CGFloat>(
+                                    get: { CGFloat(viewModel.exposureBias) },
+                                    set: { newValue in
+                                        // Still round to nearest 0.05 for better usability
+                                        let rounded = round(newValue * 20) / 20 // Round to nearest 0.05
+                                        
+                                        // Always update the local model value immediately for responsive UI
+                                        viewModel.exposureBias = Float(rounded)
+                                        
+                                        // Throttle camera updates to prevent GPU overload
+                                        let now = Date()
+                                        if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
+                                            // Enough time has passed, apply immediately
+                                            viewModel.setExposureBias(Float(rounded))
+                                            throttleData.lastUpdateTime = now
+                                            throttleData.pendingValue = nil
+                                        } else {
+                                            // Too soon, schedule for later
+                                            throttleData.pendingValue = rounded
+                                            
+                                            // Invalidate existing timer
+                                            throttleData.timer?.invalidate()
+                                            
+                                            // Schedule a new timer to apply latest value
+                                            throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
+                                                if let pendingValue = throttleData.pendingValue {
+                                                    viewModel.setExposureBias(Float(pendingValue))
+                                                    throttleData.lastUpdateTime = Date()
+                                                    throttleData.pendingValue = nil
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }()
                             SimpleWheelPicker(
                                 config: .init(
                                     min: CGFloat(viewModel.minExposureBias),
@@ -270,12 +305,8 @@ struct CameraView: View {
                                 ),
                                 value: exposureBiasBinding,
                                 onEditingChanged: { isEditing in
-                                    // When editing ends, ensure we have the final value
-                                    if !isEditing {
-                                        // This prevents any potential feedback loops by enforcing the final value
-                                        // at the end of the user interaction
-                                        viewModel.setExposureBias(viewModel.exposureBias)
-                                    }
+                                    // We don't need to explicitly call setExposureBias when editing ends
+                                    // since we're already applying changes in real-time during scrolling
                                 }
                             )
                             .frame(height: 60)

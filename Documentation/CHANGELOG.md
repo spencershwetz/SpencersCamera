@@ -15,6 +15,14 @@ All notable changes to this project will be documented in this file.
     *   Fixed texture resource retention during frame processing
     *   Reduced memory usage by ~300MB during app operation
 
+*   Enhanced: Improved EV compensation wheel performance:
+    *   Implemented real-time EV bias updates during wheel scrolling (no wait for scroll end)
+    *   Added intelligent throttling (100ms intervals) to prevent GPU overload
+    *   Optimized binding updates with threshold-based change detection
+    *   Prevented GPU timeout errors during rapid wheel scrolling
+    *   Maintained responsive UI feel while ensuring system stability
+    *   Added rounded value display to reduce animation thrashing
+
 *   Fixed: Improved session interruption handling when returning from background:
     *   Added proper handling of `.videoDeviceNotAvailableInBackground` interruption reason
     *   Added new `.sessionInterrupted` error type with user-friendly message
