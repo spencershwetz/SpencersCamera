@@ -1993,8 +1993,10 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         cameraDeviceService.setDevice(device)
         videoFormatService.setDevice(device)
         
-        // Initialize available lenses
-        availableLenses = CameraLens.availableLenses()
+        // Initialize available lenses - move to main thread
+        DispatchQueue.main.async {
+            self.availableLenses = CameraLens.availableLenses()
+        }
         
         // Ensure auto exposure is set on initialization
         do {
@@ -2004,9 +2006,11 @@ extension CameraViewModel: CameraSetupServiceDelegate {
                 logger.info("Initial exposure mode set to continuousAutoExposure")
             }
             device.unlockForConfiguration()
-            // Update view model state to match
-            self.isAutoExposureEnabled = true
-            self.isExposureLocked = false
+            // Update view model state to match - move to main thread
+            DispatchQueue.main.async {
+                self.isAutoExposureEnabled = true
+                self.isExposureLocked = false
+            }
         } catch {
             logger.error("Failed to set initial exposure mode: \(error.localizedDescription)")
         }

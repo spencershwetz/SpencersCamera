@@ -248,6 +248,7 @@ struct CameraView: View {
                                 .font(.caption)
                                 .foregroundColor(.white)
                                 .padding(.top, 4)
+                                .animatingEVValue(value: viewModel.exposureBias)
                             let exposureBiasBinding = Binding<CGFloat>(
                                 get: { CGFloat(viewModel.exposureBias) },
                                 set: { viewModel.exposureBias = Float($0) }
@@ -257,12 +258,25 @@ struct CameraView: View {
                                     min: CGFloat(viewModel.minExposureBias),
                                     max: CGFloat(viewModel.maxExposureBias),
                                     stepsPerUnit: 10, 
-                                    spacing: 8,       
+                                    spacing: 12,  // Reduced for tighter tick spacing
                                     showsText: true
                                 ),
-                                value: exposureBiasBinding
+                                value: exposureBiasBinding,
+                                onEditingChanged: { isEditing in
+                                    // When editing ends, ensure we have the final value
+                                    if !isEditing {
+                                        // This prevents any potential feedback loops by enforcing the final value
+                                        // at the end of the user interaction
+                                        viewModel.setExposureBias(viewModel.exposureBias)
+                                    }
+                                }
                             )
                             .frame(height: 60)
+                            .background(Color.black.opacity(0.3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                            )
                         }
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.5))
@@ -271,9 +285,6 @@ struct CameraView: View {
                     .padding(.trailing, 10) 
                     .transition(.opacity) 
                     .zIndex(200)
-                    .onChange(of: viewModel.exposureBias) { _, newValue in
-                        viewModel.setExposureBias(newValue)
-                    }
                 }
             }
             .animation(.easeInOut, value: settings.isEVBiasVisible),
@@ -627,3 +638,40 @@ struct PlaceholderCameraPreview: View {
     }
 }
 #endif
+
+// MARK: - EV Animation Modifier
+extension View {
+    func animatingEVValue(value: Float) -> some View {
+        modifier(AnimatingEVValue(value: value))
+    }
+}
+
+struct AnimatingEVValue: ViewModifier {
+    let value: Float
+    @State private var lastValue: Float = 0
+    @State private var isAnimating = false
+    
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isAnimating ? 1.2 : 1.0)
+            .onAppear {
+                lastValue = value
+            }
+            .onChange(of: value) { oldValue, newValue in
+                if abs(newValue - lastValue) > 0.01 {
+                    withAnimation(.spring(response: 0.3)) {
+                        isAnimating = true
+                    }
+                    
+                    // Reset to normal scale after animation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        withAnimation(.spring(response: 0.3)) {
+                            isAnimating = false
+                        }
+                    }
+                    
+                    lastValue = newValue
+                }
+            }
+    }
+}

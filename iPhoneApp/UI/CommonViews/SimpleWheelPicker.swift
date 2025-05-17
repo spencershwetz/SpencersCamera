@@ -87,18 +87,24 @@ struct SimpleWheelPicker: View {
                         let isMajorTick = index % config.stepsPerUnit == 0
                         let tickValue = value(for: index)
                         
-                        Divider()
-                            .background(isMajorTick ? Color.primary : .gray)
-                            .frame(width: 0, height: isMajorTick ? 20 : 10, alignment: .center)
-                            .frame(maxHeight: 20, alignment: .top)
+                        // Replace Divider with explicit Rectangle for better rendering
+                        Rectangle()
+                            .fill(isMajorTick ? Color.white : Color.gray.opacity(0.7))
+                            .frame(width: isMajorTick ? 2 : 1, height: isMajorTick ? 18 : 14)
+                            .padding(.vertical, 3) // Add some padding to ensure visibility
                             .overlay(alignment: .top) {
                                 if isMajorTick && config.showsText {
                                     // Display the value for major ticks
                                     Text(String(format: "%g", tickValue)) // Use %g for cleaner number format
                                         .font(.caption2)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.white)
                                         .fixedSize()
-                                        .offset(y: -20)
+                                        .offset(y: -22)
+                                }
+                            }
+                            .onAppear {
+                                if index % 10 == 0 {
+                                    logger.debug("Tick \(index) rendered: value=\(tickValue), major=\(isMajorTick)")
                                 }
                             }
                     }
@@ -117,7 +123,7 @@ struct SimpleWheelPicker: View {
                 if let newPosition {
                     let newValue = value(for: newPosition).clamped(to: config.min...config.max)
                     // Check if the intermediate value actually changed significantly
-                    if abs(newValue - intermediateValue) > 0.001 { // Use a small tolerance
+                    if abs(newValue - intermediateValue) > 0.01 { // Increased threshold from 0.001 to 0.01
                         // Signal editing started if it hasn't already
                         if dragEndWorkItem == nil { // Check if we are already tracking a drag
                             onEditingChanged?(true)
@@ -130,35 +136,48 @@ struct SimpleWheelPicker: View {
                         let impact = UIImpactFeedbackGenerator(style: .light)
                         impact.impactOccurred()
 
-                        // --- Update ONLY intermediate value during scroll ---
+                        // --- Update intermediate value first, but only update binding on debounce ---
                         intermediateValue = newValue
-                        logger.debug("Intermediate value updated: \(intermediateValue, format: .fixed(precision: 2))")
-
-                        // --- Debounce the FINAL value commit and editing end signal ---
+                        
+                        // Store the last position to prevent feedback loops
                         lastScrollPosition = newPosition
+                        
+                        // Debounce the actual binding update to prevent rapid fire updates
                         scrollEndDebounce?.invalidate()
-                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [finalValue = intermediateValue, finalPosition = newPosition] _ in
-                            // Check if the position is still the same after the delay
-                            if self.lastScrollPosition == finalPosition {
-                                // --- Commit the final value to the binding ---
-                                self.value = finalValue
-                                logger.debug("Final binding value committed: \(finalValue, format: .fixed(precision: 2))")
-
-                                // Signal editing ended
-                                self.onEditingChanged?(false)
-                                self.dragEndWorkItem = nil // Reset drag tracking
-                                self.lastScrollPosition = nil // Reset last position tracking
+                        scrollEndDebounce = Timer.scheduledTimer(withTimeInterval: 0.075, repeats: false) { _ in
+                            // Only update the binding if we're not receiving multiple updates per frame
+                            if abs(self.value - newValue) > 0.02 { // Only update if the change is significant
+                                self.value = newValue  // Update binding with debounce
+                                self.logger.debug("Value updated: \(newValue, format: .fixed(precision: 2))")
+                            }
+                            
+                            // Signal editing ended after a slight delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                // Only send editing ended if we haven't started a new edit
+                                if self.lastScrollPosition == newPosition {
+                                    self.onEditingChanged?(false)
+                                    self.dragEndWorkItem = nil // Reset drag tracking
+                                    self.lastScrollPosition = nil // Reset position tracking
+                                }
                             }
                         }
                     }
                 }
             }))
             .overlay(alignment: .center) {
-                // Center indicator line
-                Rectangle()
-                    .fill(Color.accentColor) // Use accent color for visibility
-                    .frame(width: 1, height: 40)
-                    .padding(.bottom, 20) // Adjust vertical position to match lines
+                // Center indicator line with triangle above
+                VStack(spacing: 0) {
+                    Image(systemName: "arrowtriangle.down.fill")
+                        .font(.system(size: 14))  // Increased from 12
+                        .foregroundColor(.yellow)
+                        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)  // Add shadow for contrast
+                    
+                    Rectangle()
+                        .fill(Color.yellow) // Changed to yellow for better visibility
+                        .frame(width: 3, height: 44)  // Increased width from 2 to 3 and height from 40 to 44
+                        .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 0)  // Add shadow for contrast
+                        .padding(.bottom, 20) // Adjust vertical position to match lines
+                }
             }
             .safeAreaPadding(.horizontal, horizontalPadding)
             .onAppear {
@@ -182,7 +201,7 @@ struct SimpleWheelPicker: View {
         var min: CGFloat
         var max: CGFloat
         var stepsPerUnit: Int = 10 // e.g., 10 steps per 1.0 value change means 0.1 increments
-        var spacing: CGFloat = 8    // Visual spacing between ticks
+        var spacing: CGFloat = 12   // Visual spacing between ticks
         var showsText: Bool = true  // Whether to show text labels on major ticks
     }
 }
