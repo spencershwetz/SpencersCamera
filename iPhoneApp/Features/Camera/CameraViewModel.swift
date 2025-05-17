@@ -629,6 +629,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func switchToLens(_ lens: CameraLens) {
+        // Remove video output delegate before switching
+        unifiedVideoOutput?.setSampleBufferDelegate(nil, queue: nil)
+        
         // Store current EV bias before lens switch
         lastExposureBias = exposureBias
         
@@ -687,6 +690,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             if wasShutterPriorityEnabled {
                 self.logger.info("🔄 [switchToLens] Re-applying shutter priority after lens switch")
                 self.ensureShutterPriorityConsistency()
+            }
+        }
+        
+        // Re-attach video output delegate after session is running
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            if let videoOutput = self.unifiedVideoOutput {
+                let highPriorityQueue = DispatchQueue(label: "com.camera.preview", qos: .userInteractive, attributes: .concurrent)
+                videoOutput.setSampleBufferDelegate(self, queue: highPriorityQueue)
             }
         }
     }
@@ -1344,6 +1356,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
 
             self.logger.info("[SessionControl] Attempting to start session via performSessionStartSequence...")
+            // Remove video output delegate before starting
+            self.unifiedVideoOutput?.setSampleBufferDelegate(nil, queue: nil)
             // Reapply video stabilization setting before starting session
             // This is the correct place to set it up for a new session start.
             self.setupUnifiedVideoOutput(enableStabilization: self.settingsModel.isVideoStabilizationEnabled)

@@ -13,6 +13,7 @@ class MetalFrameProcessor {
     private var computePipelineStateRGB: MTLComputePipelineState?
     private var computePipelineStateYUV: MTLComputePipelineState?
     private var _textureCache: CVMetalTextureCache?
+    private let processingSemaphore = DispatchSemaphore(value: 1)
     
     // Add public access to texture cache for management
     var textureCache: CVMetalTextureCache? {
@@ -77,6 +78,11 @@ class MetalFrameProcessor {
     ///   - bakeInLUT: Flag indicating whether the LUT should be baked into the output, primarily relevant for YUV formats during recording.
     /// - Returns: A new CVPixelBuffer in BGRA format with the LUT applied (if applicable), or nil if processing fails or is skipped.
     func processFrame(pixelBuffer: CVPixelBuffer, bakeInLUT: Bool) -> CVPixelBuffer? {
+        guard processingSemaphore.wait(timeout: .now()) == .success else {
+            logger.warning("Dropping frame: previous Metal command still in flight")
+            return nil
+        }
+        defer { processingSemaphore.signal() }
         // Quick exit: If no LUT is set **and** we are not force-baking (e.g. preview pass with no active LUT)
         // then simply skip Metal processing and let the caller use the original buffer.
         // This prevents unnecessary compute passes that can overwhelm the GPU and lead to timeout crashes
@@ -374,7 +380,9 @@ class MetalFrameProcessor {
 
         // Commit and wait for completion
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted() // Wait synchronously for simplicity in recording pipeline
+        if bakeInLUT {
+            commandBuffer.waitUntilCompleted() // Only wait for recording, not preview
+        }
 
         // Check for errors after execution
         if let error = commandBuffer.error {
