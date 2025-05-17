@@ -200,12 +200,14 @@ struct SimpleWheelPicker: View {
                 logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
                 isLoaded = true
             }
-            .onChange(of: value) { newValue in
-                // Update intermediateValue when binding value changes externally
-                let clampedValue = newValue.clamped(to: config.min...config.max)
-                intermediateValue = clampedValue
-                if clampedValue != newValue {
-                    value = clampedValue
+            .onChange(of: value) { oldValue, newValue in
+                // Only update intermediateValue if not currently dragging (i.e., no dragEndWorkItem)
+                if dragEndWorkItem == nil {
+                    let clamped = newValue.clamped(to: config.min...config.max)
+                    if abs(intermediateValue - clamped) > 0.01 {
+                        intermediateValue = clamped
+                        logger.debug("[onChange] External value change detected. intermediateValue reset to: \(clamped, format: .fixed(precision: 2))")
+                    }
                 }
             }
         }

@@ -304,11 +304,9 @@ struct CameraView: View {
                                         HapticManager.shared.lightImpact()
                                     }
                                     
-                                    // Set EV bias to zero with animation
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        viewModel.exposureBias = 0.0
-                                        viewModel.setExposureBias(0.0)
-                                    }
+                                    // Set EV bias to zero
+                                    viewModel.exposureBias = 0.0
+                                    viewModel.setExposureBias(0.0)
                                 }
                                 .foregroundColor(viewModel.exposureBias == 0.0 ? .yellow : .white)
                                 .buttonStyle(HapticButtonStyle())

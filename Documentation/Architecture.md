@@ -14,6 +14,7 @@ This document describes the high-level architecture and directory structure of t
     - **Real-time feedback:** The EV value updates continuously as you drag with optimized throttling (100ms intervals) to prevent GPU overload.
     - **Performance optimized:** Implements intelligent throttling and debouncing to prevent GPU timeouts while maintaining responsive feel.
     - **No edge bounce:** The wheel locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
+    - **Tap-to-zero:** If the user taps the Zero button, the wheel visually and logically resets to 0 EV, ensuring the UI and value are always in sync.
 - The wheel can be shown/hidden with a vertical swipe gesture on the camera preview:
     - Swipe Up: Shows the EV wheel.
     - Swipe Down: Hides the EV wheel.
