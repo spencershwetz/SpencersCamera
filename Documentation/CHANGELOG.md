@@ -108,6 +108,10 @@ All notable changes to this project will be documented in this file.
     *   Automatic cleanup when view is dismantled
     *   Debounce protection to prevent rapid toggling
 
+*   UI: EV compensation wheel now visually resets to zero when the Zero button is tapped:
+    *   The SimpleWheelPicker's position is now synced to the bound value, so tapping Zero instantly and visually resets the wheel to 0 EV.
+    *   Ensures the UI and value are always in sync, even when set programmatically.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:

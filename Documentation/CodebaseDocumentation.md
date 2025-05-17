@@ -20,6 +20,7 @@ This document provides a detailed overview of key classes, components, and their
       - Maintains local model values for responsive UI while safely throttling camera API calls
       - Properly manages timers and animation state to prevent resource leaks
     - **No edge bounce:** The wheel locks exactly on each tick when released, with scroll edge bouncing disabled. There is no overshoot or bounce-back at the ends.
+    - **Tap-to-zero support:** When the bound value is set to zero (e.g., via the Zero button), the wheel visually animates to zero, ensuring the UI and value are always in sync.
 - The wheel visibility is controlled through vertical swipe gestures:
     - Swipe Up: Shows the EV wheel.
     - Swipe Down: Hides the EV wheel.

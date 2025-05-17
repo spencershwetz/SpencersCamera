@@ -27,6 +27,7 @@ This document outlines the technical specifications and requirements for the Spe
         - Manages timers and pending updates to ensure latest value is always applied
         - Balances responsiveness with system stability to prevent GPU timeouts
     - Show/hide with vertical swipe gestures on camera preview
+    - **Tap-to-zero:** When the Zero button is tapped, the wheel visually and logically resets to 0 EV, ensuring the UI and value are always in sync.
 *   **Lifecycle Management**: App lifecycle events (`didBecomeActive`, `willResignActive`) are handled: 
     *   `willResignActive` triggers `stopSession` via `.onReceive` in `CameraView`.
     *   `didBecomeActive` is managed by `AppLifecycleObserver` (used as `@StateObject` in `CameraView`), which publishes an event triggering `startSession` in `CameraView` to ensure the session restarts correctly after backgrounding.

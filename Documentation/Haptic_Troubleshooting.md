@@ -1,5 +1,7 @@
 # EVWheelPicker Haptic Feedback Troubleshooting
 
+> Note: As of 2025-05-17, the SimpleWheelPicker now visually and logically resets to zero when the Zero button is tapped, ensuring the wheel and value are always in sync. This may help clarify user feedback and reduce confusion about the wheel's state.
+
 ## Issue
 
 Haptic feedback (vibration) is not being felt when interacting with the `EVWheelPicker` component (`iPhoneApp/Features/Camera/Views/EVWheelPicker.swift`), despite:
@@ -71,6 +73,7 @@ Haptic feedback (vibration) is not being felt when interacting with the `EVWheel
 *   **Check Audio Session:** Review how the app configures its `AVAudioSession`. Certain configurations *might* interfere with haptics, although this is less common.
 *   **Profile with Instruments:** Use the Haptics track in Instruments to see if the system is even *receiving* the haptic requests from the app process.
 *   **Refactor with ScrollView:** Consider if `EVWheelPicker` could be fundamentally refactored to use `ScrollView` + `.scrollPosition` like the example, although this would lose the custom gesture physics.
+*   **Visual Sync Improvement:** The current SimpleWheelPicker implementation now visually and logically resets to zero when the Zero button is tapped. This ensures the wheel's state always matches the logical value, which may help with user feedback clarity and reduce confusion about the wheel's position after programmatic changes.
 
 ## Possible Remaining Causes
 
