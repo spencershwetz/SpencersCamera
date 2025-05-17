@@ -915,7 +915,10 @@ class ExposureService: NSObject {
 
         let clampedBias = min(max(device.minExposureTargetBias, bias), device.maxExposureTargetBias)
 
-        logger.debug("[ExposureBias] Requested bias: \(bias). Clamped to: \(clampedBias). Device range: (\(device.minExposureTargetBias) ... \(device.maxExposureTargetBias))")
+        // Only log significant changes to avoid rate limit warnings
+        if abs(bias - device.exposureTargetBias) > 0.1 {
+            logger.debug("[ExposureBias] Requested bias: \(bias). Clamped to: \(clampedBias). Device range: (\(device.minExposureTargetBias) ... \(device.maxExposureTargetBias))")
+        }
 
         do {
             try device.lockForConfiguration()

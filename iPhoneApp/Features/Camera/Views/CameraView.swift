@@ -248,17 +248,24 @@ struct CameraView: View {
                                 .font(.caption)
                                 .foregroundColor(.white)
                                 .padding(.top, 4)
-                                .animatingEVValue(value: viewModel.exposureBias)
+                                .animatingEVValue(value: round(viewModel.exposureBias * 20) / 20) // Use rounded value to reduce animation triggers
+                            // Use a more efficient binding with a higher threshold to reduce update frequency
                             let exposureBiasBinding = Binding<CGFloat>(
                                 get: { CGFloat(viewModel.exposureBias) },
-                                set: { viewModel.exposureBias = Float($0) }
+                                set: { newValue in
+                                    // Only update if change is significant (0.05 EV steps instead of continuous)
+                                    let rounded = round(newValue * 20) / 20 // Round to nearest 0.05
+                                    if abs(CGFloat(viewModel.exposureBias) - rounded) >= 0.05 {
+                                        viewModel.exposureBias = Float(rounded)
+                                    }
+                                }
                             )
                             SimpleWheelPicker(
                                 config: .init(
                                     min: CGFloat(viewModel.minExposureBias),
                                     max: CGFloat(viewModel.maxExposureBias),
                                     stepsPerUnit: 10, 
-                                    spacing: 12,  // Reduced for tighter tick spacing
+                                    spacing: 6,  // Reduced for ultra-tight tick spacing
                                     showsText: true
                                 ),
                                 value: exposureBiasBinding,
@@ -273,14 +280,10 @@ struct CameraView: View {
                             )
                             .frame(height: 60)
                             .background(Color.black.opacity(0.3))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.gray.opacity(0.5), lineWidth: 1)
-                            )
+                            .cornerRadius(4)  // Add corner radius directly to match the stroke
                         }
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.5))
-                        .padding(.bottom, 20)
+                        .padding(.vertical, 4)  // Reduced from 8 to 4
+                        .padding(.bottom, 12)  // Reduced from 20 to 12
                     }
                     .padding(.trailing, 10) 
                     .transition(.opacity) 

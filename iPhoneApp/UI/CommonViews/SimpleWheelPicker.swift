@@ -102,11 +102,7 @@ struct SimpleWheelPicker: View {
                                         .offset(y: -22)
                                 }
                             }
-                            .onAppear {
-                                if index % 10 == 0 {
-                                    logger.debug("Tick \(index) rendered: value=\(tickValue), major=\(isMajorTick)")
-                                }
-                            }
+                            // Removed debug logs that were causing rate limit warnings
                     }
                 }
                 .frame(height: size.height)
@@ -148,7 +144,7 @@ struct SimpleWheelPicker: View {
                             // Only update the binding if we're not receiving multiple updates per frame
                             if abs(self.value - newValue) > 0.02 { // Only update if the change is significant
                                 self.value = newValue  // Update binding with debounce
-                                self.logger.debug("Value updated: \(newValue, format: .fixed(precision: 2))")
+                                // Removed high-frequency debug log that was causing rate limit warnings
                             }
                             
                             // Signal editing ended after a slight delay
@@ -201,7 +197,7 @@ struct SimpleWheelPicker: View {
         var min: CGFloat
         var max: CGFloat
         var stepsPerUnit: Int = 10 // e.g., 10 steps per 1.0 value change means 0.1 increments
-        var spacing: CGFloat = 12   // Visual spacing between ticks
+        var spacing: CGFloat = 6   // Visual spacing between ticks
         var showsText: Bool = true  // Whether to show text labels on major ticks
     }
 }
