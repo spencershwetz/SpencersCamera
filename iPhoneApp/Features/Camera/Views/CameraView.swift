@@ -294,21 +294,42 @@ struct CameraView: View {
                                     }
                                 )
                             }()
-                            SimpleWheelPicker(
-                                config: .init(
-                                    min: CGFloat(viewModel.minExposureBias),
-                                    max: CGFloat(viewModel.maxExposureBias),
-                                    stepsPerUnit: 10, 
-                                    spacing: 6,  // Reduced for ultra-tight tick spacing
-                                    showsText: true
-                                ),
-                                value: exposureBiasBinding,
-                                onEditingChanged: { isEditing in
-                                    // We don't need to explicitly call setExposureBias when editing ends
-                                    // since we're already applying changes in real-time during scrolling
+                            
+                            // Add HStack to hold the Auto Zero button and the wheel together
+                            HStack(spacing: 12) {
+                                // Auto Zero button
+                                Button("Zero") {
+                                    // Use HapticManager on main thread for reliability
+                                    DispatchQueue.main.async {
+                                        HapticManager.shared.lightImpact()
+                                    }
+                                    
+                                    // Set EV bias to zero with animation
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        viewModel.exposureBias = 0.0
+                                        viewModel.setExposureBias(0.0)
+                                    }
                                 }
-                            )
-                            .frame(height: 60)
+                                .foregroundColor(viewModel.exposureBias == 0.0 ? .yellow : .white)
+                                .buttonStyle(HapticButtonStyle())
+                                
+                                // EV Wheel
+                                SimpleWheelPicker(
+                                    config: .init(
+                                        min: CGFloat(viewModel.minExposureBias),
+                                        max: CGFloat(viewModel.maxExposureBias),
+                                        stepsPerUnit: 10, 
+                                        spacing: 6,  // Reduced for ultra-tight tick spacing
+                                        showsText: true
+                                    ),
+                                    value: exposureBiasBinding,
+                                    onEditingChanged: { isEditing in
+                                        // We don't need to explicitly call setExposureBias when editing ends
+                                        // since we're already applying changes in real-time during scrolling
+                                    }
+                                )
+                                .frame(height: 60)
+                            }
                             .background(Color.black.opacity(0.3))
                             .cornerRadius(4)  // Add corner radius directly to match the stroke
                         }

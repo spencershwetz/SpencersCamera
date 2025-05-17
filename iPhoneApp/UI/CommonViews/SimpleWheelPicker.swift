@@ -200,6 +200,14 @@ struct SimpleWheelPicker: View {
                 logger.debug("Intermediate value initialized to: \(intermediateValue, format: .fixed(precision: 2))")
                 isLoaded = true
             }
+            .onChange(of: value) { newValue in
+                // Update intermediateValue when binding value changes externally
+                let clampedValue = newValue.clamped(to: config.min...config.max)
+                intermediateValue = clampedValue
+                if clampedValue != newValue {
+                    value = clampedValue
+                }
+            }
         }
     }
     
