@@ -99,13 +99,15 @@ struct SimpleWheelPicker: View {
                                         .font(.caption2)
                                         .foregroundColor(.white)
                                         .fixedSize()
-                                        .offset(y: -22)
+                                        .offset(y: -20)
+                                        .padding(.top, 0)
                                 }
                             }
                             // Removed debug logs that were causing rate limit warnings
                     }
                 }
                 .frame(height: size.height)
+                .padding(.top, 8)
                 .scrollTargetLayout()
             }
             .scrollIndicators(.hidden)

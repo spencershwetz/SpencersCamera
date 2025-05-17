@@ -241,13 +241,12 @@ struct CameraView: View {
         .overlay(
             Group {
                 if settings.isEVBiasVisible {
-                    VStack {
-                        Spacer()
+                    GeometryReader { geo in
                         VStack(spacing: 4) {
                             Text(String(format: "%+.1f EV", viewModel.exposureBias))
                                 .font(.caption)
                                 .foregroundColor(.white)
-                                .padding(.top, 4)
+                                .padding(.top, 12)
                                 .animatingEVValue(value: round(viewModel.exposureBias * 20) / 20) // Use rounded value to reduce animation triggers
                             // Use a binding with throttling to prevent GPU timeouts
                             let exposureBiasBinding: Binding<CGFloat> = {
@@ -313,16 +312,14 @@ struct CameraView: View {
                             .background(Color.black.opacity(0.3))
                             .cornerRadius(4)  // Add corner radius directly to match the stroke
                         }
+                        .frame(width: geo.size.width * 0.85, height: nil, alignment: .center)
+                        .position(x: geo.size.width / 2, y: geo.size.height - 90)
                         .padding(.vertical, 4)  // Reduced from 8 to 4
-                        .padding(.bottom, 12)  // Reduced from 20 to 12
                     }
-                    .padding(.trailing, 10) 
-                    .transition(.opacity) 
-                    .zIndex(200)
                 }
             }
             .animation(.easeInOut, value: settings.isEVBiasVisible),
-            alignment: .trailing
+            alignment: .center
         )
         .contentShape(Rectangle())
         .gesture(
