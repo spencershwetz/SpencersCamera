@@ -23,124 +23,25 @@ extension Notification.Name {
 
 class SettingsModel: ObservableObject {
     // MARK: - Existing Settings
-    @Published var isAppleLogEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isAppleLogEnabled, forKey: Keys.isAppleLogEnabled)
-            NotificationCenter.default.post(name: .appleLogSettingChanged, object: nil)
-            print("Apple Log Enabled: \(isAppleLogEnabled)")
-        }
-    }
-    
-    @Published var isFlashlightEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isFlashlightEnabled, forKey: Keys.isFlashlightEnabled)
-            NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
-            print("Flashlight Enabled: \(isFlashlightEnabled)")
-        }
-    }
-    
-    @Published var flashlightIntensity: Float {
-        didSet {
-            UserDefaults.standard.set(flashlightIntensity, forKey: Keys.flashlightIntensity)
-            NotificationCenter.default.post(name: .flashlightSettingChanged, object: nil)
-            print("Flashlight Intensity: \(flashlightIntensity)")
-        }
-    }
-    
-    @Published var isBakeInLUTEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isBakeInLUTEnabled, forKey: Keys.isBakeInLUTEnabled)
-            NotificationCenter.default.post(name: .bakeInLUTSettingChanged, object: nil)
-            print("Bake In LUT Enabled: \(isBakeInLUTEnabled)")
-        }
-    }
-    
-    @Published var isExposureLockEnabledDuringRecording: Bool {
-        didSet {
-            UserDefaults.standard.set(isExposureLockEnabledDuringRecording, forKey: Keys.isExposureLockEnabledDuringRecording)
-            NotificationCenter.default.post(name: .exposureLockDuringRecordingSettingChanged, object: nil)
-            print("Exposure Lock During Recording Enabled: \(isExposureLockEnabledDuringRecording)")
-        }
-    }
-    
-    @Published var isWhiteBalanceLockEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isWhiteBalanceLockEnabled, forKey: Keys.isWhiteBalanceLockEnabled)
-            NotificationCenter.default.post(name: .whiteBalanceLockSettingChanged, object: nil)
-        }
-    }
+    @Published var isAppleLogEnabled: Bool
+    @Published var isFlashlightEnabled: Bool
+    @Published var flashlightIntensity: Float
+    @Published var isBakeInLUTEnabled: Bool
+    @Published var isExposureLockEnabledDuringRecording: Bool
+    @Published var isWhiteBalanceLockEnabled: Bool
     
     // MARK: - New Persistent Settings
-    @Published var selectedResolutionRaw: String {
-        didSet {
-            UserDefaults.standard.set(selectedResolutionRaw, forKey: Keys.selectedResolutionRaw)
-            NotificationCenter.default.post(name: .selectedResolutionChanged, object: nil)
-            print("Selected Resolution: \(selectedResolutionRaw)")
-        }
-    }
-    
-    @Published var selectedCodecRaw: String {
-        didSet {
-            UserDefaults.standard.set(selectedCodecRaw, forKey: Keys.selectedCodecRaw)
-            NotificationCenter.default.post(name: .selectedCodecChanged, object: nil)
-            print("Selected Codec: \(selectedCodecRaw)")
-        }
-    }
-    
-    @Published var selectedFrameRate: Double {
-        didSet {
-            UserDefaults.standard.set(selectedFrameRate, forKey: Keys.selectedFrameRate)
-            NotificationCenter.default.post(name: .selectedFrameRateChanged, object: nil)
-            print("Selected Frame Rate: \(selectedFrameRate)")
-        }
-    }
-    
-    @Published var isDebugEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isDebugEnabled, forKey: Keys.isDebugEnabled)
-            NotificationCenter.default.post(name: .isDebugEnabledChanged, object: nil)
-            print("Debug Enabled: \(isDebugEnabled)")
-        }
-    }
-    
-    @Published var isVideoStabilizationEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(isVideoStabilizationEnabled, forKey: Keys.isVideoStabilizationEnabled)
-            NotificationCenter.default.post(name: .videoStabilizationSettingChanged, object: nil)
-            print("Video Stabilization Enabled: \(isVideoStabilizationEnabled)")
-        }
-    }
-    
-    @Published var isEVBiasVisible: Bool {
-        didSet {
-            UserDefaults.standard.set(isEVBiasVisible, forKey: Keys.isEVBiasVisible)
-            NotificationCenter.default.post(name: .evBiasVisibilityChanged, object: nil)
-            print("EV Bias Visible: \(isEVBiasVisible)")
-        }
-    }
-    
-    @Published var isDebugOverlayVisible: Bool {
-        didSet {
-            UserDefaults.standard.set(isDebugOverlayVisible, forKey: Keys.isDebugOverlayVisible)
-            NotificationCenter.default.post(name: .debugOverlayVisibilityChanged, object: nil)
-            print("Debug Overlay Visible: \(isDebugOverlayVisible)")
-        }
-    }
+    @Published var selectedResolutionRaw: String
+    @Published var selectedCodecRaw: String
+    @Published var selectedFrameRate: Double
+    @Published var isDebugEnabled: Bool
+    @Published var isVideoStabilizationEnabled: Bool
+    @Published var isEVBiasVisible: Bool
+    @Published var isDebugOverlayVisible: Bool
     
     // MARK: - Function Button Assignments
-    @Published var functionButton1Ability: FunctionButtonAbility {
-        didSet {
-            UserDefaults.standard.set(functionButton1Ability.rawValue, forKey: Keys.functionButton1Ability)
-            print("Function Button 1 Ability: \(functionButton1Ability.rawValue)")
-        }
-    }
-    
-    @Published var functionButton2Ability: FunctionButtonAbility {
-        didSet {
-            UserDefaults.standard.set(functionButton2Ability.rawValue, forKey: Keys.functionButton2Ability)
-            print("Function Button 2 Ability: \(functionButton2Ability.rawValue)")
-        }
-    }
+    @Published var functionButton1Ability: FunctionButtonAbility
+    @Published var functionButton2Ability: FunctionButtonAbility
 
     // MARK: - Computed Properties
     var isAppleLogSupported: Bool {
@@ -315,5 +216,24 @@ class SettingsModel: ObservableObject {
         static let isVideoStabilizationEnabled = "isVideoStabilizationEnabled"
         static let isEVBiasVisible = "isEVBiasVisible"
         static let isDebugOverlayVisible = "isDebugOverlayVisible"
+    }
+    
+    // Add a method to save all settings to UserDefaults
+    func saveToUserDefaults() {
+        UserDefaults.standard.set(isAppleLogEnabled, forKey: Keys.isAppleLogEnabled)
+        UserDefaults.standard.set(isFlashlightEnabled, forKey: Keys.isFlashlightEnabled)
+        UserDefaults.standard.set(flashlightIntensity, forKey: Keys.flashlightIntensity)
+        UserDefaults.standard.set(isBakeInLUTEnabled, forKey: Keys.isBakeInLUTEnabled)
+        UserDefaults.standard.set(functionButton1Ability.rawValue, forKey: Keys.functionButton1Ability)
+        UserDefaults.standard.set(functionButton2Ability.rawValue, forKey: Keys.functionButton2Ability)
+        UserDefaults.standard.set(isWhiteBalanceLockEnabled, forKey: Keys.isWhiteBalanceLockEnabled)
+        UserDefaults.standard.set(isExposureLockEnabledDuringRecording, forKey: Keys.isExposureLockEnabledDuringRecording)
+        UserDefaults.standard.set(selectedResolutionRaw, forKey: Keys.selectedResolutionRaw)
+        UserDefaults.standard.set(selectedCodecRaw, forKey: Keys.selectedCodecRaw)
+        UserDefaults.standard.set(selectedFrameRate, forKey: Keys.selectedFrameRate)
+        UserDefaults.standard.set(isDebugEnabled, forKey: Keys.isDebugEnabled)
+        UserDefaults.standard.set(isVideoStabilizationEnabled, forKey: Keys.isVideoStabilizationEnabled)
+        UserDefaults.standard.set(isEVBiasVisible, forKey: Keys.isEVBiasVisible)
+        UserDefaults.standard.set(isDebugOverlayVisible, forKey: Keys.isDebugOverlayVisible)
     }
 }

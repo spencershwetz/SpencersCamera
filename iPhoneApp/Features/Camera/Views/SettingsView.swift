@@ -211,6 +211,9 @@ struct SettingsView: View {
                     }
                 }
             }
+            .onDisappear {
+                settingsModel.saveToUserDefaults()
+            }
         }
     }
     
