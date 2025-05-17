@@ -1340,6 +1340,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // If isSessionRunning is false and device is not nil, proceed to start it.
         logger.info("[SessionControl] Start session requested (isSessionRunning is false).")
+        
+        // Prepare Metal preview for new session (e.g., flush texture cache)
+        // This is called from startSession, which is invoked on the main thread by AppLifecycleObserver via ScenePhase.
+        logger.info("[SessionControl] Calling metalPreviewDelegate.prepareForNewSession() synchronously on main thread.")
+        metalPreviewDelegate?.prepareForNewSession()
+
         performSessionStartSequence()
     }
 

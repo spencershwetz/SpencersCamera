@@ -239,6 +239,7 @@ This document outlines the technical specifications and requirements for the Spe
 - **Metal Resource Management**:
     - Exposed texture cache through controlled interfaces to enable proper flushing
     - Added explicit texture cache cleanup during frame processing
+    - Proactively flushes `CVMetalTextureCache` and nils out `MTLTexture`s via `MetalPreviewView.prepareForNewSession()` before session (re)start to prevent GPU timeouts (purple screen issue) when the app returns from background or the session is re-initialized.
     - Implemented reference counting for shared Metal resources
     - Used `autoreleasepool` blocks during high-memory operations
 - **Camera Transitions**:

@@ -126,6 +126,24 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         logger.info("MetalPreviewView initialized with device: \(self.device.name)")
     }
     
+    public func prepareForNewSession() {
+        logger.info("Preparing MetalPreviewView for new session. Flushing texture cache and resetting textures.")
+        CVMetalTextureCacheFlush(textureCache, 0)
+        // Nil out textures to ensure they are recreated
+        self.bgraTexture = nil
+        self.lumaTexture = nil
+        self.chromaTexture = nil
+        self.currentPixelFormat = 0 // Force re-evaluation of pixel format and potentially another flush on first new frame
+        self.frameCounter = 0 // Reset periodic flush counter
+        
+        // It might also be beneficial to clear the MTKView's drawable if possible,
+        // though simply not drawing until a new valid frame arrives might be sufficient.
+        // Clearing the view to a solid color (e.g., black) could prevent a flash of old content.
+        // However, this needs to be done carefully within the MTKView's drawing cycle.
+        // For now, focusing on cache and texture state.
+        logger.info("MetalPreviewView new session preparation complete.")
+    }
+    
     // Renamed and modified to create both pipelines
     private func setupRenderPipelines() {
         guard let library = device.makeDefaultLibrary() else {
