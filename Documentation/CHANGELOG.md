@@ -112,6 +112,8 @@ All notable changes to this project will be documented in this file.
     *   The SimpleWheelPicker's position is now synced to the bound value, so tapping Zero instantly and visually resets the wheel to 0 EV.
     *   Ensures the UI and value are always in sync, even when set programmatically.
 
+*   Fixed: EV bias (exposure compensation) now only applies when auto exposure is enabled. The UI disables the EV bias wheel and shows a message when in manual ISO/shutter mode. This prevents user confusion and ensures the device's exposure bias is actually updated.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:

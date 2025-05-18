@@ -247,8 +247,7 @@ struct CameraView: View {
                                 .font(.caption)
                                 .foregroundColor(.white)
                                 .padding(.top, 12)
-                                .animatingEVValue(value: round(viewModel.exposureBias * 20) / 20) // Use rounded value to reduce animation triggers
-                            // Use a binding with throttling to prevent GPU timeouts
+                                .animatingEVValue(value: round(viewModel.exposureBias * 20) / 20)
                             let exposureBiasBinding: Binding<CGFloat> = {
                                 // Throttling data
                                 class ThrottleData {
@@ -294,46 +293,61 @@ struct CameraView: View {
                                     }
                                 )
                             }()
-                            
-                            // Add HStack to hold the Auto Zero button and the wheel together
                             HStack(spacing: 12) {
-                                // Auto Zero button
                                 Button("Zero") {
-                                    // Use HapticManager on main thread for reliability
                                     DispatchQueue.main.async {
                                         HapticManager.shared.lightImpact()
                                     }
-                                    
-                                    // Set EV bias to zero
                                     viewModel.exposureBias = 0.0
                                     viewModel.setExposureBias(0.0)
                                 }
                                 .foregroundColor(viewModel.exposureBias == 0.0 ? .yellow : .white)
                                 .buttonStyle(HapticButtonStyle())
-                                
-                                // EV Wheel
-                                SimpleWheelPicker(
-                                    config: .init(
-                                        min: CGFloat(viewModel.minExposureBias),
-                                        max: CGFloat(viewModel.maxExposureBias),
-                                        stepsPerUnit: 10, 
-                                        spacing: 6,  // Reduced for ultra-tight tick spacing
-                                        showsText: true
-                                    ),
-                                    value: exposureBiasBinding,
-                                    onEditingChanged: { isEditing in
-                                        // We don't need to explicitly call setExposureBias when editing ends
-                                        // since we're already applying changes in real-time during scrolling
-                                    }
-                                )
-                                .frame(height: 60)
+                                if viewModel.isAutoExposureEnabled {
+                                    SimpleWheelPicker(
+                                        config: .init(
+                                            min: CGFloat(viewModel.minExposureBias),
+                                            max: CGFloat(viewModel.maxExposureBias),
+                                            stepsPerUnit: 10,
+                                            spacing: 6,
+                                            showsText: true
+                                        ),
+                                        value: exposureBiasBinding,
+                                        onEditingChanged: { _ in }
+                                    )
+                                    .frame(height: 60)
+                                } else {
+                                    SimpleWheelPicker(
+                                        config: .init(
+                                            min: CGFloat(viewModel.minExposureBias),
+                                            max: CGFloat(viewModel.maxExposureBias),
+                                            stepsPerUnit: 10,
+                                            spacing: 6,
+                                            showsText: true
+                                        ),
+                                        value: .constant(CGFloat(viewModel.exposureBias)),
+                                        onEditingChanged: { _ in }
+                                    )
+                                    .frame(height: 60)
+                                    .disabled(true)
+                                    .opacity(0.5)
+                                    .overlay(
+                                        Text("Enable Auto Exposure to adjust EV bias")
+                                            .font(.caption2)
+                                            .foregroundColor(.yellow)
+                                            .padding(4)
+                                            .background(Color.black.opacity(0.7))
+                                            .cornerRadius(4)
+                                            .offset(y: -40)
+                                    )
+                                }
                             }
                             .background(Color.black.opacity(0.3))
-                            .cornerRadius(4)  // Add corner radius directly to match the stroke
+                            .cornerRadius(4)
                         }
                         .frame(width: geo.size.width * 0.85, height: nil, alignment: .center)
                         .position(x: geo.size.width / 2, y: geo.size.height - 90)
-                        .padding(.vertical, 4)  // Reduced from 8 to 4
+                        .padding(.vertical, 4)
                     }
                 }
             }

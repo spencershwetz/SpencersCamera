@@ -913,6 +913,12 @@ class ExposureService: NSObject {
             return
         }
 
+        // Only allow in continuousAutoExposure mode
+        guard device.exposureMode == .continuousAutoExposure else {
+            logger.warning("[ExposureBias] Cannot set EV bias unless in continuousAutoExposure mode. Current mode: \(device.exposureMode.rawValue)")
+            return
+        }
+
         let clampedBias = min(max(device.minExposureTargetBias, bias), device.maxExposureTargetBias)
 
         // Only log on larger threshold changes to avoid rate limit warnings
