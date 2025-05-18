@@ -1987,6 +1987,11 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         self.device = device
         logger.info("[CameraViewModel] Camera initialized with device: \(device.localizedName)")
         
+        // Set Apple Log support flag based on device capabilities
+        self.isAppleLogSupported = device.formats.contains { format in
+            format.supportedColorSpaces.contains(.appleLog)
+        }
+        
         // Set the device on all services that need it
         exposureService.setDevice(device)
         recordingService.setDevice(device)

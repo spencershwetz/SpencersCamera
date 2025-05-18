@@ -190,3 +190,5 @@ The project is organized into the following main components:
   - Applying SP immediately after device switch
   - Pre-calculating ISO/duration
   - Freezing/unfreezing exposure UI during transition
+
+- **CameraViewModel**: Central coordinator for camera state, settings, and service orchestration. Now ensures Apple Log color space is correctly applied at boot by setting `isAppleLogSupported` in `didInitializeCamera` based on device capabilities.

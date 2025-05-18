@@ -173,6 +173,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
         *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
         *   **New (2025-05-02):** Implements debounced and atomic shutter priority re-application after lens switches, with device readiness checks and ISO caching for SP mode to prevent exposure jumps and race conditions.
+        *   Now sets `isAppleLogSupported` in `didInitializeCamera` based on device capabilities, ensuring Apple Log color space is correctly applied at boot if supported and enabled.
     *   **VideoOutputDelegate (`Services/VideoOutputDelegate.swift`)**: Handles video sample buffer output from the camera session. Implements `AVCaptureVideoDataOutputSampleBufferDelegate` to process frames for preview, recording, or real-time effects. Acts as a bridge between `AVCaptureSession` and higher-level camera logic.
 
     *   Handles restoration of exposure lock after lens changes when both "Lock Exposure During Recording" and "Shutter Priority" are enabled. After a lens switch, it re-enables shutter priority and, after a short delay, re-applies the shutter priority exposure lock to ensure ISO remains fixed. 

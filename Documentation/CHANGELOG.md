@@ -180,6 +180,7 @@ All notable changes to this project will be documented in this file.
 *   Improved error handling for unsupported color space configurations
 *   Fix: Ensure user-selected color space is respected on initial app boot by explicitly applying the color space after session setup in CameraViewModel. (Color space was not always respected until session restart or setting toggle)
 *   Fix: Throttled Metal frame processing to one in-flight command buffer at a time and paused frame processing during session/lens switches to prevent GPU overload and timeouts.
+*   Fixed: Apple Log color space is now correctly applied at app launch if supported and enabled. The fix sets `isAppleLogSupported` in `CameraViewModel.didInitializeCamera` based on device capabilities, restoring correct boot behavior after memory management refactor.
 
 ### Removed
 

@@ -266,3 +266,5 @@ This document outlines the technical specifications and requirements for the Spe
 - The exposure UI is frozen during the transition and unfrozen after Shutter Priority is re-applied, minimizing visible flicker.
 
 *(This specification includes deeper implementation details.)*
+
+- CameraViewModel now sets `isAppleLogSupported` in `didInitializeCamera` based on device capabilities, ensuring Apple Log color space is correctly applied at boot if supported and enabled.
