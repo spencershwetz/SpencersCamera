@@ -161,53 +161,98 @@ struct ZoomSliderView: View {
     // ISO menu with auto + wheel
     private var isoMenu: some View {
         HStack(spacing: 12) {
-            Button("Auto") {
-                // Use HapticManager on main thread for reliability
-                DispatchQueue.main.async {
-                    HapticManager.shared.lightImpact()
-                }
-                
-                viewModel.isAutoExposureEnabled = true
-            }
-            .foregroundColor(viewModel.isAutoExposureEnabled ? .yellow : .white)
-            .buttonStyle(HapticButtonStyle())
-            
-            SimpleWheelPicker(
-                config: isoWheelConfig,
-                value: isoBinding,
-                onEditingChanged: { editing in
-                    if editing {
-                        viewModel.isAutoExposureEnabled = false
+            VStack {
+                HStack(spacing: 12) {
+                    // Auto button
+                    Button("Auto") {
+                        // Use HapticManager on main thread for reliability
+                        DispatchQueue.main.async {
+                            HapticManager.shared.lightImpact()
+                        }
+                        
+                        viewModel.isAutoExposureEnabled = true
                     }
-                })
-                .frame(height: 60)
+                    .foregroundColor(viewModel.isAutoExposureEnabled ? .yellow : .white)
+                    .buttonStyle(HapticButtonStyle())
+                    
+                    // Default ISO button (typically middle of range)
+                    Button("Default") {
+                        // Use HapticManager on main thread for reliability
+                        DispatchQueue.main.async {
+                            HapticManager.shared.lightImpact()
+                        }
+                        
+                        // Set ISO to middle of range or 100 if reasonable
+                        let defaultISO = max(100, min((viewModel.minISO + viewModel.maxISO) / 2, 400))
+                        viewModel.isAutoExposureEnabled = false
+                        viewModel.updateISO(Float(defaultISO))
+                    }
+                    .foregroundColor(.white)
+                    .buttonStyle(HapticButtonStyle())
+                    
+                    // ISO Wheel
+                    SimpleWheelPicker(
+                        config: isoWheelConfig,
+                        value: isoBinding,
+                        onEditingChanged: { editing in
+                            if editing {
+                                viewModel.isAutoExposureEnabled = false
+                            }
+                        })
+                        .frame(height: 60)
+                }
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(4)
+            }
         }
     }
     
     private var wbMenu: some View {
         HStack(spacing: 12) {
-            Button("Auto") {
-                // Use HapticManager on main thread for reliability
-                DispatchQueue.main.async {
-                    HapticManager.shared.lightImpact()
-                }
-                
-                viewModel.setWhiteBalanceAuto(true)
-            }
-            .foregroundColor(viewModel.isWhiteBalanceAuto ? .yellow : .white)
-            .buttonStyle(HapticButtonStyle())
-            
-            SimpleWheelPicker(
-                config: wbWheelConfig,
-                value: wbBinding,
-                onEditingChanged: { editing in
-                    if editing {
-                        viewModel.setWhiteBalanceAuto(false)
+            VStack {
+                HStack(spacing: 12) {
+                    // Auto button
+                    Button("Auto") {
+                        // Use HapticManager on main thread for reliability
+                        DispatchQueue.main.async {
+                            HapticManager.shared.lightImpact()
+                        }
+                        
+                        viewModel.setWhiteBalanceAuto(true)
                     }
-                })
-                .frame(height: 60)
-                .disabled(viewModel.isWhiteBalanceAuto)
-                .opacity(viewModel.isWhiteBalanceAuto ? 0.5 : 1)
+                    .foregroundColor(viewModel.isWhiteBalanceAuto ? .yellow : .white)
+                    .buttonStyle(HapticButtonStyle())
+                    
+                    // Default WB button (5500K - daylight)
+                    Button("5500K") {
+                        // Use HapticManager on main thread for reliability
+                        DispatchQueue.main.async {
+                            HapticManager.shared.lightImpact()
+                        }
+                        
+                        // Set WB to 5500K (daylight)
+                        viewModel.setWhiteBalanceAuto(false)
+                        viewModel.updateWhiteBalance(5500)
+                    }
+                    .foregroundColor(.white)
+                    .buttonStyle(HapticButtonStyle())
+                    
+                    // WB Wheel
+                    SimpleWheelPicker(
+                        config: wbWheelConfig,
+                        value: wbBinding,
+                        onEditingChanged: { editing in
+                            if editing {
+                                viewModel.setWhiteBalanceAuto(false)
+                            }
+                        })
+                        .frame(height: 60)
+                        .disabled(viewModel.isWhiteBalanceAuto)
+                        .opacity(viewModel.isWhiteBalanceAuto ? 0.5 : 1)
+                }
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(4)
+            }
         }
     }
     
@@ -233,19 +278,97 @@ struct ZoomSliderView: View {
     }
     
     private var isoBinding: Binding<CGFloat> {
-        Binding<CGFloat>(
+        // Create a binding with throttling to prevent GPU timeouts
+        // Similar to exposureBiasBinding in CameraView
+        
+        // Throttling data
+        class ThrottleData {
+            var lastUpdateTime = Date.distantPast
+            var pendingValue: CGFloat?
+            var timer: Timer?
+        }
+        let throttleData = ThrottleData()
+        let minTimeInterval: TimeInterval = 0.1 // 100ms between updates
+        
+        return Binding<CGFloat>(
             get: { CGFloat(viewModel.iso) },
-            set: { newVal in
-                viewModel.updateISO(Float(newVal))
+            set: { newValue in
+                // Always update the local model value immediately for responsive UI
+                let newISO = Float(newValue.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
+                viewModel.iso = newISO
+                
+                // Throttle camera updates to prevent GPU overload
+                let now = Date()
+                if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
+                    // Enough time has passed, apply immediately
+                    viewModel.updateISO(newISO)
+                    throttleData.lastUpdateTime = now
+                    throttleData.pendingValue = nil
+                } else {
+                    // Too soon, schedule for later
+                    throttleData.pendingValue = CGFloat(newISO)
+                    
+                    // Invalidate existing timer
+                    throttleData.timer?.invalidate()
+                    
+                    // Schedule a new timer to apply latest value
+                    throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
+                        if let pendingValue = throttleData.pendingValue {
+                            viewModel.updateISO(Float(pendingValue))
+                            throttleData.lastUpdateTime = Date()
+                            throttleData.pendingValue = nil
+                        }
+                    }
+                }
             }
         )
     }
     
     private var wbBinding: Binding<CGFloat> {
-        Binding<CGFloat>(
+        // Create a binding with throttling to prevent GPU timeouts
+        // Similar to exposureBiasBinding in CameraView
+        
+        // Throttling data
+        class ThrottleData {
+            var lastUpdateTime = Date.distantPast
+            var pendingValue: CGFloat?
+            var timer: Timer?
+        }
+        let throttleData = ThrottleData()
+        let minTimeInterval: TimeInterval = 0.1 // 100ms between updates
+        
+        return Binding<CGFloat>(
             get: { CGFloat(viewModel.whiteBalance / 100.0) }, // Divide by 100
             set: { newValInHundredKelvinUnits in
-                viewModel.updateWhiteBalance(Float(newValInHundredKelvinUnits * 100.0)) // Multiply by 100
+                // Calculate the actual kelvin value
+                let kelvinValue = Float(newValInHundredKelvinUnits * 100.0) // Multiply by 100
+                
+                // Always update the local model value immediately for responsive UI
+                viewModel.whiteBalance = kelvinValue
+                
+                // Throttle camera updates to prevent GPU overload
+                let now = Date()
+                if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
+                    // Enough time has passed, apply immediately
+                    viewModel.updateWhiteBalance(kelvinValue)
+                    throttleData.lastUpdateTime = now
+                    throttleData.pendingValue = nil
+                } else {
+                    // Too soon, schedule for later
+                    throttleData.pendingValue = CGFloat(kelvinValue / 100.0)
+                    
+                    // Invalidate existing timer
+                    throttleData.timer?.invalidate()
+                    
+                    // Schedule a new timer to apply latest value
+                    throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
+                        if let pendingValue = throttleData.pendingValue {
+                            viewModel.updateWhiteBalance(Float(pendingValue * 100.0))
+                            throttleData.lastUpdateTime = Date()
+                            throttleData.pendingValue = nil
+                        }
+                    }
+                }
             }
         )
     }
