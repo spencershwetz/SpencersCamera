@@ -46,6 +46,8 @@ The application primarily follows the **MVVM (Model-View-ViewModel)** architectu
         * Selecting a button reveals a horizontal menu directly above:
             * **Lens**: 0.5× / 1× / 2× / 5× buttons (filtered by `CameraLens.availableLenses()`).
             * **Shutter**: Auto (disables SP) or 180° (enables SP via `toggleShutterPriority()`).
+            * **ISO**: "Auto" toggle with manual ISO wheel for precise control.
+            * **WB**: "Auto" toggle with Kelvin temperature wheel (2500K-10000K).
 
 ## Directory Structure
 

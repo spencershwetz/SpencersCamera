@@ -273,5 +273,6 @@ This document provides a detailed overview of key classes, components, and their
     - **Shutter**: Auto or 180° (Shutter Priority toggle).
     - **ISO**: "Auto" toggle wired to `isAutoExposureEnabled`; Manual ISO wheel (`SimpleWheelPicker`) spanning `minISO…maxISO`.
     - **WB**: "Auto" toggle wired to new `isWhiteBalanceAuto`; Kelvin wheel 2 500 K – 10 000 K.
-- Menus animate in above the control row and share EV-wheel haptics, alignment & bounce-free scroll behaviour.
+- Menus animate in above the control row and share EV-wheel haptics, alignment & bounce-free scroll behavior.
+- All wheel controls (EV, ISO, WB) feature consistent design with identical tick spacing and visual style.
 - Added `ExposureService.setAutoWhiteBalanceEnabled(_:)` and `CameraViewModel.setWhiteBalanceAuto(_:)` for WB automation.

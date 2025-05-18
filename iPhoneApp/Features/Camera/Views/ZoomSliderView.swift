@@ -175,21 +175,6 @@ struct ZoomSliderView: View {
                     .foregroundColor(viewModel.isAutoExposureEnabled ? .yellow : .white)
                     .buttonStyle(HapticButtonStyle())
                     
-                    // Default ISO button (typically middle of range)
-                    Button("Default") {
-                        // Use HapticManager on main thread for reliability
-                        DispatchQueue.main.async {
-                            HapticManager.shared.lightImpact()
-                        }
-                        
-                        // Set ISO to middle of range or 100 if reasonable
-                        let defaultISO = max(100, min((viewModel.minISO + viewModel.maxISO) / 2, 400))
-                        viewModel.isAutoExposureEnabled = false
-                        viewModel.updateISO(Float(defaultISO))
-                    }
-                    .foregroundColor(.white)
-                    .buttonStyle(HapticButtonStyle())
-                    
                     // ISO Wheel
                     SimpleWheelPicker(
                         config: isoWheelConfig,
@@ -221,20 +206,6 @@ struct ZoomSliderView: View {
                         viewModel.setWhiteBalanceAuto(true)
                     }
                     .foregroundColor(viewModel.isWhiteBalanceAuto ? .yellow : .white)
-                    .buttonStyle(HapticButtonStyle())
-                    
-                    // Default WB button (5500K - daylight)
-                    Button("5500K") {
-                        // Use HapticManager on main thread for reliability
-                        DispatchQueue.main.async {
-                            HapticManager.shared.lightImpact()
-                        }
-                        
-                        // Set WB to 5500K (daylight)
-                        viewModel.setWhiteBalanceAuto(false)
-                        viewModel.updateWhiteBalance(5500)
-                    }
-                    .foregroundColor(.white)
                     .buttonStyle(HapticButtonStyle())
                     
                     // WB Wheel

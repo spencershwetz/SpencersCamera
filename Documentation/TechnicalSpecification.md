@@ -167,9 +167,11 @@ This document outlines the technical specifications and requirements for the Spe
     *   Each button reveals a horizontal menu:
         *   Lens buttons (0.5×, 1×, 2×, 5×).
         *   Shutter options (Auto, 180°) toggling shutter priority.
-        *   ISO wheel (`SimpleWheelPicker`) with auto toggle.
+        *   ISO wheel (`SimpleWheelPicker`) with auto toggle for exposure control.
         *   Kelvin wheel (`SimpleWheelPicker`) with auto white-balance toggle (2500–10000 K).
-    *   Wheels inherit EV bias picker behaviour: view-aligned, haptic feedback, bounce-free.
+    *   All wheels feature identical design with consistent tick spacing and visual styling.
+    *   Wheels inherit EV bias picker behavior: view-aligned, haptic feedback, bounce-free scrolling.
+    *   Implements throttled camera updates to prevent GPU overload during wheel scrolling.
     *   Newly added `ExposureService.setAutoWhiteBalanceEnabled` supports WB automation.
 
 ## Technical Requirements & Dependencies
