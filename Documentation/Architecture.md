@@ -32,6 +32,7 @@ This document describes the high-level architecture and directory structure of t
 - **VideoOutputDelegate**: Handles video sample buffer output for preview/recording.
 - **LensSelectionView**: UI for selecting camera lenses.
 - **Coordinator Classes**: Bridge UIKit/AppKit delegates to SwiftUI views for event handling.
+- **Note:** The debug log for updated rotation angle was removed from `DeviceOrientationViewModel` for cleaner logging.
 
 The application primarily follows the **MVVM (Model-View-ViewModel)** architecture pattern, particularly within the SwiftUI features (`CameraView`, `SettingsView`, `VideoLibraryView`, `Watch App/ContentView`).
 
