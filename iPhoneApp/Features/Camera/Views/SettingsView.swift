@@ -6,7 +6,7 @@ struct SettingsView: View {
     @ObservedObject var lutManager: LUTManager
     @ObservedObject var viewModel: CameraViewModel
     @ObservedObject var settingsModel: SettingsModel
-    var dismissAction: () -> Void
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -198,7 +198,7 @@ struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        dismissAction()
+                        dismiss()
                     }
                 }
             }
@@ -241,7 +241,6 @@ struct SettingsView: View {
     SettingsView(
         lutManager: LUTManager(),
         viewModel: CameraViewModel(),
-        settingsModel: SettingsModel(),
-        dismissAction: {}
+        settingsModel: SettingsModel()
     )
 } 
