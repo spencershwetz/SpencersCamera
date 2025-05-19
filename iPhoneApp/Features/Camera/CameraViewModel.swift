@@ -656,6 +656,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         // Perform the lens switch
+        videoFormatService.setAppleLogEnabled(isAppleLogEnabled)
         cameraDeviceService.switchToLens(lens)
         
         // Update the timestamp immediately to trigger orientation update in PreviewView via updateState
