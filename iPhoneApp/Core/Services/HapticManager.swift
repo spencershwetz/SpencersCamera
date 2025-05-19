@@ -1,6 +1,7 @@
 import CoreHaptics
 import os.log
 import UIKit
+import SwiftUI
 
 class HapticManager {
     static let shared = HapticManager()
@@ -8,6 +9,8 @@ class HapticManager {
 
     private var engine: CHHapticEngine?
     private var supportsHaptics: Bool = false
+    private var isEngineRunning: Bool = false
+    private var isAppActive: Bool = true
     
     // UIKit haptic generators
     private let lightGenerator = UIImpactFeedbackGenerator(style: .light)
@@ -28,18 +31,19 @@ class HapticManager {
     private var prepareTimer: Timer?
 
     private init() {
+        // Observe app state
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
+        
         // Initialize UIKit generators on a high priority background thread
         hapticQueue.async { [weak self] in
             guard let self = self else { return }
-            
             self.lightGenerator.prepare()
             self.mediumGenerator.prepare()
             self.heavyGenerator.prepare()
             self.selectionGenerator.prepare()
             self.notificationGenerator.prepare()
             self.isPrepared = true
-            
-            // Keep generators prepared
             self.startPreparationTimer()
         }
         
@@ -50,6 +54,16 @@ class HapticManager {
             return
         }
         createAndStartEngine()
+    }
+    
+    @objc private func appDidBecomeActive() {
+        isAppActive = true
+        createAndStartEngine()
+    }
+    
+    @objc private func appWillResignActive() {
+        isAppActive = false
+        stopEngine()
     }
     
     private func startPreparationTimer() {
@@ -79,23 +93,30 @@ class HapticManager {
             engine = try CHHapticEngine()
             engine?.stoppedHandler = { [weak self] reason in
                 self?.logger.warning("Haptic engine stopped: \(reason.rawValue)")
-                // Attempt to restart the engine if stopped unexpectedly
-                self?.createAndStartEngine()
+                self?.isEngineRunning = false
+                // Attempt to restart the engine if stopped unexpectedly and app is active
+                if self?.isAppActive == true {
+                    self?.createAndStartEngine()
+                }
             }
             engine?.resetHandler = { [weak self] in
                 self?.logger.info("Haptic engine reset.")
                 // Attempt to restart the engine after reset
                 do {
                     try self?.engine?.start()
+                    self?.isEngineRunning = true
                 } catch {
                     self?.logger.error("Failed to restart haptic engine after reset: \(error.localizedDescription)")
+                    self?.isEngineRunning = false
                 }
             }
             try engine?.start()
+            isEngineRunning = true
             logger.info("Core Haptics engine started successfully.")
         } catch {
             logger.error("Failed to create or start Core Haptics engine: \(error.localizedDescription)")
             engine = nil
+            isEngineRunning = false
         }
     }
 
@@ -133,7 +154,8 @@ class HapticManager {
 
     func stopEngine() {
         guard supportsHaptics, let engine = engine else { return }
-        engine.stop()
+        engine.stop(completionHandler: nil)
+        isEngineRunning = false
         logger.info("Core Haptics engine stopped.")
     }
     
@@ -141,100 +163,71 @@ class HapticManager {
     
     /// Trigger light impact feedback (best for small controls like buttons)
     func lightImpact() {
+        guard isAppActive else {
+            logger.debug("App not active, skipping haptic.")
+            return
+        }
         guard canTriggerHaptic(type: "light") else { return }
-        
-        hapticQueue.async { [weak self] in
-            guard let self = self else { return }
-            // Force prepare if not ready
-            if !self.isPrepared {
-                self.lightGenerator.prepare()
-                self.isPrepared = true
-            }
-            
-            // Execute on main thread
-            DispatchQueue.main.async {
-                self.lightGenerator.impactOccurred()
-                // Record last haptic time
-                self.lastHapticTime["light"] = Date().timeIntervalSince1970
-                // Prepare for next use
-                self.lightGenerator.prepare()
-            }
+        DispatchQueue.main.async {
+            self.lightGenerator.impactOccurred()
+            self.lastHapticTime["light"] = Date().timeIntervalSince1970
+            self.lightGenerator.prepare()
         }
     }
     
     /// Trigger medium impact feedback (best for medium controls)
     func mediumImpact() {
+        guard isAppActive else {
+            logger.debug("App not active, skipping haptic.")
+            return
+        }
         guard canTriggerHaptic(type: "medium") else { return }
-        
-        hapticQueue.async { [weak self] in
-            guard let self = self else { return }
-            if !self.isPrepared {
-                self.mediumGenerator.prepare()
-                self.isPrepared = true
-            }
-            
-            DispatchQueue.main.async {
-                self.mediumGenerator.impactOccurred()
-                self.lastHapticTime["medium"] = Date().timeIntervalSince1970
-                self.mediumGenerator.prepare()
-            }
+        DispatchQueue.main.async {
+            self.mediumGenerator.impactOccurred()
+            self.lastHapticTime["medium"] = Date().timeIntervalSince1970
+            self.mediumGenerator.prepare()
         }
     }
     
     /// Trigger heavy impact feedback (best for significant actions)
     func heavyImpact() {
+        guard isAppActive else {
+            logger.debug("App not active, skipping haptic.")
+            return
+        }
         guard canTriggerHaptic(type: "heavy") else { return }
-        
-        hapticQueue.async { [weak self] in
-            guard let self = self else { return }
-            if !self.isPrepared {
-                self.heavyGenerator.prepare()
-                self.isPrepared = true
-            }
-            
-            DispatchQueue.main.async {
-                self.heavyGenerator.impactOccurred()
-                self.lastHapticTime["heavy"] = Date().timeIntervalSince1970
-                self.heavyGenerator.prepare()
-            }
+        DispatchQueue.main.async {
+            self.heavyGenerator.impactOccurred()
+            self.lastHapticTime["heavy"] = Date().timeIntervalSince1970
+            self.heavyGenerator.prepare()
         }
     }
     
     /// Trigger selection feedback (best for moving through discrete values)
     func selectionChanged() {
+        guard isAppActive else {
+            logger.debug("App not active, skipping haptic.")
+            return
+        }
         guard canTriggerHaptic(type: "selection") else { return }
-        
-        hapticQueue.async { [weak self] in
-            guard let self = self else { return }
-            if !self.isPrepared {
-                self.selectionGenerator.prepare()
-                self.isPrepared = true
-            }
-            
-            DispatchQueue.main.async {
-                self.selectionGenerator.selectionChanged()
-                self.lastHapticTime["selection"] = Date().timeIntervalSince1970
-                self.selectionGenerator.prepare()
-            }
+        DispatchQueue.main.async {
+            self.selectionGenerator.selectionChanged()
+            self.lastHapticTime["selection"] = Date().timeIntervalSince1970
+            self.selectionGenerator.prepare()
         }
     }
     
     /// Trigger notification feedback for success/warning/error
-    func notification(type: UINotificationFeedbackGenerator.FeedbackType) {
-        guard canTriggerHaptic(type: "notification") else { return }
-        
-        hapticQueue.async { [weak self] in
-            guard let self = self else { return }
-            if !self.isPrepared {
-                self.notificationGenerator.prepare()
-                self.isPrepared = true
-            }
-            
-            DispatchQueue.main.async {
-                self.notificationGenerator.notificationOccurred(type)
-                self.lastHapticTime["notification"] = Date().timeIntervalSince1970
-                self.notificationGenerator.prepare()
-            }
+    func notification(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        guard isAppActive else {
+            logger.debug("App not active, skipping haptic.")
+            return
+        }
+        guard canTriggerHaptic(type: "notification_\(type.rawValue)") else { return }
+        DispatchQueue.main.async {
+            self.notificationGenerator.notificationOccurred(type)
+            self.lastHapticTime["notification_\(type.rawValue)"] = Date().timeIntervalSince1970
+            self.notificationGenerator.prepare()
         }
     }
     

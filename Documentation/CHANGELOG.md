@@ -114,6 +114,8 @@ All notable changes to this project will be documented in this file.
 
 *   Fixed: EV bias (exposure compensation) now only applies when auto exposure is enabled. The UI disables the EV bias wheel and shows a message when in manual ISO/shutter mode. This prevents user confusion and ensures the device's exposure bias is actually updated.
 
+*   Fixed: Haptic feedback is now robust—HapticManager only plays haptics when the app is active, manages the Core Haptics engine lifecycle, and prevents errors when the app is backgrounded or inactive. Users now reliably get haptic feedback for UI actions.
+
 ### Added
 
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
