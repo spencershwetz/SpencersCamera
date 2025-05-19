@@ -26,21 +26,6 @@ struct CameraView: View {
     @State private var lastFocusPoint: CGPoint? = nil // Normalized 0-1 point
     @State private var lastTapLocation: CGPoint = .zero
     @State private var isFocusLocked: Bool = false
-    
-    // State for the temporary SimpleWheelPicker test - REMOVED
-    // @State private var testWheelValue: CGFloat = 0
-    // @State private var testWheelConfig: SimpleWheelPicker.Config = .init(count: 20, steps: 5, spacing: 8, multiplier: 1, showsText: true)
-
-    // Remove the local state variables and use the settings model instead
-    private var showExposureSlider: Bool {
-        get { settings.isEVBiasVisible }
-        set { settings.isEVBiasVisible = newValue }
-    }
-    
-    private var showDebugOverlay: Bool {
-        get { settings.isDebugOverlayVisible }
-        set { settings.isDebugOverlayVisible = newValue }
-    }
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraView")
 
@@ -102,6 +87,8 @@ struct CameraView: View {
             .onDisappear {
                 viewModel.stopSession()
             }
+            .onChange(of: isShowingVideoLibrary, stopSessionWhenShowingModal)
+            .onChange(of: isShowingSettings, stopSessionWhenShowingModal)
             .onChange(of: scenePhase) { oldPhase, newPhase in
                 switch newPhase {
                 case .active:
@@ -152,15 +139,11 @@ struct CameraView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .fullScreenCover(isPresented: $isShowingSettings, onDismiss: {
-                // Reset orientation lock when settings is dismissed
-                print("DEBUG: [ORIENTATION-DEBUG] settings fullScreenCover onDismiss - setting AppDelegate.isVideoLibraryPresented = false")
-            }) {
+            .fullScreenCover(isPresented: $isShowingSettings) {
                 SettingsView(
                     lutManager: viewModel.lutManager,
                     viewModel: viewModel,
-                    settingsModel: settings,
-                    dismissAction: { isShowingSettings = false }
+                    settingsModel: settings
                 )
             }
             .sheet(isPresented: $isShowingDocumentPicker) {
@@ -643,6 +626,14 @@ struct CameraView: View {
                 FocusSquare(isLocked: isFocusLocked)
                     .position(position)
             }
+        }
+    }
+    
+    private func stopSessionWhenShowingModal(_ oldValue: Bool, newValue: Bool) {
+        if newValue {
+            viewModel.stopSession()
+        } else {
+            viewModel.startSession()
         }
     }
 }
