@@ -127,17 +127,13 @@ class CameraDeviceService {
         // ---> ADDED: Configure Color Space and HDR based on format and Log setting <---
         logger.info("🎨 [configureSession] Configuring color space and HDR...")
         let targetColorSpace: AVCaptureColorSpace
-        if requireLog {
-            if selectedFormat.supportedColorSpaces.contains(.appleLog) {
-                targetColorSpace = .appleLog
-                logger.info("🎨 [configureSession] Target color space: Apple Log (requested and supported).")
-            } else {
-                logger.warning("⚠️ [configureSession] Apple Log requested but NOT supported by format \(selectedFormat.description). Falling back.")
-                // Fallback logic - P3 or sRGB? Let's prefer P3 if available.
-                targetColorSpace = selectedFormat.supportedColorSpaces.contains(.P3_D65) ? .P3_D65 : .sRGB
-            }
+        if requireLog, selectedFormat.supportedColorSpaces.contains(.appleLog) {
+            targetColorSpace = .appleLog
+            logger.info("🎨 [configureSession] Target color space: Apple Log (requested and supported).")
+        } else if requireLog {
+            logger.warning("⚠️ [configureSession] Apple Log requested but NOT supported by format \(selectedFormat.description). Falling back.")
+            targetColorSpace = selectedFormat.supportedColorSpaces.contains(.P3_D65) ? .P3_D65 : .sRGB
         } else {
-            // Default to P3 if supported, otherwise sRGB when Log is not requested
             targetColorSpace = selectedFormat.supportedColorSpaces.contains(.P3_D65) ? .P3_D65 : .sRGB
             logger.info("🎨 [configureSession] Target color space: \(targetColorSpace == .P3_D65 ? "P3_D65" : "sRGB") (Log not requested).")
         }

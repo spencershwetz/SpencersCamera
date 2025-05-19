@@ -195,3 +195,5 @@ The project is organized into the following main components:
   - Freezing/unfreezing exposure UI during transition
 
 - **CameraViewModel**: Central coordinator for camera state, settings, and service orchestration. Now ensures Apple Log color space is correctly applied at boot by setting `isAppleLogSupported` in `didInitializeCamera` based on device capabilities.
+
+- **Note:** The app now preserves Apple Log color space after lens switches if enabled, fixing a previous bug where it would revert to Rec.709.
