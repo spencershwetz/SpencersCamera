@@ -197,3 +197,4 @@ The project is organized into the following main components:
 - **CameraViewModel**: Central coordinator for camera state, settings, and service orchestration. Now ensures Apple Log color space is correctly applied at boot by setting `isAppleLogSupported` in `didInitializeCamera` based on device capabilities.
 
 - **Note:** The app now automatically restores the last loaded LUT after lens switches, fixing a previous issue where the LUT would be lost.
+- **Note:** LUT loading is always decoupled from color space configuration. Only the user's Apple Log toggle controls the color space; loading a LUT never changes the camera's color space, even if the LUT is named for a specific color space.

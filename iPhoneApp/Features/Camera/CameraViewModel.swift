@@ -559,6 +559,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 try self.cameraSetupService.setupSession()
                 self.logger.info("Camera session setup completed successfully")
                 // --- Ensure color space is set to user preference on initial boot ---
+                // NOTE: LUT loading is always decoupled from color space configuration.
+                //       Loading a LUT (even one named 'Apple Log to Rec709') will never change the camera's color space.
+                //       Only the user's Apple Log toggle controls the color space.
                 Task {
                     do {
                         if self.isAppleLogEnabled && self.isAppleLogSupported {
