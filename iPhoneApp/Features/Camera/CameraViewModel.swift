@@ -638,6 +638,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Track shutter priority state
         let wasShutterPriorityEnabled = isShutterPriorityEnabled
         
+        // --- LUT Restoration Fix ---
+        // Persist the last selected LUT URL before clearing
+        let lastLUTURL = lutManager.selectedLUTURL
+        // --- END LUT Restoration Fix ---
+        
         // Explicitly release memory before lens switch
         autoreleasepool {
             // Temporarily disable LUT preview during switch to prevent flash and reduce memory usage
@@ -663,19 +668,24 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         lastLensSwitchTimestamp = Date()
         logger.debug("🔄 Lens switch: Updated lastLensSwitchTimestamp to trigger PreviewView orientation update.")
 
+        // --- LUT Restoration Fix ---
         // Schedule LUT restoration after a short delay to ensure smooth lens transition
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             guard let self = self else { return }
-            
-            // Restore LUT filter if one was stored
-            if self.tempLUTFilter != nil {
-                self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter after delay.")
+            // Restore LUT filter if one was stored or if a LUT was loaded before
+            if let lutURL = lastLUTURL {
+                self.logger.debug("🔄 Lens switch: Re-enabling LUT from last selected URL after delay.")
+                self.lutManager.loadLUT(from: lutURL)
+                self.tempLUTFilter = nil
+            } else if self.tempLUTFilter != nil {
+                self.logger.debug("🔄 Lens switch: Re-enabling stored LUT filter after delay (no URL, fallback).")
                 if let lutURL = self.lutManager.selectedLUTURL {
                     self.lutManager.loadLUT(from: lutURL)
                 }
                 self.tempLUTFilter = nil
             }
         }
+        // --- END LUT Restoration Fix ---
         
         // After a short delay to ensure the device is ready, restore settings
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
