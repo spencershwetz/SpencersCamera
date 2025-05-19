@@ -44,6 +44,8 @@ struct SimpleWheelPicker: View {
     /// Config
     var config: Config
     @Binding var value: CGFloat
+    /// Whether recording is active (disable haptics if true)
+    var isRecording: Bool = false
     /// Optional closure called when editing starts/ends (true = start, false = end)
     var onEditingChanged: ((Bool) -> Void)? = nil
     /// View Properties
@@ -134,9 +136,9 @@ struct SimpleWheelPicker: View {
                         dragEndWorkItem?.cancel()
                         dragEndWorkItem = DispatchWorkItem { /* Only used for cancellation */ }
                         
-                        // Trigger haptics with rate limiting
+                        // Trigger haptics with rate limiting, only if not recording
                         let now = Date().timeIntervalSince1970
-                        if now - lastHapticTime >= minHapticInterval {
+                        if !isRecording && now - lastHapticTime >= minHapticInterval {
                             // Use the enhanced HapticManager instead of local generator
                             HapticManager.shared.selectionChanged()
                             lastHapticTime = now
@@ -164,8 +166,10 @@ struct SimpleWheelPicker: View {
                                     self.dragEndWorkItem = nil // Reset drag tracking
                                     self.lastScrollPosition = nil // Reset position tracking
                                     
-                                    // One final haptic when scroll settles
-                                    HapticManager.shared.lightImpact()
+                                    // One final haptic when scroll settles, only if not recording
+                                    if !isRecording {
+                                        HapticManager.shared.lightImpact()
+                                    }
                                 }
                             }
                         }

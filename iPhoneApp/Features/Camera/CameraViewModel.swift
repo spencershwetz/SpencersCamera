@@ -1824,7 +1824,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 
     private func configureAudioInput() {
-        logger.info("Configuring audio input")
+        logger.info("Configuring audio input (MIC DISABLED FOR HAPTIC TEST)")
         
         // Remove any existing audio inputs
         session.inputs.forEach { input in
@@ -1833,6 +1833,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         }
         
+        // --- TEMPORARILY DISABLED: Do not add audio input for haptic feedback testing ---
+        /*
         // Get the default audio device
         guard let audioDevice = AVCaptureDevice.default(for: .audio) else {
             logger.error("Failed to get default audio device")
@@ -1851,6 +1853,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         } catch {
             logger.error("Error creating audio device input: \(error.localizedDescription)")
         }
+        */
     }
 
     // MARK: - Focus & Exposure Controls

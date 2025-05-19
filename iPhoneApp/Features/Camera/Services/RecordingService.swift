@@ -100,6 +100,8 @@ class RecordingService: NSObject {
     }
     
     func setupAudioDataOutput() {
+        // --- AUDIO OUTPUT DISABLED FOR HAPTIC TEST ---
+        /*
         guard audioDataOutput == nil else {
             logger.info("Audio data output already configured.")
             return
@@ -112,6 +114,7 @@ class RecordingService: NSObject {
         } else {
             logger.error("Failed to add audio data output to session")
         }
+        */
     }
     
     func startRecording(orientation: CGFloat) async {
@@ -273,6 +276,7 @@ class RecordingService: NSObject {
             logger.info("Created asset writer input with settings: \(videoSettings)")
             
             // Configure audio settings
+            /*
             let audioSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
                 AVSampleRateKey: 48000,
@@ -282,10 +286,10 @@ class RecordingService: NSObject {
                 AVLinearPCMIsBigEndianKey: false,
                 AVLinearPCMIsNonInterleaved: false
             ]
-            
             // Create audio input
             let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
             audioInput.expectsMediaDataInRealTime = true
+            */
             
             // Create pixel buffer adaptor with appropriate format
             let sourcePixelBufferAttributes: [String: Any] = [
@@ -311,7 +315,8 @@ class RecordingService: NSObject {
                 delegate?.didEncounterError(.custom(message: "Failed to add video input: \(error.localizedDescription)"))
                 return
             }
-            
+            // --- AUDIO INPUT DISABLED FOR HAPTIC TEST ---
+            /*
             if assetWriter!.canAdd(audioInput) {
                 assetWriter!.add(audioInput)
             } else {
@@ -321,6 +326,7 @@ class RecordingService: NSObject {
                 delegate?.didEncounterError(.custom(message: "Failed to add audio input: \(error.localizedDescription)"))
                 return
             }
+            */
             
             // Ensure video and audio outputs are configured
             // REMOVED: setupVideoDataOutput()

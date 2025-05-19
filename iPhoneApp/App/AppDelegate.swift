@@ -24,6 +24,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Configure AVAudioSession
         do {
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .videoRecording)
+            if #available(iOS 13.0, *) {
+                try AVAudioSession.sharedInstance().setAllowHapticsAndSystemSoundsDuringRecording(true)
+            }
             try AVAudioSession.sharedInstance().setActive(true)
             logger.info("Successfully configured AVAudioSession")
         } catch {

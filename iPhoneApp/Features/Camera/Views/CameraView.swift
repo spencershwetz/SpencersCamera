@@ -296,6 +296,7 @@ struct CameraView: View {
                                             showsText: true
                                         ),
                                         value: exposureBiasBinding,
+                                        isRecording: viewModel.isRecording,
                                         onEditingChanged: { _ in }
                                     )
                                     .frame(height: 60)
@@ -309,6 +310,7 @@ struct CameraView: View {
                                             showsText: true
                                         ),
                                         value: .constant(CGFloat(viewModel.exposureBias)),
+                                        isRecording: viewModel.isRecording,
                                         onEditingChanged: { _ in }
                                     )
                                     .frame(height: 60)
