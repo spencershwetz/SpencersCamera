@@ -390,6 +390,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     @Published var isWhiteBalanceAuto: Bool = true
 
+    // Flag to prevent session/camera/color space reconfiguration during LUT removal
+    private var isLUTBeingRemoved = false
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -454,7 +457,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 // Temporarily clear LUT texture if we're not recording
                 // This will be restored when needed
                 tempLUTFilter = lutManager.currentLUTFilter
+                isLUTBeingRemoved = true
                 lutManager.clearCurrentLUT()
+                isLUTBeingRemoved = false
                 
                 // Schedule restoration after a short delay if needed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -555,6 +560,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Configure session asynchronously to not block initialization
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
+            // Prevent session/camera/color space reconfiguration if LUT is being removed
+            if self.isLUTBeingRemoved { return }
             do {
                 try self.cameraSetupService.setupSession()
                 self.logger.info("Camera session setup completed successfully")
