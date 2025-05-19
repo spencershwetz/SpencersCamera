@@ -48,7 +48,6 @@ final class DeviceOrientationViewModel: ObservableObject {
             if abs(angle - self.rotationAngleInDegrees) >= self.orientationUpdateThreshold {
                 self.rotationAngleInDegrees = angle
                 self.lastUpdateTime = Date()
-                self.logger.debug("Updated rotation angle: \\(angle)")
             }
         }
     }
