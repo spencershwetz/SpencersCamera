@@ -84,21 +84,18 @@ struct ZoomSliderView: View {
     @ViewBuilder
     private func menuContent(for type: MenuType) -> some View {
         VStack {
-            // Menu content in a fixed-size container with background
             HStack {
                 Spacer(minLength: 0)
-                
                 switch type {
                 case .lens:
                     lensMenu
                 case .shutter:
                     shutterMenu
                 case .iso:
-                    isoMenu
+                    ISOMenuView(viewModel: viewModel, isoWheelConfig: isoWheelConfig, isoBinding: isoBinding)
                 case .wb:
                     wbMenu
                 }
-                
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 8)
@@ -363,5 +360,37 @@ struct HapticButtonStyle: ButtonStyle {
 extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
         return min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+// Add new ISOMenuView struct
+struct ISOMenuView: View {
+    @ObservedObject var viewModel: CameraViewModel
+    var isoWheelConfig: SimpleWheelPicker.Config
+    var isoBinding: Binding<CGFloat>
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack {
+                HStack(spacing: 12) {
+                    Button("Auto") {
+                        viewModel.logger.info("[UI] Auto ISO button tapped by user")
+                        DispatchQueue.main.async {
+                            HapticManager.shared.lightImpact()
+                        }
+                        viewModel.resetManualISOInSP()
+                        viewModel.isAutoExposureEnabled = true
+                    }
+                    .foregroundColor((viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP) ? .yellow : .white)
+                    .buttonStyle(HapticButtonStyle())
+                    SimpleWheelPicker(
+                        config: isoWheelConfig,
+                        value: isoBinding,
+                        onEditingChanged: { _ in })
+                        .frame(height: 60)
+                }
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(4)
+            }
+        }
     }
 } 
