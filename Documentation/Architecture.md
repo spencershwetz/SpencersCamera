@@ -214,3 +214,12 @@ The project is organized into the following main components:
 - **Service singletons** (e.g., `HapticManager`, `LocationService`) are not observable objects and do not affect SwiftUI redraws.
 
 This approach ensures robust, efficient SwiftUI state management and avoids unnecessary redraws across unrelated views.
+
+*   **Manual ISO Override in Shutter Priority (2025-05-08):**
+    *   When Shutter Priority (SP) is enabled, users can now manually override ISO.
+    *   The app tracks this with `isManualISOInSP` in both `CameraViewModel` and `ExposureService`.
+    *   When the user adjusts ISO in SP mode, the app stops all SP auto-ISO adjustments and respects the user's value until the user explicitly resets ("Reset to SP ISO").
+    *   All SP ISO logic is blocked while manual ISO is active, ensuring no feedback loop or fighting the user.
+    *   Debug logs are present for every transition and override, aiding troubleshooting.
+    *   A "Reset to SP ISO" action is available in the UI when manual ISO is active in SP mode, restoring auto ISO calculation.
+    *   This prevents feedback loops and ensures a smooth, predictable user experience for advanced shooters.

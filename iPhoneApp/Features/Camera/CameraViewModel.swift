@@ -402,6 +402,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     @Published var currentExposureMode: ExposureMode = .auto
 
+    @Published var isManualISOInSP: Bool = false
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -622,7 +624,24 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.isAutoExposureEnabled = false
             logger.info("ISO updated manually, disabling isAutoExposureEnabled.")
         }
+        // If in SP mode, mark manual ISO override
+        if currentExposureMode == .shutterPriority {
+            isManualISOInSP = true
+            logger.info("Manual ISO override set in SP mode.")
+            exposureService.setManualISOInSP(true)
+        }
         exposureService.updateISO(isoValue)
+    }
+    
+    /// Resets manual ISO override in SP mode, returning to SP-calculated ISO
+    func resetManualISOInSP() {
+        isManualISOInSP = false
+        logger.info("Manual ISO override reset in SP mode.")
+        exposureService.setManualISOInSP(false)
+        // Re-apply SP to restore auto ISO
+        if currentExposureMode == .shutterPriority {
+            ensureShutterPriorityConsistency()
+        }
     }
     
     func updateShutterSpeed(_ speed: CMTime) {

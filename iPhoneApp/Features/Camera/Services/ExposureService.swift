@@ -72,6 +72,9 @@ class ExposureService: NSObject {
     // Add property to track current exposure mode
     private(set) var currentExposureMode: ExposureMode = .auto
     
+    // Track if user has overridden ISO in SP mode
+    private var isManualISOInSP: Bool = false
+    
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
     }
@@ -662,12 +665,59 @@ class ExposureService: NSObject {
         self.isShutterPriorityActive = true
         self.isTemporarilyLockedForRecording = false // Ensure recording lock is off when enabling/re-enabling
         self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", clampedDuration.seconds))s")
+        // --- Add Check for Manual ISO Override ---
+        if isManualISOInSP {
+            logger.debug("SP Enable: Manual ISO in SP mode, only set duration.");
+            do {
+                try device.lockForConfiguration()
+                device.setExposureModeCustom(duration: clampedDuration, iso: device.iso) { [weak self] _ in
+                    DispatchQueue.main.async {
+                        self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                        self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
+                    }
+                }
+                device.unlockForConfiguration()
+            } catch {
+                self.logger.error("SP Enable: Error setting custom duration with manual ISO: \(error.localizedDescription)")
+                device.unlockForConfiguration()
+                DispatchQueue.main.async {
+                    self.isShutterPriorityActive = false
+                    self.targetShutterDuration = nil
+                    self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
+                }
+            }
+            self.currentExposureMode = .shutterPriority
+            return
+        }
         // Perform initial mode set on the adjustment queue
         exposureAdjustmentQueue.async { [weak self] in
             guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
             let minISO = currentDevice.activeFormat.minISO
             let maxISO = currentDevice.activeFormat.maxISO
             let isoToSet: Float
+            if self.isManualISOInSP {
+                // If user has overridden ISO, do not set ISO, only set duration
+                do {
+                    try currentDevice.lockForConfiguration()
+                    currentDevice.setExposureModeCustom(duration: clampedDuration, iso: currentDevice.iso) { [weak self] _ in
+                        DispatchQueue.main.async {
+                            self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                            self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
+                        }
+                    }
+                    currentDevice.unlockForConfiguration()
+                } catch {
+                    self.logger.error("SP Enable: Error setting custom duration with manual ISO: \(error.localizedDescription)")
+                    currentDevice.unlockForConfiguration()
+                    DispatchQueue.main.async {
+                        self.isShutterPriorityActive = false
+                        self.targetShutterDuration = nil
+                        self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
+                    }
+                }
+                self.currentExposureMode = .shutterPriority
+                return
+            }
             if let initialISO = initialISO {
                 isoToSet = min(max(initialISO, minISO), maxISO)
             } else {
@@ -693,6 +743,7 @@ class ExposureService: NSObject {
                     self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
                 }
             }
+            self.currentExposureMode = .shutterPriority
         }
         self.currentExposureMode = .shutterPriority
     }
@@ -744,54 +795,42 @@ class ExposureService: NSObject {
         guard isShutterPriorityActive,
               let targetDuration = targetShutterDuration,
               let newOffset = change.newValue else {
-            // logger.debug("SP Adjust: KVO ignored (SP inactive or missing data)")
             return
         }
-        
-        // --- Add Check for Recording Lock ---
-        guard !isTemporarilyLockedForRecording else {
-            logger.debug("SP Adjust: Ignored (Temporarily locked for recording)")
-            return
+        // --- Add Check for Manual ISO Override ---
+        if isManualISOInSP {
+            logger.debug("SP Adjust: Manual ISO in SP mode, skipping ISO adjustment.");
+            return;
         }
-        // --- End Check ---
-
         // Throttle adjustments
         let now = Date()
         guard now.timeIntervalSince(lastIsoAdjustmentTime) > isoAdjustmentInterval else {
              // logger.debug("SP Adjust: KVO ignored (Rate limited)")
             return
         }
-
         // Only adjust if EV offset is significant
         guard abs(newOffset) > evOffsetThreshold else {
             // logger.debug("SP Adjust: KVO ignored (EV offset \(newOffset) within threshold \(evOffsetThreshold))")
             return
         }
-
         // Perform calculations and device interaction on the dedicated queue
         exposureAdjustmentQueue.async { [weak self] in
              guard let self = self, self.isShutterPriorityActive, let currentDevice = self.device else { return } // Re-check state inside async block
-
             let currentISO = currentDevice.iso
             let minISO = currentDevice.activeFormat.minISO
             let maxISO = currentDevice.activeFormat.maxISO
-
             // Calculate the ideal ISO to compensate for the offset
             // newISO = currentISO / 2^(offset)
             var idealISO = currentISO / pow(2.0, newOffset)
-
             // Clamp ISO to device limits
             idealISO = min(max(idealISO, minISO), maxISO)
-
             // Only adjust if the change is significant enough
             let percentageChange = abs(idealISO - currentISO) / currentISO
             guard percentageChange > self.isoPercentageThreshold else {
                 // self.logger.debug("SP Adjust: KVO ignored (ISO change \(percentageChange * 100)% within threshold \(self.isoPercentageThreshold * 100)%)")
                 return
             }
-
             self.logger.debug("SP Adjust: Offset \(String(format: "%.2f", newOffset))EV, Current ISO \(String(format: "%.1f", currentISO)), Ideal ISO \(String(format: "%.1f", idealISO))")
-
             do {
                 try currentDevice.lockForConfiguration()
                 // Re-apply custom exposure with the fixed duration and newly calculated ISO
@@ -1072,6 +1111,10 @@ class ExposureService: NSObject {
             logger.error("Failed to change white-balance mode: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)
         }
+    }
+
+    func setManualISOInSP(_ manual: Bool) {
+        isManualISOInSP = manual
     }
 }
 
