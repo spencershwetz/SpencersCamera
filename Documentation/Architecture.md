@@ -223,3 +223,6 @@ This approach ensures robust, efficient SwiftUI state management and avoids unne
     *   Debug logs are present for every transition and override, aiding troubleshooting.
     *   A "Reset to SP ISO" action is available in the UI when manual ISO is active in SP mode, restoring auto ISO calculation.
     *   This prevents feedback loops and ensures a smooth, predictable user experience for advanced shooters.
+*   **ISO Wheel (2025-05-08):**
+    *   The ISO wheel now uses 100 ISO increments per major tick mark for faster, more precise adjustments.
+    *   This makes it easier to select common ISO values and improves usability for advanced users.

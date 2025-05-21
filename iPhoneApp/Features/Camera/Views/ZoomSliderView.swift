@@ -232,9 +232,9 @@ struct ZoomSliderView: View {
         SimpleWheelPicker.Config(
             min: CGFloat(viewModel.minISO),
             max: CGFloat(viewModel.maxISO),
-            stepsPerUnit: 10, // Increased to 10 steps per unit to match EV bias wheel density
-            spacing: 6,       // Same as EV bias wheel
-            showsText: true   // Display text labels for better usability, matching EV bias wheel
+            stepsPerUnit: 1, // 1 step per 1 ISO, so 100 ISO per major tick
+            spacing: 12,     // Wider spacing for clarity at 100 ISO per tick
+            showsText: true  // Display text labels for better usability
         )
     }
     
