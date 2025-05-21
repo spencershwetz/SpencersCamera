@@ -14,8 +14,8 @@ struct CameraView: View {
     @EnvironmentObject var settings: SettingsModel
     @Environment(\.scenePhase) private var scenePhase
 
-    // Use the shared instance with @ObservedObject
-    @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
+    // Use a local instance instead of the shared one
+    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
 
     @State private var isShowingSettings = false
     @State private var isShowingDocumentPicker = false

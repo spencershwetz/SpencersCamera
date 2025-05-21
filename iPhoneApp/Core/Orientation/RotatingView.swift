@@ -35,18 +35,19 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
 
 class RotatingViewController<Content: View>: UIViewController {
     private var cancellables = Set<AnyCancellable>()
-    private let orientationViewModel = DeviceOrientationViewModel.shared
+    private var orientationViewModel: DeviceOrientationViewModel
     private var hostingController: UIHostingController<Content>!
     private let invertRotation: Bool
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "RotatingView.Controller")
     
     init(rootView: Content, orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool) {
         self.invertRotation = invertRotation
+        self.orientationViewModel = orientationViewModel
         super.init(nibName: nil, bundle: nil)
         hostingController = UIHostingController(rootView: rootView)
         hostingController.view.backgroundColor = .clear
         
-        // Use the shared orientation view model
+        // Use the provided orientation view model
         orientationViewModel.$orientation
             .receive(on: RunLoop.main)
             .sink { [weak self] newOrientation in

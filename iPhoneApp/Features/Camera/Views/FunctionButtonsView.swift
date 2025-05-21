@@ -5,7 +5,7 @@ import UIKit
 struct FunctionButtonsView: View {
     @ObservedObject var viewModel: CameraViewModel
     @ObservedObject var settingsModel: SettingsModel // Inject SettingsModel
-    @ObservedObject private var orientationViewModel = DeviceOrientationViewModel.shared
+    @StateObject private var orientationViewModel = DeviceOrientationViewModel()
     @Binding var isShowingSettings: Bool
     @Binding var isShowingLibrary: Bool
     @State private var topSafeAreaHeight: CGFloat = 44 // Default value

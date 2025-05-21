@@ -3,12 +3,17 @@ import Combine
 import os.log
 import CoreMotion
 
-/// A shared observable object that tracks the device's physical orientation.
-final class DeviceOrientationViewModel: ObservableObject {
-    static let shared = DeviceOrientationViewModel()
-
-    @Published var orientation: UIDeviceOrientation = .portrait
-    @Published var rotationAngleInDegrees: Double = 0
+/// Coordination model for device orientation that prevents unnecessary view redraws
+final class OrientationCoordinator {
+    static let shared = OrientationCoordinator()
+    
+    // Direct access properties that don't trigger view redraws
+    private(set) var orientation: UIDeviceOrientation = .portrait
+    private(set) var rotationAngleInDegrees: Double = 0
+    
+    // State change subject that view models can subscribe to
+    let orientationChanged = PassthroughSubject<UIDeviceOrientation, Never>()
+    let rotationChanged = PassthroughSubject<Double, Never>()
     
     private var cancellables = Set<AnyCancellable>()
     private var orientationObserver: Any?
@@ -17,13 +22,13 @@ final class DeviceOrientationViewModel: ObservableObject {
     private var lastUpdateTime: Date = Date()
     private let updateInterval: TimeInterval = 0.2 // seconds
     
-    // Logger for Orientation ViewModel
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "DeviceOrientationVM")
+    // Logger for Orientation Coordinator
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "OrientationCoordinator")
 
     private init() {
-        logger.info("Initializing DeviceOrientationViewModel.")
+        logger.info("Initializing OrientationCoordinator.")
         orientation = UIDevice.current.orientation
-        logger.info("Initial device orientation: \\(orientation.rawValue) - \\(String(describing: orientation))")
+        logger.info("Initial device orientation: \(self.orientation.rawValue) - \(String(describing: self.orientation))")
         
         setupMotionUpdates()
         setupOrientationNotifications()
@@ -48,6 +53,7 @@ final class DeviceOrientationViewModel: ObservableObject {
             if abs(angle - self.rotationAngleInDegrees) >= self.orientationUpdateThreshold {
                 self.rotationAngleInDegrees = angle
                 self.lastUpdateTime = Date()
+                self.rotationChanged.send(angle)
             }
         }
     }
@@ -67,8 +73,10 @@ final class DeviceOrientationViewModel: ObservableObject {
             }
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] newOrientation in
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    self?.orientation = newOrientation
+                guard let self = self else { return }
+                if self.orientation != newOrientation {
+                    self.orientation = newOrientation
+                    self.orientationChanged.send(newOrientation)
                 }
             }
             .store(in: &cancellables)
@@ -82,11 +90,48 @@ final class DeviceOrientationViewModel: ObservableObject {
         }
     }
     
-    var rotationAngle: Angle {
+    func rotationAngle() -> Angle {
         .degrees(rotationAngleInDegrees)
     }
     
     var rotationOffset: CGSize {
         .zero // Dynamic offset based on rotation is handled by the rotation angle
+    }
+}
+
+/// A view-specific orientation view model that subscribes to the shared coordinator
+final class DeviceOrientationViewModel: ObservableObject {
+    // Legacy shared instance for backward compatibility - will be deprecated
+    static let shared = DeviceOrientationViewModel()
+
+    @Published var orientation: UIDeviceOrientation
+    @Published var rotationAngleInDegrees: Double
+    
+    private var cancellables = Set<AnyCancellable>()
+    private let coordinator: OrientationCoordinator
+    
+    init(coordinator: OrientationCoordinator = OrientationCoordinator.shared) {
+        self.coordinator = coordinator
+        self.orientation = coordinator.orientation
+        self.rotationAngleInDegrees = coordinator.rotationAngleInDegrees
+        
+        // Only subscribe to changes we need
+        coordinator.orientationChanged
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newOrientation in
+                self?.orientation = newOrientation
+            }
+            .store(in: &cancellables)
+        
+        coordinator.rotationChanged
+            .receive(on: RunLoop.main)
+            .sink { [weak self] newAngle in
+                self?.rotationAngleInDegrees = newAngle
+            }
+            .store(in: &cancellables)
+    }
+    
+    var rotationAngle: Angle {
+        .degrees(rotationAngleInDegrees)
     }
 } 
