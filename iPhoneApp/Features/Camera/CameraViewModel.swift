@@ -50,7 +50,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     @Published var captureMode: CaptureMode = .video
     
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModel")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModel")
     
     @Published var isSessionRunning = false
     @Published var error: CameraError?
@@ -359,7 +359,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     // Service Instances
     private var cameraSetupService: CameraSetupService!
-    private var exposureService: ExposureService!
+    var exposureService: ExposureService!
     private var recordingService: RecordingService!
     internal var cameraDeviceService: CameraDeviceService!
     private var videoFormatService: VideoFormatService!
@@ -621,20 +621,21 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     func updateISO(_ isoValue: Float) {
         // If auto exposure is on, trying to set ISO manually should turn it off.
         if self.isAutoExposureEnabled {
-            self.isAutoExposureEnabled = false
+            DispatchQueue.main.async { self.isAutoExposureEnabled = false }
             logger.info("ISO updated manually, disabling isAutoExposureEnabled.")
         }
         // If in SP mode, mark manual ISO override if not already set
         if currentExposureMode == .shutterPriority {
             if !isManualISOInSP {
-                isManualISOInSP = true
-                logger.info("Manual ISO override set in SP mode.")
+                DispatchQueue.main.async { self.isManualISOInSP = true }
+                logger.info("Manual ISO override set in SP mode (updateISO).")
                 exposureService.setManualISOInSP(true)
             } else {
                 logger.debug("Manual ISO override already active in SP mode.")
             }
         }
-        exposureService.updateISO(isoValue)
+        logger.debug("updateISO called with value: \(isoValue)")
+        exposureService.updateISO(isoValue, fromUser: true)
     }
     
     /// Resets manual ISO override in SP mode, returning to SP-calculated ISO
@@ -2193,31 +2194,13 @@ extension CameraViewModel: ExposureServiceDelegate {
     
     func didUpdateISO(_ isoFromDevice: Float) {
         DispatchQueue.main.async {
-            if self.isAutoExposureEnabled {
-                // If auto exposure is enabled, the device is driving the ISO, so update our state.
-                if abs(self.iso - isoFromDevice) > 0.01 { // Update only if meaningfully different
-                    self.iso = isoFromDevice
-                    // Removed excessive log
-                }
-            } else {
-                // Manual ISO mode (isAutoExposureEnabled is false)
-                // This means the user is controlling ISO, likely via SimpleWheelPicker.
-                // We should be careful not to fight with the picker.
-                let tolerance: Float = 0.5 // Tolerance for ISO comparison
-
-                if abs(self.iso - isoFromDevice) > tolerance {
-                    // The device ISO is significantly different from our target manual ISO.
-                    // This could happen if the device couldn't achieve the target.
-                    // Update self.iso to reflect reality; this might make the picker adjust.
-                    // Removed excessive log
-                    self.iso = isoFromDevice
-                } else {
-                    // Device ISO is close enough to our target. Don't update self.iso.
-                    // This prevents self.iso from being jittery due to minor KVO fluctuations
-                    // if self.iso was recently set by the picker.
-                    // Removed excessive log
-                }
+            // Block ISO updates from KVO if manual ISO override is active
+            if self.isManualISOInSP {
+                self.logger.debug("KVO ISO update ignored due to manual ISO override: \(isoFromDevice)")
+                return
             }
+            self.logger.debug("KVO ISO update applied: \(isoFromDevice)")
+            self.iso = isoFromDevice
         }
     }
     

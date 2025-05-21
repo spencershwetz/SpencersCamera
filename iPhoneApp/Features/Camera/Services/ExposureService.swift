@@ -126,17 +126,14 @@ class ExposureService: NSObject {
         // Observe ISO changes
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
-            // Log the KVO update regardless of mode for debugging SP
-            // self.logger.debug("[KVO ISO] Observed ISO change to: \(newISO) (Current Mode: \(device.exposureMode.rawValue))" ) // REMOVED
-            // Report if in auto, locked, OR custom mode (since ISO can auto-adjust in custom mode too)
-            if device.exposureMode == .continuousAutoExposure || 
-               device.exposureMode == .locked || 
-               device.exposureMode == .custom {
-                // logger.debug("[KVO] ISO changed to: \(newISO) while mode is \(device.exposureMode.rawValue)")
-                // Update delegate on the main thread as it might trigger UI updates
-                DispatchQueue.main.async {
-                    self.delegate?.didUpdateISO(newISO)
-                }
+            // Block KVO ISO updates if manual ISO override is active
+            if self.isManualISOInSP {
+                self.logger.debug("KVO ISO update ignored due to manual ISO override: \(newISO)")
+                return
+            }
+            self.logger.debug("KVO ISO update applied: \(newISO)")
+            DispatchQueue.main.async {
+                self.delegate?.didUpdateISO(newISO)
             }
         }
         
@@ -266,12 +263,16 @@ class ExposureService: NSObject {
         }
     }
     
-    func updateISO(_ iso: Float) {
+    func updateISO(_ iso: Float, fromUser: Bool = false) {
         guard let device = device else { 
             logger.error("No camera device available")
             return 
         }
-        
+        // Block all ISO changes if manual ISO override is active and not from user
+        if isManualISOInSP && !fromUser {
+            logger.debug("updateISO blocked: Manual ISO override active, value: \(iso), fromUser: \(fromUser)")
+            return
+        }
         // Get the current device's supported ISO range
         let minISO = device.activeFormat.minISO
         let maxISO = device.activeFormat.maxISO
@@ -395,6 +396,10 @@ class ExposureService: NSObject {
     func setCustomExposure(duration: CMTime, iso: Float) {
         guard let device = device else {
             logger.error("No camera device available for custom exposure setting")
+            return
+        }
+        if isManualISOInSP {
+            logger.debug("setCustomExposure blocked: Manual ISO override active, duration: \(duration.seconds), iso: \(iso)")
             return
         }
         
@@ -657,22 +662,14 @@ class ExposureService: NSObject {
             logger.error("SP Enable: No device available.")
             return
         }
-        // Clamp the requested duration just in case
-        let minDuration = device.activeFormat.minExposureDuration
-        let maxDuration = device.activeFormat.maxExposureDuration
-        let clampedDuration = CMTimeClampToRange(duration, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
-        self.targetShutterDuration = clampedDuration
-        self.isShutterPriorityActive = true
-        self.isTemporarilyLockedForRecording = false // Ensure recording lock is off when enabling/re-enabling
-        self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", clampedDuration.seconds))s")
         // Block ISO set if manual ISO override is active
         if isManualISOInSP {
             logger.debug("SP Enable: Manual ISO in SP mode, only set duration.");
             do {
                 try device.lockForConfiguration()
-                device.setExposureModeCustom(duration: clampedDuration, iso: device.iso) { [weak self] _ in
+                device.setExposureModeCustom(duration: duration, iso: device.iso) { [weak self] _ in
                     DispatchQueue.main.async {
-                        self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                        self?.delegate?.didUpdateShutterSpeed(duration)
                         self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
                     }
                 }
@@ -699,9 +696,9 @@ class ExposureService: NSObject {
                 // If user has overridden ISO, do not set ISO, only set duration
                 do {
                     try currentDevice.lockForConfiguration()
-                    currentDevice.setExposureModeCustom(duration: clampedDuration, iso: currentDevice.iso) { [weak self] _ in
+                    currentDevice.setExposureModeCustom(duration: duration, iso: currentDevice.iso) { [weak self] _ in
                         DispatchQueue.main.async {
-                            self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                            self?.delegate?.didUpdateShutterSpeed(duration)
                             self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
                         }
                     }
@@ -726,9 +723,9 @@ class ExposureService: NSObject {
             do {
                 try currentDevice.lockForConfiguration()
                 // Set the mode to custom with the fixed duration and ISO
-                currentDevice.setExposureModeCustom(duration: clampedDuration, iso: isoToSet) { [weak self] _ in
+                currentDevice.setExposureModeCustom(duration: duration, iso: isoToSet) { [weak self] _ in
                     DispatchQueue.main.async {
-                        self?.delegate?.didUpdateShutterSpeed(clampedDuration)
+                        self?.delegate?.didUpdateShutterSpeed(duration)
                         self?.delegate?.didUpdateISO(isoToSet)
                         self?.logger.info("SP Enabled: Initial ISO set to \(String(format: "%.1f", isoToSet))")
                     }

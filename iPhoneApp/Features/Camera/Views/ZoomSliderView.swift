@@ -181,6 +181,12 @@ struct ZoomSliderView: View {
                         value: isoBinding,
                         onEditingChanged: { editing in
                             if editing {
+                                // Set manual ISO override immediately if in SP mode
+                                if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
+                                    viewModel.isManualISOInSP = true
+                                    viewModel.logger.info("Manual ISO override set in SP mode (onEditingChanged in wheel).")
+                                    viewModel.exposureService.setManualISOInSP(true)
+                                }
                                 viewModel.isAutoExposureEnabled = false
                             }
                         })
