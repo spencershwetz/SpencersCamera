@@ -270,3 +270,14 @@ This document outlines the technical specifications and requirements for the Spe
 *(This specification includes deeper implementation details.)*
 
 - CameraViewModel now sets `isAppleLogSupported` in `didInitializeCamera` based on device capabilities, ensuring Apple Log color space is correctly applied at boot if supported and enabled.
+
+## State Management Refactor (2025-05)
+
+- **DeviceOrientationViewModel**: No longer used as a singleton in SwiftUI views. Each view creates its own instance. OrientationCoordinator is used for device orientation updates and is not an observable object.
+- **WatchConnectivityService (Watch App)**: Now injected as an .environmentObject at the root of the watch app. All views use @EnvironmentObject, ensuring a single instance and robust SwiftUI redraw behavior.
+- **SettingsModel**: Used as a single @StateObject at the app root and injected via .environmentObject (best practice for global settings).
+- **CameraViewModel**: Instantiated per screen as a @StateObject and passed down (best practice for screen-specific state).
+- **No other ObservableObject singletons are used in SwiftUI views.**
+- **Service singletons** (e.g., HapticManager, LocationService) are not observable objects and do not affect SwiftUI redraws.
+
+This approach ensures robust, efficient SwiftUI state management and avoids unnecessary redraws across unrelated views.

@@ -200,3 +200,14 @@ The project is organized into the following main components:
 - **Note:** LUT loading is always decoupled from color space configuration. Only the user's Apple Log toggle controls the color space; loading a LUT never changes the camera's color space, even if the LUT is named for a specific color space.
 
 - **WatchConnectivityService**: Now injected as an `.environmentObject` at the root of the Watch app (`SCApp.swift`). All views access it via `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior. The singleton pattern is not used in SwiftUI views.
+
+## State Management & ViewModel Refactoring (2025-05)
+
+- **DeviceOrientationViewModel**: Previously used as a singleton (`.shared`) in multiple views, which caused unnecessary SwiftUI redraws. Now, each view creates its own instance (`@StateObject` or `@ObservedObject`). A new `OrientationCoordinator` handles device orientation updates and is not an observable object, so only the views that need to update do so.
+- **WatchConnectivityService (Watch App)**: Now created as a `@StateObject` at the root (`SCApp.swift`) and injected via `.environmentObject`. All views use `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior. The singleton pattern is not used in SwiftUI views.
+- **SettingsModel**: Remains a single `@StateObject` at the app root, injected via `.environmentObject` (best practice for global settings).
+- **CameraViewModel**: Instantiated per screen as a `@StateObject` and passed down (best practice for screen-specific state).
+- **No other ObservableObject singletons are used in SwiftUI views.**
+- **Service singletons** (e.g., `HapticManager`, `LocationService`) are not observable objects and do not affect SwiftUI redraws.
+
+This approach ensures robust, efficient SwiftUI state management and avoids unnecessary redraws across unrelated views.

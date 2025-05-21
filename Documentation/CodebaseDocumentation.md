@@ -277,8 +277,13 @@ This document provides a detailed overview of key classes, components, and their
 - All wheel controls (EV, ISO, WB) feature consistent design with identical tick spacing and visual style.
 - Added `ExposureService.setAutoWhiteBalanceEnabled(_:)` and `CameraViewModel.setWhiteBalanceAuto(_:)` for WB automation.
 
-## Watch Connectivity Service
-- **WatchConnectivityService** (`SC Watch App/WatchConnectivityService.swift`):
-    *   Now injected as an `.environmentObject` at the root of the watch app (`SCApp.swift`).
-    *   All views access it via `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior.
-    *   The singleton pattern is not used in SwiftUI views, preventing cross-view redraws.
+## State Management & ViewModel Usage (2025-05)
+
+- **DeviceOrientationViewModel**: No longer used as a singleton in SwiftUI views. Each view creates its own instance. OrientationCoordinator is used for device orientation updates and is not an observable object.
+- **WatchConnectivityService (Watch App)**: Now injected as an .environmentObject at the root of the watch app. All views use @EnvironmentObject, ensuring a single instance and robust SwiftUI redraw behavior.
+- **SettingsModel**: Used as a single @StateObject at the app root and injected via .environmentObject (best practice for global settings).
+- **CameraViewModel**: Instantiated per screen as a @StateObject and passed down (best practice for screen-specific state).
+- **No other ObservableObject singletons are used in SwiftUI views.**
+- **Service singletons** (e.g., HapticManager, LocationService) are not observable objects and do not affect SwiftUI redraws.
+
+This refactor ensures robust, efficient SwiftUI state management and avoids unnecessary redraws across unrelated views.

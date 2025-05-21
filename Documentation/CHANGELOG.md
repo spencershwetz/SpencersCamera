@@ -226,3 +226,10 @@ All notable changes to this project will be documented in this file.
 ### Refactored
 
 *   WatchConnectivityService is now injected as an `.environmentObject` at the root of the watch app, not used as a singleton in views. This ensures robust SwiftUI redraw behavior and prevents cross-view redraw issues.
+
+### Refactored (2025-05)
+
+* DeviceOrientationViewModel is no longer used as a singleton in SwiftUI views. Each view now creates its own instance, and a new OrientationCoordinator handles device orientation updates without triggering global redraws.
+* WatchConnectivityService in the Watch App is now injected as an .environmentObject at the root, not used as a singleton in views. This ensures robust SwiftUI redraw behavior and prevents cross-view redraw issues.
+* SettingsModel and CameraViewModel continue to follow best practices: SettingsModel as a root .environmentObject, CameraViewModel as a per-screen @StateObject.
+* No other ObservableObject singletons are used in SwiftUI views. Service singletons (e.g., HapticManager, LocationService) are not observable objects and do not affect SwiftUI redraws.
