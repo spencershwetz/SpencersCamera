@@ -30,11 +30,8 @@ struct ZoomSliderView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: activeMenu)
         // Reset transition flag after animation completes
-        .onChange(of: activeMenu) { _ in
-            // Set transitioning flag
+        .onChange(of: activeMenu) { _, _ in
             isTransitioning = true
-            
-            // Clear flag after animation duration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isTransitioning = false
             }
@@ -92,7 +89,7 @@ struct ZoomSliderView: View {
                 case .shutter:
                     shutterMenu
                 case .iso:
-                    ISOMenuView(viewModel: viewModel, isoWheelConfig: isoWheelConfig, isoBinding: isoBinding)
+                    ISOMenuView(viewModel: viewModel)
                 case .wb:
                     wbMenu
                 }
@@ -230,9 +227,9 @@ struct ZoomSliderView: View {
         SimpleWheelPicker.Config(
             min: CGFloat(viewModel.minISO),
             max: CGFloat(viewModel.maxISO),
-            stepsPerUnit: 1, // 1 step per 1 ISO, so 100 ISO per major tick
-            spacing: 12,     // Wider spacing for clarity at 100 ISO per tick
-            showsText: true  // Display text labels for better usability
+            stepsPerUnit: 10, // Match EV bias: 10 steps per unit
+            spacing: 6,
+            showsText: true
         )
     }
     
@@ -262,9 +259,11 @@ struct ZoomSliderView: View {
         return Binding<CGFloat>(
             get: { CGFloat(viewModel.iso) },
             set: { newValue in
-                let newISO = Float(newValue.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
+                // Round to nearest 0.1 for consistency with EV bias
+                let rounded = round(newValue * 10) / 10
+                let clamped = Float(rounded.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
                 // Only set manual override if the value actually changes
-                if newISO != viewModel.iso {
+                if clamped != viewModel.iso {
                     if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
                         viewModel.isManualISOInSP = true
                         viewModel.logger.info("Manual ISO override set in SP mode (isoBinding set).")
@@ -272,20 +271,16 @@ struct ZoomSliderView: View {
                     }
                     viewModel.isAutoExposureEnabled = false
                 }
-                viewModel.iso = newISO
-                // Throttle camera updates to prevent GPU overload
+                viewModel.iso = clamped
+                // Throttle camera updates
                 let now = Date()
                 if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
-                    // Enough time has passed, apply immediately
-                    viewModel.updateISO(newISO)
+                    viewModel.updateISO(clamped)
                     throttleData.lastUpdateTime = now
                     throttleData.pendingValue = nil
                 } else {
-                    // Too soon, schedule for later
-                    throttleData.pendingValue = CGFloat(newISO)
-                    // Invalidate existing timer
+                    throttleData.pendingValue = CGFloat(clamped)
                     throttleData.timer?.invalidate()
-                    // Schedule a new timer to apply latest value
                     throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
                         if let pendingValue = throttleData.pendingValue {
                             viewModel.updateISO(Float(pendingValue))
@@ -363,12 +358,59 @@ extension Comparable {
     }
 }
 
-// Add new ISOMenuView struct
+// Move ThrottleData outside ISOMenuView
+private class ISOMenuThrottleData {
+    var lastUpdateTime = Date.distantPast
+    var pendingValue: CGFloat?
+    var timer: Timer?
+}
+
+// Replace ISOMenuView and isoMenu with a new ISOMenuView that matches EV bias control
 struct ISOMenuView: View {
     @ObservedObject var viewModel: CameraViewModel
-    var isoWheelConfig: SimpleWheelPicker.Config
-    var isoBinding: Binding<CGFloat>
     var body: some View {
+        let isoWheelConfig = SimpleWheelPicker.Config(
+            min: CGFloat(viewModel.minISO),
+            max: CGFloat(viewModel.maxISO),
+            stepsPerUnit: 10, // Match EV bias: 10 steps per unit
+            spacing: 6,
+            showsText: true
+        )
+        // Use the moved throttle data class
+        let throttleData = ISOMenuThrottleData()
+        let minTimeInterval: TimeInterval = 0.1 // 100ms
+        let isoBinding = Binding<CGFloat>(
+            get: { CGFloat(viewModel.iso) },
+            set: { newValue in
+                let rounded = round(newValue * 10) / 10
+                let clamped = Float(rounded.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
+                if clamped != viewModel.iso {
+                    if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
+                        viewModel.isManualISOInSP = true
+                        viewModel.logger.info("Manual ISO override set in SP mode (isoBinding set).")
+                        viewModel.exposureService.setManualISOInSP(true)
+                    }
+                    viewModel.isAutoExposureEnabled = false
+                }
+                viewModel.iso = clamped
+                let now = Date()
+                if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
+                    viewModel.updateISO(clamped)
+                    throttleData.lastUpdateTime = now
+                    throttleData.pendingValue = nil
+                } else {
+                    throttleData.pendingValue = CGFloat(clamped)
+                    throttleData.timer?.invalidate()
+                    throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
+                        if let pendingValue = throttleData.pendingValue {
+                            viewModel.updateISO(Float(pendingValue))
+                            throttleData.lastUpdateTime = Date()
+                            throttleData.pendingValue = nil
+                        }
+                    }
+                }
+            }
+        )
         HStack(spacing: 12) {
             VStack {
                 HStack(spacing: 12) {
@@ -382,11 +424,34 @@ struct ISOMenuView: View {
                     }
                     .foregroundColor((viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP) ? .yellow : .white)
                     .buttonStyle(HapticButtonStyle())
-                    SimpleWheelPicker(
-                        config: isoWheelConfig,
-                        value: isoBinding,
-                        onEditingChanged: { _ in })
+                    if viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP {
+                        SimpleWheelPicker(
+                            config: isoWheelConfig,
+                            value: .constant(CGFloat(viewModel.iso)),
+                            isRecording: viewModel.isRecording,
+                            onEditingChanged: { _ in }
+                        )
                         .frame(height: 60)
+                        .disabled(true)
+                        .opacity(0.5)
+                        .overlay(
+                            Text("Disable Auto ISO to adjust ISO")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                                .padding(4)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(4)
+                                .offset(y: -40)
+                        )
+                    } else {
+                        SimpleWheelPicker(
+                            config: isoWheelConfig,
+                            value: isoBinding,
+                            isRecording: viewModel.isRecording,
+                            onEditingChanged: { _ in }
+                        )
+                        .frame(height: 60)
+                    }
                 }
                 .background(Color.black.opacity(0.3))
                 .cornerRadius(4)

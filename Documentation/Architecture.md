@@ -226,3 +226,4 @@ This approach ensures robust, efficient SwiftUI state management and avoids unne
 *   **ISO Wheel (2025-05-08):**
     *   The ISO wheel now uses 100 ISO increments per major tick mark for faster, more precise adjustments.
     *   This makes it easier to select common ISO values and improves usability for advanced users.
+    *   **(2025-05-09):** The ISO wheel and Auto button now match the EV bias scale and Zero button exactly in appearance and behavior. Both use stepsPerUnit: 10, spacing: 6, and show an overlay/disable the wheel when auto is enabled. The only difference is the label (Auto for ISO, Zero for EV bias).
