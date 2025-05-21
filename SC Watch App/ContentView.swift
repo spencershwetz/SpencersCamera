@@ -9,7 +9,7 @@ import SwiftUI
 import Combine // Import Combine for Timer
 
 struct ContentView: View {
-    @StateObject private var connectivityService = WatchConnectivityService.shared
+    @EnvironmentObject private var connectivityService: WatchConnectivityService
     
     // Timer for updating elapsed time - Update more frequently for frames
     private let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
