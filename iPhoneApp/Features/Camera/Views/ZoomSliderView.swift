@@ -169,10 +169,11 @@ struct ZoomSliderView: View {
                         DispatchQueue.main.async {
                             HapticManager.shared.lightImpact()
                         }
-                        
+                        // Reset manual ISO override and enable auto exposure
+                        viewModel.resetManualISOInSP()
                         viewModel.isAutoExposureEnabled = true
                     }
-                    .foregroundColor(viewModel.isAutoExposureEnabled ? .yellow : .white)
+                    .foregroundColor((viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP) ? .yellow : .white)
                     .buttonStyle(HapticButtonStyle())
                     
                     // ISO Wheel
