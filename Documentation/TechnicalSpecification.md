@@ -74,7 +74,7 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Watch App Remote Control**: 
     *   Uses `WatchConnectivity` framework.
     *   iPhone (`CameraViewModel`): Sends state (`isRecording`, `isAppActive`, `selectedFrameRate`, `recordingStartTime`) via `WCSession.updateApplicationContext(_:)`. Receives commands (`startRecording`, `stopRecording`) via `session(_:didReceiveMessage:replyHandler:)`.
-    *   Watch (`WatchConnectivityService`): Receives context via `session(_:didReceiveApplicationContext:)` and publishes `latestContext`. Sends commands via `WCSession.sendMessage(_:replyHandler:errorHandler:)`.
+    *   Watch (`WatchConnectivityService`): Now injected as an `.environmentObject` at the root of the watch app (`SCApp.swift`). All views access it via `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior. The singleton pattern is not used in SwiftUI views, preventing cross-view redraws.
     *   Watch `ContentView` observes `latestContext` and uses a `Timer` to calculate/display elapsed time from `recordingStartTime`.
 *   **Video Library**: 
     *   Uses `Photos` framework (`PHPhotoLibrary`, `PHAsset`, `PHImageManager`).

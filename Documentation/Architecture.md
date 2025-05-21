@@ -198,3 +198,5 @@ The project is organized into the following main components:
 
 - **Note:** The app now automatically restores the last loaded LUT after lens switches, fixing a previous issue where the LUT would be lost.
 - **Note:** LUT loading is always decoupled from color space configuration. Only the user's Apple Log toggle controls the color space; loading a LUT never changes the camera's color space, even if the LUT is named for a specific color space.
+
+- **WatchConnectivityService**: Now injected as an `.environmentObject` at the root of the Watch app (`SCApp.swift`). All views access it via `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior. The singleton pattern is not used in SwiftUI views.

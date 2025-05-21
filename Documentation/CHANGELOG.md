@@ -222,3 +222,7 @@ All notable changes to this project will be documented in this file.
 *   Set default LUT bake-in state in `RecordingService` to `false` to prevent unnecessary processing.
 *   Removed redundant `didBecomeActiveNotification` observer in `CameraView` to simplify session lifecycle management and potentially resolve preview freezes.
 *   Corrected initializer logic in `SettingsModel`
+
+### Refactored
+
+*   WatchConnectivityService is now injected as an `.environmentObject` at the root of the watch app, not used as a singleton in views. This ensures robust SwiftUI redraw behavior and prevents cross-view redraw issues.

@@ -276,3 +276,9 @@ This document provides a detailed overview of key classes, components, and their
 - Menus animate in above the control row and share EV-wheel haptics, alignment & bounce-free scroll behavior.
 - All wheel controls (EV, ISO, WB) feature consistent design with identical tick spacing and visual style.
 - Added `ExposureService.setAutoWhiteBalanceEnabled(_:)` and `CameraViewModel.setWhiteBalanceAuto(_:)` for WB automation.
+
+## Watch Connectivity Service
+- **WatchConnectivityService** (`SC Watch App/WatchConnectivityService.swift`):
+    *   Now injected as an `.environmentObject` at the root of the watch app (`SCApp.swift`).
+    *   All views access it via `@EnvironmentObject`, ensuring a single instance and robust SwiftUI redraw behavior.
+    *   The singleton pattern is not used in SwiftUI views, preventing cross-view redraws.
