@@ -665,7 +665,7 @@ class ExposureService: NSObject {
         self.isShutterPriorityActive = true
         self.isTemporarilyLockedForRecording = false // Ensure recording lock is off when enabling/re-enabling
         self.logger.info("Enabling Shutter Priority: Duration \(String(format: "%.5f", clampedDuration.seconds))s")
-        // --- Add Check for Manual ISO Override ---
+        // Block ISO set if manual ISO override is active
         if isManualISOInSP {
             logger.debug("SP Enable: Manual ISO in SP mode, only set duration.");
             do {
@@ -791,16 +791,16 @@ class ExposureService: NSObject {
 
     // --- Add new method here ---
     private func handleExposureTargetOffsetUpdate(change: NSKeyValueObservedChange<Float>) {
+        // Block SP ISO adjustment if manual ISO override is active
+        if isManualISOInSP {
+            logger.debug("SP Adjust: Manual ISO in SP mode, skipping ISO adjustment.");
+            return;
+        }
         // Ensure SP is active and we have the necessary info
         guard isShutterPriorityActive,
               let targetDuration = targetShutterDuration,
               let newOffset = change.newValue else {
             return
-        }
-        // --- Add Check for Manual ISO Override ---
-        if isManualISOInSP {
-            logger.debug("SP Adjust: Manual ISO in SP mode, skipping ISO adjustment.");
-            return;
         }
         // Throttle adjustments
         let now = Date()

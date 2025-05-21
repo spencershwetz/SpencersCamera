@@ -624,11 +624,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             self.isAutoExposureEnabled = false
             logger.info("ISO updated manually, disabling isAutoExposureEnabled.")
         }
-        // If in SP mode, mark manual ISO override
+        // If in SP mode, mark manual ISO override if not already set
         if currentExposureMode == .shutterPriority {
-            isManualISOInSP = true
-            logger.info("Manual ISO override set in SP mode.")
-            exposureService.setManualISOInSP(true)
+            if !isManualISOInSP {
+                isManualISOInSP = true
+                logger.info("Manual ISO override set in SP mode.")
+                exposureService.setManualISOInSP(true)
+            } else {
+                logger.debug("Manual ISO override already active in SP mode.")
+            }
         }
         exposureService.updateISO(isoValue)
     }
