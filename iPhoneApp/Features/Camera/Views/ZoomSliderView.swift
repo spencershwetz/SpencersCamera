@@ -181,15 +181,7 @@ struct ZoomSliderView: View {
                         config: isoWheelConfig,
                         value: isoBinding,
                         onEditingChanged: { editing in
-                            if editing {
-                                // Set manual ISO override immediately if in SP mode
-                                if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
-                                    viewModel.isManualISOInSP = true
-                                    viewModel.logger.info("Manual ISO override set in SP mode (onEditingChanged in wheel).")
-                                    viewModel.exposureService.setManualISOInSP(true)
-                                }
-                                viewModel.isAutoExposureEnabled = false
-                            }
+                            // No logic here; handled in isoBinding set
                         })
                         .frame(height: 60)
                 }
@@ -271,10 +263,17 @@ struct ZoomSliderView: View {
         return Binding<CGFloat>(
             get: { CGFloat(viewModel.iso) },
             set: { newValue in
-                // Always update the local model value immediately for responsive UI
                 let newISO = Float(newValue.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
+                // Only set manual override if the value actually changes
+                if newISO != viewModel.iso {
+                    if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
+                        viewModel.isManualISOInSP = true
+                        viewModel.logger.info("Manual ISO override set in SP mode (isoBinding set).")
+                        viewModel.exposureService.setManualISOInSP(true)
+                    }
+                    viewModel.isAutoExposureEnabled = false
+                }
                 viewModel.iso = newISO
-                
                 // Throttle camera updates to prevent GPU overload
                 let now = Date()
                 if now.timeIntervalSince(throttleData.lastUpdateTime) >= minTimeInterval {
@@ -285,10 +284,8 @@ struct ZoomSliderView: View {
                 } else {
                     // Too soon, schedule for later
                     throttleData.pendingValue = CGFloat(newISO)
-                    
                     // Invalidate existing timer
                     throttleData.timer?.invalidate()
-                    
                     // Schedule a new timer to apply latest value
                     throttleData.timer = Timer.scheduledTimer(withTimeInterval: minTimeInterval, repeats: false) { _ in
                         if let pendingValue = throttleData.pendingValue {
