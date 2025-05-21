@@ -393,6 +393,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Flag to prevent session/camera/color space reconfiguration during LUT removal
     private var isLUTBeingRemoved = false
 
+    enum ExposureMode: String, Codable, Equatable {
+        case auto
+        case manual
+        case shutterPriority
+        case locked
+    }
+
+    @Published var currentExposureMode: ExposureMode = .auto
+
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
         exposureService.updateExposureTargetBias(bias)
@@ -412,6 +421,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     var metalPreviewDelegate: MetalPreviewView?
     
     let locationService = LocationService.shared
+    
+    private var lastKnownGoodState: ExposureState?
     
     init(settingsModel: SettingsModel = SettingsModel()) {
         self.settingsModel = settingsModel
@@ -1972,6 +1983,64 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         }
         owningView = nil
+    }
+
+    func setAutoExposureEnabled(_ enabled: Bool) {
+        // Only update if the state actually changes
+        guard isAutoExposureEnabled != enabled else { return }
+        isAutoExposureEnabled = enabled
+        currentExposureMode = enabled ? .auto : .manual
+        exposureService.setAutoExposureEnabled(enabled)
+    }
+
+    func enableShutterPriority(duration: CMTime, initialISO: Float? = nil) {
+        exposureService.enableShutterPriority(duration: duration, initialISO: initialISO)
+        currentExposureMode = .shutterPriority
+    }
+
+    func disableShutterPriority() {
+        exposureService.disableShutterPriority()
+        currentExposureMode = .auto
+    }
+
+    func setExposureLock(locked: Bool) {
+        exposureService.setExposureLock(locked: locked)
+        currentExposureMode = locked ? .locked : (isAutoExposureEnabled ? .auto : .manual)
+    }
+
+    private struct ExposureState {
+        let iso: Float
+        let duration: CMTime
+        let mode: ExposureMode
+        static func capture(from device: AVCaptureDevice, mode: ExposureMode) -> ExposureState {
+            return ExposureState(
+                iso: device.iso,
+                duration: device.exposureDuration,
+                mode: mode
+            )
+        }
+    }
+
+    func prepareForLensSwitch() {
+        guard let device = device else { return }
+        lastKnownGoodState = ExposureState.capture(from: device, mode: currentExposureMode)
+    }
+
+    func restoreAfterLensSwitch() {
+        guard let state = lastKnownGoodState,
+              let device = device else { return }
+        switch state.mode {
+        case .shutterPriority:
+            enableShutterPriority(duration: state.duration, initialISO: state.iso)
+        case .locked:
+            exposureService.setExposureLock(locked: true)
+        case .manual:
+            exposureService.setAutoExposureEnabled(false)
+            exposureService.setCustomExposure(duration: state.duration, iso: state.iso)
+        case .auto:
+            exposureService.setAutoExposureEnabled(true)
+        }
+        currentExposureMode = state.mode
     }
 }
 

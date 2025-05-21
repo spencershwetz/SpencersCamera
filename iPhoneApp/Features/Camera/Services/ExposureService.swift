@@ -69,6 +69,9 @@ class ExposureService: NSObject {
     private var _isShutterPriorityActive: Bool = false
     private var lastKnownGoodState: ExposureState?
     
+    // Add property to track current exposure mode
+    private(set) var currentExposureMode: ExposureMode = .auto
+    
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
     }
@@ -433,8 +436,8 @@ class ExposureService: NSObject {
     func setAutoExposureEnabled(_ enabled: Bool) {
         // Only update if the state actually changes
         guard isAutoExposureEnabled != enabled else { return }
-        
         isAutoExposureEnabled = enabled
+        currentExposureMode = enabled ? .auto : .manual
         updateExposureMode()
     }
     
@@ -504,16 +507,14 @@ class ExposureService: NSObject {
         let targetMode: AVCaptureDevice.ExposureMode
         if locked {
             targetMode = .locked
+            currentExposureMode = .locked
         } else {
-            // If unlocking, revert to auto or custom based on isAutoExposureEnabled
             if isAutoExposureEnabled {
                 targetMode = .continuousAutoExposure
+                currentExposureMode = .auto
             } else {
                 targetMode = .custom
-                // Note: When switching to .custom, device might reset ISO/shutter.
-                // Ideally, we should re-apply the last known manual settings here,
-                // but that requires ExposureService to store them.
-                // For now, just switching to .custom might suffice, but could be improved.
+                currentExposureMode = .manual
             }
         }
         
@@ -693,6 +694,7 @@ class ExposureService: NSObject {
                 }
             }
         }
+        self.currentExposureMode = .shutterPriority
     }
     
     func disableShutterPriority() {
@@ -732,6 +734,7 @@ class ExposureService: NSObject {
                  // Should we notify delegate of error?
             }
         }
+        self.currentExposureMode = .auto
     }
     // --------------------------------
 
@@ -962,7 +965,7 @@ class ExposureService: NSObject {
 
     func prepareForLensSwitch() {
         guard let device = device else { return }
-        lastKnownGoodState = ExposureState.capture(from: device)
+        lastKnownGoodState = ExposureState.capture(from: device, mode: currentExposureMode)
     }
 
     func restoreAfterLensSwitch() {
@@ -972,10 +975,16 @@ class ExposureService: NSObject {
         exposureAdjustmentQueue.async {
             do {
                 try device.lockForConfiguration()
-                if state.isShutterPriority {
+                self.currentExposureMode = state.mode
+                switch state.mode {
+                case .shutterPriority:
                     self.enableShutterPriority(duration: state.duration, initialISO: state.iso)
-                } else if state.isLocked {
+                case .locked:
                     device.setExposureModeCustom(duration: state.duration, iso: state.iso)
+                case .manual:
+                    device.setExposureModeCustom(duration: state.duration, iso: state.iso)
+                case .auto:
+                    device.exposureMode = .continuousAutoExposure
                 }
                 device.unlockForConfiguration()
             } catch {
@@ -1072,13 +1081,22 @@ private struct ExposureState {
     let duration: CMTime
     let isLocked: Bool
     let isShutterPriority: Bool
+    let mode: ExposureMode
     
-    static func capture(from device: AVCaptureDevice) -> ExposureState {
+    static func capture(from device: AVCaptureDevice, mode: ExposureMode) -> ExposureState {
         return ExposureState(
             iso: device.iso,
             duration: device.exposureDuration,
             isLocked: device.exposureMode == .locked,
-            isShutterPriority: device.exposureMode == .custom
+            isShutterPriority: device.exposureMode == .custom,
+            mode: mode
         )
     }
+}
+
+enum ExposureMode: String, Codable, Equatable {
+    case auto
+    case manual
+    case shutterPriority
+    case locked
 } 

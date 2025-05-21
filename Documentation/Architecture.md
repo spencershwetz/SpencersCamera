@@ -149,6 +149,9 @@ The project is organized into the following main components:
     *   User tap (push) on the preview sets the focus point only (push-to-focus). Exposure point is not set by user tap.
     *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
     *   **Exposure Lock & Shutter Priority Lens Switch Handling:**
+        *   Exposure mode is now managed via a single `ExposureMode` enum (`auto`, `manual`, `shutterPriority`, `locked`) in both `CameraViewModel` and `ExposureService`. This enum is the single source of truth for all exposure transitions and UI state.
+        *   All transitions (auto/manual/shutterPriority/locked) update the `ExposureMode` property, ensuring consistent state across the app.
+        *   The `ExposureState` struct now captures the complete exposure state, including ISO, duration, and mode, and is used for all transitions (not just lens switches). This enables robust restoration after interruptions, errors, or user toggles.
         *   When both "Lock Exposure During Recording" and "Shutter Priority" are enabled, `CameraViewModel` ensures that after a lens change, the correct exposure lock is restored.
         *   **Robust Shutter Priority Logic (2025-05-01):** The app implements a highly consistent 180° shutter angle system with improved reliability through the new `ensureShutterPriorityConsistency()` method.
         *   After every lens switch, app backgrounding, or session interruption, 180° shutter duration is recalculated based on the *current* frame rate and immediately applied via `ExposureService.enableShutterPriority(duration:)`. 
