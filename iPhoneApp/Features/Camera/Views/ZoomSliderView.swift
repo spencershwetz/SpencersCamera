@@ -165,6 +165,8 @@ struct ZoomSliderView: View {
                 HStack(spacing: 12) {
                     // Auto button
                     Button("Auto") {
+                        // Debug log to confirm this only fires on user tap
+                        viewModel.logger.info("[UI] Auto ISO button tapped by user")
                         // Use HapticManager on main thread for reliability
                         DispatchQueue.main.async {
                             HapticManager.shared.lightImpact()
