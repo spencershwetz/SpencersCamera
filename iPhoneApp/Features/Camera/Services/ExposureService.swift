@@ -122,11 +122,23 @@ class ExposureService: NSObject {
                     self.targetShutterDuration = targetDuration
                     if device.isExposureModeSupported(.custom) {
                         device.exposureMode = .custom
-                        let isoToSet = manualISO ?? device.iso
-                        device.setExposureModeCustom(duration: targetDuration, iso: isoToSet) { _ in
-                            DispatchQueue.main.async {
-                                self.delegate?.didUpdateISO(isoToSet)
-                                self.delegate?.didUpdateShutterSpeed(targetDuration)
+                        if let manualISO = manualISO {
+                            // Manual ISO override is set
+                            device.setExposureModeCustom(duration: targetDuration, iso: manualISO) { _ in
+                                DispatchQueue.main.async {
+                                    self.delegate?.didUpdateISO(manualISO)
+                                    self.delegate?.didUpdateShutterSpeed(targetDuration)
+                                }
+                            }
+                        } else {
+                            // No manual ISO - let the camera auto-adjust ISO for the fixed shutter
+                            // Use current ISO as starting point but camera will adjust as needed
+                            let currentISO = device.iso
+                            device.setExposureModeCustom(duration: targetDuration, iso: currentISO) { _ in
+                                DispatchQueue.main.async {
+                                    self.delegate?.didUpdateShutterSpeed(targetDuration)
+                                    // Don't report ISO here - let KVO handle it as it auto-adjusts
+                                }
                             }
                         }
                     }
@@ -456,6 +468,19 @@ class ExposureService: NSObject {
     func setAutoExposureEnabled(_ enabled: Bool) {
         guard let device = device else { return }
         
+        // Check if we're in shutter priority mode
+        if case .shutterPriority(_, let manualISO) = stateMachine.currentState {
+            // In SP mode, toggle between manual ISO override and auto ISO
+            if enabled && manualISO != nil {
+                // Clear manual ISO override to return to auto ISO in SP
+                _ = stateMachine.processEvent(.clearManualISOOverride, device: device)
+            }
+            // If disabling auto in SP mode, the user will set ISO manually via updateISO
+            // No need to change state here
+            return
+        }
+        
+        // Normal auto/manual mode switching
         if enabled {
             _ = stateMachine.processEvent(.enableAuto, device: device)
         } else {
