@@ -204,6 +204,16 @@ class ExposureStateMachine {
                 logger.error("Exposure error occurred: \(error.localizedDescription), maintaining current state")
                 newState = currentState
                 
+            // Handle clearManualISOOverride in any state - it's a no-op if not in SP mode
+            case (_, .clearManualISOOverride):
+                // Only relevant in shutter priority mode
+                if case .shutterPriority(let duration, let manualISO) = currentState, manualISO != nil {
+                    newState = .shutterPriority(targetDuration: duration, manualISO: nil)
+                } else {
+                    // No-op in other states
+                    newState = currentState
+                }
+                
             // Default: maintain current state for invalid transitions
             default:
                 logger.debug("No valid transition from \(String(describing: self.currentState)) with event \(String(describing: event))")

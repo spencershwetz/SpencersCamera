@@ -165,9 +165,16 @@ struct ZoomSliderView: View {
                         DispatchQueue.main.async {
                             HapticManager.shared.lightImpact()
                         }
-                        // Reset manual ISO override and enable auto exposure
-                        viewModel.resetManualISOInSP()
-                        viewModel.isAutoExposureEnabled = true
+                        
+                        // Toggle auto exposure - if it's on, turn it off; if it's off, turn it on
+                        if viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP {
+                            // Currently in auto mode, switch to manual
+                            viewModel.isAutoExposureEnabled = false
+                        } else {
+                            // Currently in manual mode (or SP with manual override), switch to auto
+                            viewModel.resetManualISOInSP()
+                            viewModel.isAutoExposureEnabled = true
+                        }
                     }
                     .foregroundColor((viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP) ? .yellow : .white)
                     .buttonStyle(HapticButtonStyle())
@@ -419,8 +426,16 @@ struct ISOMenuView: View {
                         DispatchQueue.main.async {
                             HapticManager.shared.lightImpact()
                         }
-                        viewModel.resetManualISOInSP()
-                        viewModel.isAutoExposureEnabled = true
+                        
+                        // Toggle auto exposure - if it's on, turn it off; if it's off, turn it on
+                        if viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP {
+                            // Currently in auto mode, switch to manual
+                            viewModel.isAutoExposureEnabled = false
+                        } else {
+                            // Currently in manual mode (or SP with manual override), switch to auto
+                            viewModel.resetManualISOInSP()
+                            viewModel.isAutoExposureEnabled = true
+                        }
                     }
                     .foregroundColor((viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP) ? .yellow : .white)
                     .buttonStyle(HapticButtonStyle())
