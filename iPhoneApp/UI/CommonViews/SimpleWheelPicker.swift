@@ -101,7 +101,7 @@ struct SimpleWheelPicker: View {
                             .overlay(alignment: .top) {
                                 if isMajorTick && config.showsText {
                                     // Display the value for major ticks
-                                    Text(String(format: "%g", tickValue)) // Use %g for cleaner number format
+                                    Text(config.labelFormatter(tickValue))
                                         .font(.caption2)
                                         .foregroundColor(.white)
                                         .fixedSize()
@@ -224,6 +224,16 @@ struct SimpleWheelPicker: View {
         var stepsPerUnit: Int = 10 // e.g., 10 steps per 1.0 value change means 0.1 increments
         var spacing: CGFloat = 6   // Visual spacing between ticks
         var showsText: Bool = true  // Whether to show text labels on major ticks
+        var labelFormatter: (CGFloat) -> String = { String(format: "%g", $0) } // Default formatter
+        
+        static func == (lhs: Config, rhs: Config) -> Bool {
+            lhs.min == rhs.min &&
+            lhs.max == rhs.max &&
+            lhs.stepsPerUnit == rhs.stepsPerUnit &&
+            lhs.spacing == rhs.spacing &&
+            lhs.showsText == rhs.showsText
+            // Note: We can't compare function properties for equality
+        }
     }
 }
 

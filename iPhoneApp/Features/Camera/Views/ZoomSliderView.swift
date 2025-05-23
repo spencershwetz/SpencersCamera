@@ -377,19 +377,26 @@ struct ISOMenuView: View {
     @ObservedObject var viewModel: CameraViewModel
     var body: some View {
         let isoWheelConfig = SimpleWheelPicker.Config(
-            min: CGFloat(viewModel.minISO),
-            max: CGFloat(viewModel.maxISO),
-            stepsPerUnit: 10, // Match EV bias: 10 steps per unit
+            min: CGFloat(viewModel.minISO) / 100.0,  // Convert to hundreds scale
+            max: CGFloat(viewModel.maxISO) / 100.0,  // Convert to hundreds scale
+            stepsPerUnit: 10, // 10 steps per 100 ISO (each step = 10 ISO)
             spacing: 6,
-            showsText: true
+            showsText: true,
+            labelFormatter: { value in
+                // Convert from hundreds scale back to ISO for display
+                let isoValue = value * 100
+                return String(format: "%.0f", isoValue)
+            }
         )
         // Use the moved throttle data class
         let throttleData = ISOMenuThrottleData()
         let minTimeInterval: TimeInterval = 0.1 // 100ms
         let isoBinding = Binding<CGFloat>(
-            get: { CGFloat(viewModel.iso) },
-            set: { newValue in
-                let rounded = round(newValue * 10) / 10
+            get: { CGFloat(viewModel.iso) / 100.0 },  // Convert from ISO to hundreds scale
+            set: { newValueInHundreds in
+                // Convert back from hundreds scale to ISO
+                let isoValue = newValueInHundreds * 100.0
+                let rounded = round(isoValue / 10.0) * 10.0  // Round to nearest 10 ISO
                 let clamped = Float(rounded.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
                 if clamped != viewModel.iso {
                     if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
@@ -442,7 +449,7 @@ struct ISOMenuView: View {
                     if viewModel.isAutoExposureEnabled && !viewModel.isManualISOInSP {
                         SimpleWheelPicker(
                             config: isoWheelConfig,
-                            value: .constant(CGFloat(viewModel.iso)),
+                            value: .constant(CGFloat(viewModel.iso) / 100.0),  // Convert to hundreds scale
                             isRecording: viewModel.isRecording,
                             onEditingChanged: { _ in }
                         )
