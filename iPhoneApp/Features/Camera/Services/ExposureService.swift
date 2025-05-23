@@ -35,13 +35,11 @@ class ExposureService: NSObject {
     private weak var delegate: ExposureServiceDelegate?
     
     private var device: AVCaptureDevice?
-    private var isAutoExposureEnabled = true
+    
+    // State machine for exposure management
+    private let stateMachine = ExposureStateMachine()
     
     // --- Shutter Priority State ---
-    private var isShutterPriorityActive: Bool {
-        get { stateQueue.sync { _isShutterPriorityActive } }
-        set { stateQueue.sync { _isShutterPriorityActive = newValue } }
-    }
     private var targetShutterDuration: CMTime?
     private var exposureTargetOffsetObservation: NSKeyValueObservation?
     private var lastIsoAdjustmentTime: Date = .distantPast // For rate limiting
@@ -54,8 +52,6 @@ class ExposureService: NSObject {
     // --- Dispatch Queue ---
     // Add a dedicated serial queue for exposure adjustments to avoid blocking KVO/session queues
     private let exposureAdjustmentQueue = DispatchQueue(label: "com.camera.exposureAdjustmentQueue", qos: .userInitiated)
-    // --- Recording Lock State ---
-    private var isTemporarilyLockedForRecording: Bool = false
 
     // KVO Observation tokens
     private var isoObservation: NSKeyValueObservation?
@@ -66,17 +62,92 @@ class ExposureService: NSObject {
     
     // Add new properties
     private let stateQueue = DispatchQueue(label: "com.camera.exposureState", qos: .userInitiated)
-    private var _isShutterPriorityActive: Bool = false
     private var lastKnownGoodState: ExposureState?
     
-    // Add property to track current exposure mode
-    private(set) var currentExposureMode: ExposureMode = .auto
-    
-    // Track if user has overridden ISO in SP mode
-    private var isManualISOInSP: Bool = false
+    // Computed property to get current exposure mode
+    var currentExposureMode: ExposureMode {
+        switch stateMachine.currentState {
+        case .auto:
+            return .auto
+        case .manual:
+            return .manual
+        case .shutterPriority:
+            return .shutterPriority
+        case .locked, .recordingLocked:
+            return .locked
+        }
+    }
     
     init(delegate: ExposureServiceDelegate) {
         self.delegate = delegate
+        super.init()
+        
+        // Setup state machine callbacks
+        stateMachine.onStateChange = { [weak self] oldState, newState in
+            self?.handleStateTransition(from: oldState, to: newState)
+        }
+    }
+    
+    // Handle state transitions
+    private func handleStateTransition(from oldState: ExposureState, to newState: ExposureState) {
+        guard let device = device else { return }
+        
+        logger.info("Handling exposure state transition: \(String(describing: oldState)) -> \(String(describing: newState))")
+        
+        // Apply the new state to the device
+        exposureAdjustmentQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            do {
+                try device.lockForConfiguration()
+                
+                switch newState {
+                case .auto:
+                    if device.isExposureModeSupported(.continuousAutoExposure) {
+                        device.exposureMode = .continuousAutoExposure
+                    }
+                    
+                case .manual(let iso, let duration):
+                    if device.isExposureModeSupported(.custom) {
+                        device.exposureMode = .custom
+                        device.setExposureModeCustom(duration: duration, iso: iso) { _ in
+                            DispatchQueue.main.async {
+                                self.delegate?.didUpdateISO(iso)
+                                self.delegate?.didUpdateShutterSpeed(duration)
+                            }
+                        }
+                    }
+                    
+                case .shutterPriority(let targetDuration, let manualISO):
+                    self.targetShutterDuration = targetDuration
+                    if device.isExposureModeSupported(.custom) {
+                        device.exposureMode = .custom
+                        let isoToSet = manualISO ?? device.iso
+                        device.setExposureModeCustom(duration: targetDuration, iso: isoToSet) { _ in
+                            DispatchQueue.main.async {
+                                self.delegate?.didUpdateISO(isoToSet)
+                                self.delegate?.didUpdateShutterSpeed(targetDuration)
+                            }
+                        }
+                    }
+                    
+                case .locked(_, _):
+                    if device.isExposureModeSupported(.locked) {
+                        device.exposureMode = .locked
+                    }
+                    
+                case .recordingLocked:
+                    if device.isExposureModeSupported(.locked) {
+                        device.exposureMode = .locked
+                    }
+                }
+                
+                device.unlockForConfiguration()
+            } catch {
+                self.logger.error("Failed to apply exposure state: \(error.localizedDescription)")
+                self.delegate?.didEncounterError(.configurationFailed)
+            }
+        }
     }
     
     // Clean up observers on deinitialization
@@ -106,8 +177,13 @@ class ExposureService: NSObject {
         if let newDevice = device {
             logger.info("ExposureService setupDeviceObservers called for NEW device: \(newDevice.localizedName)")
             setupDeviceObservers(for: newDevice) // Setup observers for the NEW device
-            self.isAutoExposureEnabled = (newDevice.exposureMode == .continuousAutoExposure)
-            logger.info("Initial auto exposure state set to: \(self.isAutoExposureEnabled) for new device")
+            // Set initial state based on device mode
+            if newDevice.exposureMode == .continuousAutoExposure {
+                _ = stateMachine.processEvent(.enableAuto, device: newDevice)
+            } else if newDevice.exposureMode == .custom {
+                _ = stateMachine.processEvent(.enableManual(iso: nil, duration: nil), device: newDevice)
+            }
+            logger.info("Initial exposure state set for new device")
         } else {
              logger.info("ExposureService setDevice called with nil, observers removed, device set to nil.")
         }
@@ -126,11 +202,19 @@ class ExposureService: NSObject {
         // Observe ISO changes
         isoObservation = device.observe(\.iso, options: [.new]) { [weak self] device, change in
             guard let self = self, let newISO = change.newValue else { return }
-            // Block KVO ISO updates if manual ISO override is active
-            if self.isManualISOInSP {
-                self.logger.debug("KVO ISO update ignored due to manual ISO override: \(newISO)")
-                return
+            
+            // Check if we should report ISO based on current state
+            switch self.stateMachine.currentState {
+            case .shutterPriority(_, let manualISO):
+                // Only ignore if manual ISO is set in SP mode
+                if manualISO != nil {
+                    self.logger.debug("KVO ISO update ignored due to manual ISO override in SP: \(newISO)")
+                    return
+                }
+            default:
+                break
             }
+            
             self.logger.debug("KVO ISO update applied: \(newISO)")
             DispatchQueue.main.async {
                 self.delegate?.didUpdateISO(newISO)
@@ -156,7 +240,7 @@ class ExposureService: NSObject {
         
         // Observe exposure target offset for Shutter Priority
         exposureTargetOffsetObservation = device.observe(\.exposureTargetOffset, options: [.new]) { [weak self] device, change in
-            // No need to check mode here, handleExposureTargetOffsetUpdate checks isShutterPriorityActive
+            // handleExposureTargetOffsetUpdate will check if we're in shutter priority mode
             self?.handleExposureTargetOffsetUpdate(change: change)
         }
         
@@ -268,11 +352,7 @@ class ExposureService: NSObject {
             logger.error("No camera device available")
             return 
         }
-        // Block all ISO changes if manual ISO override is active and not from user
-        if isManualISOInSP && !fromUser {
-            logger.debug("updateISO blocked: Manual ISO override active, value: \(iso), fromUser: \(fromUser)")
-            return
-        }
+        
         // Get the current device's supported ISO range
         let minISO = device.activeFormat.minISO
         let maxISO = device.activeFormat.maxISO
@@ -287,85 +367,55 @@ class ExposureService: NSObject {
             logger.debug("Clamped ISO from \(iso) to \(clampedISO) to stay within device limits")
         }
         
-        do {
-            try device.lockForConfiguration()
-            
-            // Set exposure mode to custom
-            if device.isExposureModeSupported(.custom) {
-                device.exposureMode = .custom
-                device.setExposureModeCustom(duration: device.exposureDuration, iso: clampedISO) { [weak self] _ in
-                     // Report the value back via delegate *after* it's set
-                     DispatchQueue.main.async {
-                          self?.delegate?.didUpdateISO(clampedISO)
-                          self?.logger.debug("Successfully set ISO to \(clampedISO)")
-                     }
-                }
+        // Handle based on current state
+        switch stateMachine.currentState {
+        case .shutterPriority(_, _):
+            if fromUser {
+                // User is manually overriding ISO in SP mode
+                _ = stateMachine.processEvent(.overrideISOInShutterPriority(iso: clampedISO), device: device)
             } else {
-                 logger.warning("Custom exposure mode not supported.")
+                // System trying to update ISO in SP mode - ignore
+                logger.debug("System ISO update ignored in SP mode")
+                return
             }
-            
-            device.unlockForConfiguration()
-            
-            // Delegate call moved inside completion handler
-            // delegate?.didUpdateISO(clampedISO)
-            // logger.debug("Successfully set ISO to \(clampedISO)")
-        } catch {
-            logger.error("ISO update error: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+        case .auto:
+            // Switch to manual mode when ISO is set
+            _ = stateMachine.processEvent(.enableManual(iso: clampedISO, duration: nil), device: device)
+        case .manual:
+            // Update ISO in manual mode
+            _ = stateMachine.processEvent(.enableManual(iso: clampedISO, duration: nil), device: device)
+        case .locked, .recordingLocked:
+            logger.warning("Cannot update ISO while exposure is locked")
+            return
         }
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
-        // If Shutter Priority is active, do not allow manual shutter speed changes.
-        guard !isShutterPriorityActive else {
-            logger.info("updateShutterSpeed called while Shutter Priority is active. Ignoring.")
-            return
-        }
-
         guard let device = device else {
             logger.error("No camera device available for shutter speed update")
             return
         }
-
-        do {
-            try device.lockForConfiguration()
-
-            // Clamp the requested speed to the device's limits
-            let minDuration = device.activeFormat.minExposureDuration
-            let maxDuration = device.activeFormat.maxExposureDuration
-            let clampedSpeed = CMTimeClampToRange(speed, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
-
-            if CMTimeCompare(clampedSpeed, speed) != 0 {
-                 logger.debug("Clamped shutter speed from \(CMTimeGetSeconds(speed))s to \(CMTimeGetSeconds(clampedSpeed))s")
-            }
-
-            // Set exposure mode to custom and use the clamped speed
-            if device.isExposureModeSupported(.custom) {
-                // Revert to using setExposureModeCustom with currentISO
-                device.exposureMode = .custom
-                device.setExposureModeCustom(duration: clampedSpeed, iso: AVCaptureDevice.currentISO) { [weak self] timestamp in
-                    // Report the actually set clamped speed immediately.
-                    // KVO should handle reporting the automatically adjusted ISO.
-                    DispatchQueue.main.async {
-                        self?.delegate?.didUpdateShutterSpeed(clampedSpeed)
-                        self?.logger.debug("Set shutter speed to \\(CMTimeGetSeconds(clampedSpeed))s via setExposureModeCustom (ISO should adjust automatically)")
-                    }
-                }
-            } else {
-                 logger.warning("Custom exposure mode not supported.")
-            }
-
-            device.unlockForConfiguration()
-
-        } catch {
-            logger.error("Shutter speed update error: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+        
+        // Check current state
+        switch stateMachine.currentState {
+        case .shutterPriority:
+            logger.info("updateShutterSpeed called while Shutter Priority is active. Ignoring.")
+            return
+        case .locked, .recordingLocked:
+            logger.warning("Cannot update shutter speed while exposure is locked")
+            return
+        case .auto:
+            // Switch to manual mode when shutter speed is set
+            _ = stateMachine.processEvent(.enableManual(iso: nil, duration: speed), device: device)
+        case .manual:
+            // Update shutter speed in manual mode
+            _ = stateMachine.processEvent(.enableManual(iso: nil, duration: speed), device: device)
         }
     }
     
     func updateShutterAngle(_ angle: Double, frameRate: Double) {
-        // If Shutter Priority is active, do not allow manual shutter angle changes.
-        guard !isShutterPriorityActive else {
+        // Check if Shutter Priority is active
+        if case .shutterPriority = stateMachine.currentState {
             logger.info("updateShutterAngle called while Shutter Priority is active. Ignoring.")
             return
         }
@@ -398,106 +448,21 @@ class ExposureService: NSObject {
             logger.error("No camera device available for custom exposure setting")
             return
         }
-        if isManualISOInSP {
-            logger.debug("setCustomExposure blocked: Manual ISO override active, duration: \(duration.seconds), iso: \(iso)")
-            return
-        }
         
-        do {
-            try device.lockForConfiguration()
-            
-            // Clamp duration and ISO to device limits
-            let minDuration = device.activeFormat.minExposureDuration
-            let maxDuration = device.activeFormat.maxExposureDuration
-            let clampedDuration = CMTimeClampToRange(duration, range: CMTimeRange(start: minDuration, duration: maxDuration - minDuration))
-
-            let minISO = device.activeFormat.minISO
-            let maxISO = device.activeFormat.maxISO
-            let clampedISO = min(max(minISO, iso), maxISO)
-            
-            if device.isExposureModeSupported(.custom) {
-                device.exposureMode = .custom
-                device.setExposureModeCustom(duration: clampedDuration, iso: clampedISO) { [weak self] timestamp in
-                    // Log success but DO NOT call delegates here. Rely on KVO for state updates.
-                    // This prevents race conditions where this completion handler overwrites
-                    // newer KVO updates after recording stops / modes change.
-                    // DispatchQueue.main.async {
-                    //     guard let self = self else { return }
-                    //     // Report the actually set values
-                    //     self.delegate?.didUpdateShutterSpeed(clampedDuration)
-                    //     self.delegate?.didUpdateISO(clampedISO)
-                    // }
-                     self?.logger.info("[setCustomExposure Completion] Successfully set custom exposure: Duration \\(CMTimeGetSeconds(clampedDuration))s, ISO \\(clampedISO)")
-                }
-            } else {
-                 logger.warning("Custom exposure mode not supported.")
-            }
-
-            device.unlockForConfiguration()
-
-        } catch {
-            logger.error("Custom exposure setting error: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
-        }
+        // Use state machine to set manual exposure with specific values
+        _ = stateMachine.processEvent(.enableManual(iso: iso, duration: duration), device: device)
     }
     
     func setAutoExposureEnabled(_ enabled: Bool) {
-        // Only update if the state actually changes
-        guard isAutoExposureEnabled != enabled else { return }
-        isAutoExposureEnabled = enabled
-        currentExposureMode = enabled ? .auto : .manual
-        updateExposureMode()
+        guard let device = device else { return }
+        
+        if enabled {
+            _ = stateMachine.processEvent(.enableAuto, device: device)
+        } else {
+            _ = stateMachine.processEvent(.enableManual(iso: nil, duration: nil), device: device)
+        }
     }
     
-    private func updateExposureMode() {
-        guard let device = device else { 
-            logger.error("No camera device available")
-            return 
-        }
-        
-        do {
-            try device.lockForConfiguration()
-            
-            if isAutoExposureEnabled {
-                if device.isExposureModeSupported(.continuousAutoExposure) {
-                    device.exposureMode = .continuousAutoExposure
-                    logger.info("Auto exposure enabled")
-                    // Report current values when switching back to auto
-                    reportCurrentDeviceValues()
-                }
-            } else {
-                if device.isExposureModeSupported(.custom) {
-                    device.exposureMode = .custom
-                    
-                    // Double check ISO range limits
-                    let minISO = device.activeFormat.minISO
-                    let maxISO = device.activeFormat.maxISO
-                    let currentISO = device.iso
-                    let clampedISO = min(max(minISO, currentISO), maxISO)
-                    
-                    device.setExposureModeCustom(duration: device.exposureDuration,
-                                                 iso: clampedISO) { [weak self] _ in
-                         // Report the value back via delegate *after* it's set
-                         DispatchQueue.main.async {
-                              self?.delegate?.didUpdateISO(clampedISO)
-                              self?.logger.debug("Successfully set ISO to \(clampedISO)")
-                         }
-                    }
-                    self.logger.info("Manual exposure enabled with ISO \(clampedISO)")
-                    
-                    // If we had to adjust the ISO, update the delegate
-                    if clampedISO != currentISO {
-                        self.delegate?.didUpdateISO(clampedISO)
-                    }
-                }
-            }
-            
-            device.unlockForConfiguration()
-        } catch {
-            logger.error("Error setting exposure mode: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
-        }
-    }
     
     /// Sets the exposure lock on the capture device.
     /// - Parameter locked: A Boolean value indicating whether to lock the exposure.
@@ -508,68 +473,12 @@ class ExposureService: NSObject {
             return
         }
         
-        let deviceName = device.localizedName
-        logger.info("[ExposureLock] Request to set lock=\(locked) for device: \(deviceName)")
+        logger.info("[ExposureLock] Request to set lock=\(locked) for device: \(device.localizedName)")
 
-        // Determine the target mode based on lock state and current settings
-        let targetMode: AVCaptureDevice.ExposureMode
         if locked {
-            targetMode = .locked
-            currentExposureMode = .locked
+            _ = stateMachine.processEvent(.lock, device: device)
         } else {
-            if isAutoExposureEnabled {
-                targetMode = .continuousAutoExposure
-                currentExposureMode = .auto
-            } else {
-                targetMode = .custom
-                currentExposureMode = .manual
-            }
-        }
-        
-        logger.debug("[ExposureLock] Determined target exposure mode: \(String(describing: targetMode))")
-        
-        // Check if the target mode is supported
-        let isSupported = device.isExposureModeSupported(targetMode)
-        logger.info("[ExposureLock] Device \(deviceName) supports mode \(String(describing: targetMode)): \(isSupported)")
-        guard isSupported else {
-            logger.warning("[ExposureLock] Exposure mode \(String(describing: targetMode)) is not supported by \(deviceName). Cannot set.")
-            // Optionally, inform the delegate or handle this case appropriately.
-            // For now, we just log and return, leaving the mode unchanged.
-            return
-        }
-        
-        // Only apply if the mode needs to change
-        if device.exposureMode != targetMode {
-            logger.debug("[ExposureLock] Current mode (\(device.exposureMode.rawValue)) differs from target (\(targetMode.rawValue)). Attempting change on \(deviceName)...")
-            do {
-                logger.debug("[ExposureLock] Attempting lockForConfiguration on \(deviceName)...)")
-                try device.lockForConfiguration()
-                logger.debug("[ExposureLock] lockForConfiguration succeeded. Setting exposureMode to \(targetMode.rawValue) on \(deviceName)...")
-                device.exposureMode = targetMode
-                logger.debug("[ExposureLock] Setting exposureMode completed. Unlocking configuration on \(deviceName)...")
-                device.unlockForConfiguration()
-                logger.info("[ExposureLock] Successfully set exposure mode to \(String(describing: targetMode)) for \(deviceName)")
-
-                // Report current values ONLY if we locked or unlocked to AUTO.
-                // If we unlocked to CUSTOM, rely solely on KVO updates to avoid reporting a potentially stale value immediately after mode switch.
-                if targetMode == .locked || targetMode == .continuousAutoExposure {
-                    reportCurrentDeviceValues()
-                }
-
-            } catch {
-                logger.error("[ExposureLock] Error setting exposure mode to \(String(describing: targetMode)) for \(deviceName): \(error.localizedDescription)")
-                delegate?.didEncounterError(.configurationFailed(message: "Failed to set exposure mode for \(deviceName): \(error.localizedDescription)"))
-                // Attempt to unlock configuration if lock failed during change
-                device.unlockForConfiguration()
-            }
-        } else {
-            logger.info("[ExposureLock] Exposure mode on \(deviceName) is already \(String(describing: targetMode)), no change needed.")
-            // Even if no mode change occurred, report values if the target was lock or auto, 
-            // as the interpretation might change (e.g., KVO reporting might differ).
-            // Avoid reporting if target was .custom and already .custom to prevent potential stale values.
-            if targetMode == .locked || targetMode == .continuousAutoExposure {
-                reportCurrentDeviceValues()
-            }
+            _ = stateMachine.processEvent(.unlock, device: device)
         }
     }
     
@@ -662,140 +571,33 @@ class ExposureService: NSObject {
             logger.error("SP Enable: No device available.")
             return
         }
-        // Block ISO set if manual ISO override is active
-        if isManualISOInSP {
-            logger.debug("SP Enable: Manual ISO in SP mode, only set duration.");
-            do {
-                try device.lockForConfiguration()
-                device.setExposureModeCustom(duration: duration, iso: device.iso) { [weak self] _ in
-                    DispatchQueue.main.async {
-                        self?.delegate?.didUpdateShutterSpeed(duration)
-                        self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
-                    }
-                }
-                device.unlockForConfiguration()
-            } catch {
-                self.logger.error("SP Enable: Error setting custom duration with manual ISO: \(error.localizedDescription)")
-                device.unlockForConfiguration()
-                DispatchQueue.main.async {
-                    self.isShutterPriorityActive = false
-                    self.targetShutterDuration = nil
-                    self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
-                }
-            }
-            self.currentExposureMode = .shutterPriority
-            return
+        
+        _ = stateMachine.processEvent(.enableShutterPriority(duration: duration), device: device)
+        
+        // If initial ISO is provided, override it
+        if let initialISO = initialISO {
+            _ = stateMachine.processEvent(.overrideISOInShutterPriority(iso: initialISO), device: device)
         }
-        // Perform initial mode set on the adjustment queue
-        exposureAdjustmentQueue.async { [weak self] in
-            guard let self = self, let currentDevice = self.device, self.isShutterPriorityActive else { return } // Re-check state
-            let minISO = currentDevice.activeFormat.minISO
-            let maxISO = currentDevice.activeFormat.maxISO
-            let isoToSet: Float
-            if self.isManualISOInSP {
-                // If user has overridden ISO, do not set ISO, only set duration
-                do {
-                    try currentDevice.lockForConfiguration()
-                    currentDevice.setExposureModeCustom(duration: duration, iso: currentDevice.iso) { [weak self] _ in
-                        DispatchQueue.main.async {
-                            self?.delegate?.didUpdateShutterSpeed(duration)
-                            self?.logger.info("SP Enabled: Manual ISO in SP mode, only set duration.")
-                        }
-                    }
-                    currentDevice.unlockForConfiguration()
-                } catch {
-                    self.logger.error("SP Enable: Error setting custom duration with manual ISO: \(error.localizedDescription)")
-                    currentDevice.unlockForConfiguration()
-                    DispatchQueue.main.async {
-                        self.isShutterPriorityActive = false
-                        self.targetShutterDuration = nil
-                        self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
-                    }
-                }
-                self.currentExposureMode = .shutterPriority
-                return
-            }
-            if let initialISO = initialISO {
-                isoToSet = min(max(initialISO, minISO), maxISO)
-            } else {
-                isoToSet = min(max(currentDevice.iso, minISO), maxISO)
-            }
-            do {
-                try currentDevice.lockForConfiguration()
-                // Set the mode to custom with the fixed duration and ISO
-                currentDevice.setExposureModeCustom(duration: duration, iso: isoToSet) { [weak self] _ in
-                    DispatchQueue.main.async {
-                        self?.delegate?.didUpdateShutterSpeed(duration)
-                        self?.delegate?.didUpdateISO(isoToSet)
-                        self?.logger.info("SP Enabled: Initial ISO set to \(String(format: "%.1f", isoToSet))")
-                    }
-                }
-                currentDevice.unlockForConfiguration()
-            } catch {
-                self.logger.error("SP Enable: Error setting initial custom exposure: \(error.localizedDescription)")
-                currentDevice.unlockForConfiguration()
-                DispatchQueue.main.async {
-                    self.isShutterPriorityActive = false
-                    self.targetShutterDuration = nil
-                    self.delegate?.didEncounterError(.configurationFailed(message: "Failed to enable SP"))
-                }
-            }
-            self.currentExposureMode = .shutterPriority
-        }
-        self.currentExposureMode = .shutterPriority
     }
     
     func disableShutterPriority() {
-        guard isShutterPriorityActive else {
-            // logger.debug("SP Disable: Already inactive.")
-            return
-        }
-        guard let _ = device else {
+        guard let device = device else {
             logger.error("SP Disable: No device available.")
             return
         }
-
-        isShutterPriorityActive = false // Set flag immediately to stop adjustments
+        
+        // Always revert to auto when disabling SP
+        _ = stateMachine.processEvent(.enableAuto, device: device)
         targetShutterDuration = nil
-        isTemporarilyLockedForRecording = false // Ensure recording lock is off when disabling
         logger.info("Disabling Shutter Priority.")
-
-        // Revert to auto-exposure on the adjustment queue
-        exposureAdjustmentQueue.async { [weak self] in
-             guard let self = self, let currentDevice = self.device else { return }
-
-            do {
-                try currentDevice.lockForConfiguration()
-                // Always revert to continuousAutoExposure when SP is turned off
-                if currentDevice.isExposureModeSupported(.continuousAutoExposure) {
-                    currentDevice.exposureMode = .continuousAutoExposure
-                     self.logger.info("SP Disabled: Reverted to Continuous Auto Exposure.")
-                    // KVO should automatically report the new auto values
-                } else {
-                    self.logger.warning("SP Disable: Continuous Auto Exposure not supported, leaving mode as is.")
-                }
-                currentDevice.unlockForConfiguration()
-            } catch {
-                self.logger.error("SP Disable: Error reverting to auto exposure: \(error.localizedDescription)")
-                 // Attempt to unlock configuration if lock failed during change
-                 currentDevice.unlockForConfiguration()
-                 // Should we notify delegate of error?
-            }
-        }
-        self.currentExposureMode = .auto
     }
     // --------------------------------
 
     // --- Add new method here ---
     private func handleExposureTargetOffsetUpdate(change: NSKeyValueObservedChange<Float>) {
-        // Block SP ISO adjustment if manual ISO override is active
-        if isManualISOInSP {
-            logger.debug("SP Adjust: Manual ISO in SP mode, skipping ISO adjustment.");
-            return;
-        }
-        // Ensure SP is active and we have the necessary info
-        guard isShutterPriorityActive,
-              let targetDuration = targetShutterDuration,
+        // Check if we're in shutter priority mode
+        guard case .shutterPriority(let targetDuration, let manualISO) = stateMachine.currentState,
+              manualISO == nil, // Only adjust if no manual ISO override
               let newOffset = change.newValue else {
             return
         }
@@ -812,7 +614,9 @@ class ExposureService: NSObject {
         }
         // Perform calculations and device interaction on the dedicated queue
         exposureAdjustmentQueue.async { [weak self] in
-             guard let self = self, self.isShutterPriorityActive, let currentDevice = self.device else { return } // Re-check state inside async block
+             guard let self = self, 
+                   case .shutterPriority = self.stateMachine.currentState,
+                   let currentDevice = self.device else { return } // Re-check state inside async block
             let currentISO = currentDevice.iso
             let minISO = currentDevice.activeFormat.minISO
             let maxISO = currentDevice.activeFormat.maxISO
@@ -855,28 +659,8 @@ class ExposureService: NSObject {
             return
         }
         
-        do {
-            try device.lockForConfiguration()
-            
-            // Store current values before locking
-            let currentISO = device.iso
-            let currentDuration = device.exposureDuration
-            
-            // Set to locked mode with current values
-            if device.isExposureModeSupported(.locked) {
-                device.exposureMode = .locked
-                logger.info("🔒 Locked SP exposure for recording with ISO: \(currentISO), Duration: \(CMTimeGetSeconds(currentDuration))s")
-            }
-            
-            device.unlockForConfiguration()
-            
-            // Set internal state
-            isTemporarilyLockedForRecording = true
-            
-        } catch {
-            logger.error("Failed to lock SP exposure for recording: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
-        }
+        _ = stateMachine.processEvent(.startRecording, device: device)
+        logger.info("🔒 Locked SP exposure for recording")
     }
     
     /// Unlocks exposure after recording when Shutter Priority is active
@@ -886,28 +670,8 @@ class ExposureService: NSObject {
             return
         }
         
-        do {
-            try device.lockForConfiguration()
-            
-            // Return to custom mode for Shutter Priority
-            if device.isExposureModeSupported(.custom) {
-                device.exposureMode = .custom
-                // Re-apply the target shutter duration if we have it
-                if let targetDuration = targetShutterDuration {
-                    device.setExposureModeCustom(duration: targetDuration, iso: device.iso)
-                }
-                logger.info("🔓 Unlocked SP exposure after recording, returning to custom mode")
-            }
-            
-            device.unlockForConfiguration()
-            
-            // Reset internal state
-            isTemporarilyLockedForRecording = false
-            
-        } catch {
-            logger.error("Failed to unlock SP exposure after recording: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
-        }
+        _ = stateMachine.processEvent(.stopRecording, device: device)
+        logger.info("🔓 Unlocked SP exposure after recording")
     }
     
     // MARK: - Safe White Balance Conversion (NEW HELPER)
@@ -987,7 +751,7 @@ class ExposureService: NSObject {
             do {
                 try device.lockForConfiguration()
                 // Attempt to restore last known good state
-                if self.isShutterPriorityActive {
+                if case .shutterPriority = self.stateMachine.currentState {
                     self.enableShutterPriority(duration: self.targetShutterDuration ?? device.exposureDuration)
                 } else {
                     device.exposureMode = .continuousAutoExposure
@@ -1000,32 +764,30 @@ class ExposureService: NSObject {
     }
 
     func prepareForLensSwitch() {
-        guard let device = device else { return }
-        lastKnownGoodState = ExposureState.capture(from: device, mode: currentExposureMode)
+        lastKnownGoodState = stateMachine.currentState
     }
 
     func restoreAfterLensSwitch() {
         guard let state = lastKnownGoodState,
               let device = device else { return }
         
-        exposureAdjustmentQueue.async {
-            do {
-                try device.lockForConfiguration()
-                self.currentExposureMode = state.mode
-                switch state.mode {
-                case .shutterPriority:
-                    self.enableShutterPriority(duration: state.duration, initialISO: state.iso)
-                case .locked:
-                    device.setExposureModeCustom(duration: state.duration, iso: state.iso)
-                case .manual:
-                    device.setExposureModeCustom(duration: state.duration, iso: state.iso)
-                case .auto:
-                    device.exposureMode = .continuousAutoExposure
-                }
-                device.unlockForConfiguration()
-            } catch {
-                self.logger.error("Restore after lens switch failed: \(error)")
+        // Restore the state machine state
+        switch state {
+        case .auto:
+            _ = stateMachine.processEvent(.enableAuto, device: device)
+        case .manual(let iso, let duration):
+            _ = stateMachine.processEvent(.enableManual(iso: iso, duration: duration), device: device)
+        case .shutterPriority(let duration, let manualISO):
+            _ = stateMachine.processEvent(.enableShutterPriority(duration: duration), device: device)
+            if let manualISO = manualISO {
+                _ = stateMachine.processEvent(.overrideISOInShutterPriority(iso: manualISO), device: device)
             }
+        case .locked(let iso, let duration):
+            _ = stateMachine.processEvent(.enableManual(iso: iso, duration: duration), device: device)
+            _ = stateMachine.processEvent(.lock, device: device)
+        case .recordingLocked:
+            // Should not happen during lens switch
+            logger.warning("Unexpected recording locked state during lens switch restore")
         }
     }
 
@@ -1051,7 +813,7 @@ class ExposureService: NSObject {
         let stabilityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self,
                   let device = self.device,
-                  self.isShutterPriorityActive else { return }
+                  case .shutterPriority = self.stateMachine.currentState else { return }
             
             samples.append(device.iso)
             if samples.count > 10 {
@@ -1111,29 +873,22 @@ class ExposureService: NSObject {
     }
 
     func setManualISOInSP(_ manual: Bool) {
-        isManualISOInSP = manual
+        guard let device = device else { return }
+        
+        if manual {
+            // This should only be called when in SP mode
+            if case .shutterPriority = stateMachine.currentState {
+                // ISO will be set via updateISO with fromUser=true
+                logger.debug("Manual ISO override enabled in SP mode")
+            }
+        } else {
+            // Clear manual ISO override
+            _ = stateMachine.processEvent(.clearManualISOOverride, device: device)
+        }
     }
 }
 
-// Add after class ExposureService: NSObject {
-private struct ExposureState {
-    let iso: Float
-    let duration: CMTime
-    let isLocked: Bool
-    let isShutterPriority: Bool
-    let mode: ExposureMode
-    
-    static func capture(from device: AVCaptureDevice, mode: ExposureMode) -> ExposureState {
-        return ExposureState(
-            iso: device.iso,
-            duration: device.exposureDuration,
-            isLocked: device.exposureMode == .locked,
-            isShutterPriority: device.exposureMode == .custom,
-            mode: mode
-        )
-    }
-}
-
+// ExposureMode moved to match the one in CameraViewModel
 enum ExposureMode: String, Codable, Equatable {
     case auto
     case manual
