@@ -100,7 +100,7 @@ class ExposureUIViewModel: ObservableObject {
         
         isAutoExposureEnabled = enabled
         updateExposureMode(enabled ? .auto : .manual)
-        cameraViewModel?.exposureService.setAutoExposureEnabled(enabled)
+        cameraViewModel?.exposureService?.setAutoExposureEnabled(enabled)
     }
     
     /// Sets exposure lock and updates the camera
@@ -108,7 +108,7 @@ class ExposureUIViewModel: ObservableObject {
         guard isExposureLocked != locked else { return }
         
         isExposureLocked = locked
-        cameraViewModel?.exposureService.setExposureLock(locked: locked)
+        cameraViewModel?.exposureService?.setExposureLock(locked: locked)
     }
     
     /// Enables/disables shutter priority mode
@@ -128,7 +128,7 @@ class ExposureUIViewModel: ObservableObject {
     func setExposureBias(_ bias: Float) {
         let clampedBias = min(max(bias, minExposureBias), maxExposureBias)
         exposureBias = clampedBias
-        cameraViewModel?.exposureService.updateExposureTargetBias(clampedBias)
+        cameraViewModel?.exposureService?.updateExposureTargetBias(clampedBias)
     }
     
     /// Updates ISO value through the camera
@@ -145,34 +145,34 @@ class ExposureUIViewModel: ObservableObject {
             setManualISOInSP(true)
         }
         
-        cameraViewModel?.exposureService.updateISO(clampedISO, fromUser: true)
+        cameraViewModel?.exposureService?.updateISO(clampedISO, fromUser: true)
     }
     
     /// Updates shutter speed through the camera
     func updateShutterSpeed(_ speed: CMTime) {
-        cameraViewModel?.exposureService.updateShutterSpeed(speed)
+        cameraViewModel?.exposureService?.updateShutterSpeed(speed)
     }
     
     /// Updates shutter angle (converts to shutter speed based on frame rate)
     func updateShutterAngle(_ angle: Double) {
         guard let frameRate = cameraViewModel?.selectedFrameRate else { return }
-        cameraViewModel?.exposureService.updateShutterAngle(angle, frameRate: frameRate)
+        cameraViewModel?.exposureService?.updateShutterAngle(angle, frameRate: frameRate)
     }
     
     /// Updates white balance temperature
     func updateWhiteBalance(_ temperature: Float) {
-        cameraViewModel?.exposureService.updateWhiteBalance(temperature)
+        cameraViewModel?.exposureService?.updateWhiteBalance(temperature)
     }
     
     /// Updates white balance tint
     func updateTint(_ tint: Float) {
-        cameraViewModel?.exposureService.updateTint(tint, currentWhiteBalance: currentWhiteBalance)
+        cameraViewModel?.exposureService?.updateTint(tint, currentWhiteBalance: currentWhiteBalance)
     }
     
     /// Sets manual ISO override in shutter priority mode
     func setManualISOInSP(_ manual: Bool) {
         isManualISOInSP = manual
-        cameraViewModel?.exposureService.setManualISOInSP(manual)
+        cameraViewModel?.exposureService?.setManualISOInSP(manual)
     }
     
     // MARK: - Device State Updates (called by CameraViewModel)
@@ -293,12 +293,12 @@ class ExposureUIViewModel: ObservableObject {
         // Calculate 180° shutter duration based on current frame rate
         guard let frameRate = cameraViewModel?.selectedFrameRate else { return }
         let duration = CMTimeMakeWithSeconds(1.0 / (2.0 * frameRate), preferredTimescale: 1_000_000)
-        cameraViewModel?.exposureService.enableShutterPriority(duration: duration)
+        cameraViewModel?.exposureService?.enableShutterPriority(duration: duration)
         updateExposureMode(.shutterPriority)
     }
     
     private func disableShutterPriority() {
-        cameraViewModel?.exposureService.disableShutterPriority()
+        cameraViewModel?.exposureService?.disableShutterPriority()
         isManualISOInSP = false
         updateExposureMode(.auto)
     }

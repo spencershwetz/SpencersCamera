@@ -50,7 +50,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     @Published var captureMode: CaptureMode = .video
     
-    let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModel")
+    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "CameraViewModel")
     
     @Published var isSessionRunning = false
     @Published var error: CameraError?
@@ -138,19 +138,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     
                     // Asynchronously configure the format
                     if logEnabled {
-                        logger.info("🎥 Calling videoFormatService.configureAppleLog() to prepare device...")
+                        logger.info("🎥 Calling videoFormatService?.configureAppleLog() to prepare device...")
                         guard let formatService = formatService else { throw CameraError.setupFailed }
                         try await formatService.configureAppleLog() // Use captured service
                         logger.info("✅ Successfully completed configureAppleLog() device preparation.")
                     } else {
-                        logger.info("🎥 Calling videoFormatService.resetAppleLog() to prepare device...")
+                        logger.info("🎥 Calling videoFormatService?.resetAppleLog() to prepare device...")
                         guard let formatService = formatService else { throw CameraError.setupFailed }
                         try await formatService.resetAppleLog() // Use captured service
                         logger.info("✅ Successfully completed resetAppleLog() device preparation.")
                     }
                     
                     // Step 2: Trigger CameraDeviceService to reconfigure the session with the prepared device state
-                    logger.info("🔄 Calling cameraDeviceService.reconfigureSessionForCurrentDevice() to apply changes...")
+                    logger.info("🔄 Calling cameraDeviceService?.reconfigureSessionForCurrentDevice() to apply changes...")
                     guard let deviceService = deviceService else { throw CameraError.setupFailed }
                     try await deviceService.reconfigureSessionForCurrentDevice() // Use captured service
                     logger.info("✅ Successfully completed reconfigureSessionForCurrentDevice().")
@@ -246,7 +246,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             
             Task {
                 do {
-                    try await videoFormatService.updateCameraFormat(for: selectedResolution)
+                    try await videoFormatService?.updateCameraFormat(for: selectedResolution)
                 } catch {
                     print("Error updating camera format: \(error)")
                     self.error = .configurationFailed(message: nil)
@@ -313,7 +313,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     @Published var isAutoExposureEnabled: Bool = true {
         didSet {
-            exposureService.setAutoExposureEnabled(isAutoExposureEnabled)
+            exposureService?.setAutoExposureEnabled(isAutoExposureEnabled)
         }
     }
     
@@ -367,14 +367,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Exposure lock state is now managed internally by ExposureService
     
     // Service Instances
-    private var cameraSetupService: CameraSetupService!
-    var exposureService: ExposureService!
-    private var recordingService: RecordingService!
-    internal var cameraDeviceService: CameraDeviceService!
-    private var videoFormatService: VideoFormatService!
+    private var cameraSetupService: CameraSetupService?
+    var exposureService: ExposureService?
+    private var recordingService: RecordingService?
+    internal var cameraDeviceService: CameraDeviceService?
+    private var videoFormatService: VideoFormatService?
     
     // UI ViewModels
-    @Published var exposureUI: ExposureUIViewModel!
+    @Published var exposureUI: ExposureUIViewModel?
     
     @Published var lastLensSwitchTimestamp = Date()
     @Published var exposureBias: Float = 0.0
@@ -383,11 +383,11 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     var maxExposureBias: Float { device?.maxExposureTargetBias ?? 2.0 }
     
     // Logger for orientation specific logs
-    private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraViewModelOrientation")
+    private let orientationLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "CameraViewModelOrientation")
     
     // Watch Connectivity properties
     private var wcSession: WCSession?
-    private let wcLogger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "WatchConnectivity")
+    private let wcLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "WatchConnectivity")
     private var isAppCurrentlyActive = false // Track app active state
     
     // Timer for polling WB
@@ -412,7 +412,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
-        exposureService.updateExposureTargetBias(bias)
+        exposureService?.updateExposureTargetBias(bias)
     }
     
     // Add a computed property to expose the current device for debug purposes
@@ -508,7 +508,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // Explicitly remove device observers BEFORE stopping the session
         // This ensures observers are gone while exposureService is still valid.
-        exposureService.removeDeviceObservers()
+        exposureService?.removeDeviceObservers()
         logger.info("Explicitly removed ExposureService KVO observers in CameraViewModel deinit")
 
         // Nil out delegates for AVCaptureOutputs to break potential retain cycles
@@ -556,26 +556,35 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Ensure ExposureService is initialized before CameraSetupService
         exposureService = ExposureService(delegate: self)
         // Inject closure to allow ExposureService to check stabilization state
-        exposureService.isVideoStabilizationCurrentlyEnabled = { [weak self] in
+        exposureService?.isVideoStabilizationCurrentlyEnabled = { [weak self] in
             return self?.settingsModel.isVideoStabilizationEnabled ?? false
         }
         
         // Initialize ExposureUIViewModel
         exposureUI = ExposureUIViewModel(cameraViewModel: self)
-        exposureUI.selectedFrameRate = selectedFrameRate
+        exposureUI?.selectedFrameRate = selectedFrameRate
         
         // Initialize video format service early as it's needed by other services
         videoFormatService = VideoFormatService(session: session, delegate: self)
         
         // Initialize recording service
         recordingService = RecordingService(session: session, delegate: self)
-        recordingService.setMetalFrameProcessor(self.metalFrameProcessor)
+        recordingService?.setMetalFrameProcessor(self.metalFrameProcessor)
         
         // Pass exposureService to CameraDeviceService initializer
-        cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, exposureService: exposureService, delegate: self)
+        if let videoFormatService = videoFormatService,
+           let exposureService = exposureService {
+            cameraDeviceService = CameraDeviceService(session: session, videoFormatService: videoFormatService, exposureService: exposureService, delegate: self)
+        } else {
+            logger.error("Failed to create CameraDeviceService: missing dependencies")
+        }
         
         // Initialize CameraSetupService last, after all dependencies are ready
-        cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self)
+        if let exposureService = exposureService {
+            cameraSetupService = CameraSetupService(session: session, exposureService: exposureService, delegate: self, viewModel: self)
+        } else {
+            logger.error("Failed to create CameraSetupService: missing exposureService")
+        }
         
         // Set up notification observers
         setupSettingObservers()
@@ -586,7 +595,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // Prevent session/camera/color space reconfiguration if LUT is being removed
             if self.isLUTBeingRemoved { return }
             do {
-                try self.cameraSetupService.setupSession()
+                try self.cameraSetupService?.setupSession()
                 self.logger.info("Camera session setup completed successfully")
                 // --- Ensure color space is set to user preference on initial boot ---
                 // NOTE: LUT loading is always decoupled from color space configuration.
@@ -596,10 +605,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     do {
                         if self.isAppleLogEnabled && self.isAppleLogSupported {
                             self.logger.info("[Boot] Applying Apple Log color space after initial session setup...")
-                            try await self.videoFormatService.configureAppleLog()
+                            try await self.videoFormatService?.configureAppleLog()
                         } else {
                             self.logger.info("[Boot] Applying Rec. 709 / P3 color space after initial session setup...")
-                            try await self.videoFormatService.resetAppleLog()
+                            try await self.videoFormatService?.resetAppleLog()
                         }
                         self.logger.info("[Boot] Successfully applied color space after initial session setup.")
                     } catch {
@@ -619,13 +628,13 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func updateWhiteBalance(_ temperature: Float) {
         isWhiteBalanceAuto = false // Switching to manual WB
-        exposureService.updateWhiteBalance(temperature)
+        exposureService?.updateWhiteBalance(temperature)
     }
 
     /// Enables or disables automatic white-balance.
     func setWhiteBalanceAuto(_ enabled: Bool) {
         isWhiteBalanceAuto = enabled
-        exposureService.setAutoWhiteBalanceEnabled(enabled)
+        exposureService?.setAutoWhiteBalanceEnabled(enabled)
     }
     
     func updateISO(_ isoValue: Float) {
@@ -652,7 +661,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func updateFrameRate(_ fps: Double) {
         do {
-            try videoFormatService.updateFrameRate(fps)
+            try videoFormatService?.updateFrameRate(fps)
         } catch {
             print("❌ Frame rate error: \(error)")
             self.error = .configurationFailed(message: nil)
@@ -699,8 +708,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         }
         
         // Perform the lens switch
-        videoFormatService.setAppleLogEnabled(isAppleLogEnabled)
-        cameraDeviceService.switchToLens(lens)
+        videoFormatService?.setAppleLogEnabled(isAppleLogEnabled)
+        cameraDeviceService?.switchToLens(lens)
         
         // Update the timestamp immediately to trigger orientation update in PreviewView via updateState
         lastLensSwitchTimestamp = Date()
@@ -754,7 +763,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     func setZoomFactor(_ factor: CGFloat) {
         // Remove isRecording argument
-        cameraDeviceService.setZoomFactor(factor, currentLens: currentLens, availableLenses: availableLenses)
+        cameraDeviceService?.setZoomFactor(factor, currentLens: currentLens, availableLenses: availableLenses)
     }
     
     @MainActor
@@ -776,7 +785,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         if self.settingsModel.isExposureLockEnabledDuringRecording {
             // Use unified lock method for all modes
             logger.info("Auto-locking exposure for recording (SP mode: \\(isShutterPriorityEnabled))")
-            exposureService.lockExposureForRecording()
+            exposureService?.lockExposureForRecording()
             
             // Store previous UI state for restoration
             // Note: Don't set isExposureLocked here as it's for manual lock only
@@ -785,23 +794,23 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Lock white balance if enabled in settings
         if self.settingsModel.isWhiteBalanceLockEnabled {
             logger.info("Auto-locking white balance for recording start.")
-            exposureService.updateWhiteBalance(self.whiteBalance)
+            exposureService?.updateWhiteBalance(self.whiteBalance)
         }
 
         // Set the selected LUT TEXTURE onto the METAL processor BEFORE configuring the recording service
         logger.debug("Setting Metal LUT texture for bake-in: \(self.lutManager.currentLUTTexture != nil ? "Available" : "None")")
-        recordingService.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
+        recordingService?.setLUTTextureForBakeIn(lutManager.currentLUTTexture) // <-- Use new method to set texture
 
         // Update configuration for recording
-        recordingService.setDevice(currentDevice)
-        recordingService.setAppleLogEnabled(isAppleLogEnabled)
-        recordingService.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
+        recordingService?.setDevice(currentDevice)
+        recordingService?.setAppleLogEnabled(isAppleLogEnabled)
+        recordingService?.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
 
         // ---> ADD LOGGING HERE <---
         logger.info("DEBUG_FRAMERATE: Configuring RecordingService with selectedFrameRate: \\(self.selectedFrameRate)")
         // ---> END LOGGING <---
 
-        recordingService.setVideoConfiguration(
+        recordingService?.setVideoConfiguration(
             frameRate: selectedFrameRate,
             resolution: selectedResolution,
             codec: selectedCodec
@@ -848,7 +857,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         logger.info("Requesting recording stop.")
         // Stop recording
-        await recordingService.stopRecording()
+        await recordingService?.stopRecording()
 
         self.isRecording = false
         self.recordingStartTime = nil // Clear start time
@@ -892,7 +901,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             logger.info("Recording stopped: Unlocking exposure")
             
             // Use unified unlock method - the service will restore the correct state
-            exposureService.unlockExposureAfterRecording()
+            exposureService?.unlockExposureAfterRecording()
             
             // The service handles all state restoration internally
             // No need for complex restoration logic here
@@ -910,7 +919,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     
     private func updateVideoConfiguration() {
         // Update recording service with new codec
-        recordingService.setVideoConfiguration(
+        recordingService?.setVideoConfiguration(
             frameRate: selectedFrameRate,
             resolution: selectedResolution,
             codec: selectedCodec
@@ -1158,7 +1167,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         if !isShutterPriorityEnabled {
             logger.info("ViewModel: Enabling Shutter Priority with duration \\(targetDurationSeconds)s.")
-            exposureService.enableShutterPriority(duration: targetDuration)
+            exposureService?.enableShutterPriority(duration: targetDuration)
             isShutterPriorityEnabled = true // Update state AFTER calling service
             // ADDED: Ensure standard AE lock UI turns off when SP enables
             if self.isExposureLocked {
@@ -1167,7 +1176,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             }
         } else {
             logger.info("ViewModel: Disabling Shutter Priority.")
-            exposureService.disableShutterPriority()
+            exposureService?.disableShutterPriority()
             isShutterPriorityEnabled = false // Update state AFTER calling service
             // No need to change isExposureLocked state here - leave it as it was before SP was disabled
         }
@@ -1207,7 +1216,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return
         }
 
-        guard let currentTemperature = exposureService.getCurrentWhiteBalanceTemperature() else {
+        guard let currentTemperature = exposureService?.getCurrentWhiteBalanceTemperature() else {
             // logger.trace("WB Poll: Exposure service returned nil, skipping update.")
             return
         }
@@ -1321,7 +1330,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 guard let self = self else { return }
                 do {
                     // First try to set up the session
-                    try self.cameraSetupService.setupSession()
+                    try self.cameraSetupService?.setupSession()
                     self.logger.info("[SessionControl] Camera session setup completed successfully, now starting session")
                     
                     // Only attempt to start session if setup was successful
@@ -1378,7 +1387,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     // Re-attach KVO observers AFTER session is confirmed running
                     if let currentDevice = self.device {
                         self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \\(currentDevice.localizedName)")
-                        self.exposureService.setDevice(currentDevice)
+                        self.exposureService?.setDevice(currentDevice)
                         // Check if we actually need to reconfigure color space
                         let activeFormat = currentDevice.activeFormat
                             let currentColorSpace = currentDevice.activeColorSpace
@@ -1394,8 +1403,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                                     self.logger.info("[SessionControl] Re-applying Apple Log color space after session start...")
                                     Task {
                                         do {
-                                            try await self.videoFormatService.configureAppleLog()
-                                            try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                            try await self.videoFormatService?.configureAppleLog()
+                                            try await self.cameraDeviceService?.reconfigureSessionForCurrentDevice()
                                             self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
                                             // Reapply video stabilization setting after AppleLog reconfiguration
                                             self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
@@ -1407,8 +1416,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                                     self.logger.info("[SessionControl] Re-applying Rec. 709 / P3 color space after session start...")
                                     Task {
                                         do {
-                                            try await self.videoFormatService.resetAppleLog()
-                                            try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                            try await self.videoFormatService?.resetAppleLog()
+                                            try await self.cameraDeviceService?.reconfigureSessionForCurrentDevice()
                                             self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
                                             self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
                                         } catch {
@@ -1490,7 +1499,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // MARK: - Interruption Handlers
     @objc private func sessionInterrupted(_ notification: Notification) {
         // Remove observers IMMEDIATELY upon interruption notification
-        exposureService.removeDeviceObservers()
+        exposureService?.removeDeviceObservers()
         logger.warning("[SessionControl] ExposureService observers removed due to session interruption.")
 
         logger.warning("[SessionControl] Session interrupted: \(notification.userInfo ?? [:])")
@@ -1554,7 +1563,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
         // !!! CRITICAL: Remove observers immediately BEFORE updating state for any runtime error
         logger.warning("[SessionControl] Runtime Error detected. Removing ExposureService observers immediately.")
-        exposureService.removeDeviceObservers()
+        exposureService?.removeDeviceObservers()
 
         // --- Handle 'Cannot Record' error by reconfiguring session ---
         if specificErrorCode == .mediaServicesWereReset || specificErrorCode == .sessionWasInterrupted {
@@ -1562,7 +1571,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             sessionQueue.async { [weak self] in
                 guard let self = self else { return }
                 do {
-                    try self.cameraSetupService.setupSession()
+                    try self.cameraSetupService?.setupSession()
                     DispatchQueue.main.async {
                         self.startSession()
                     }
@@ -1876,14 +1885,14 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     @MainActor
     func focus(at point: CGPoint, lockAfter: Bool) {
         print("📍 [CameraViewModel.focus] Called with point: \(point), lockAfter: \(lockAfter)")
-        cameraDeviceService.setFocusAndExposure(at: point, lock: lockAfter)
+        cameraDeviceService?.setFocusAndExposure(at: point, lock: lockAfter)
     }
 
     /// Updates exposure compensation by adding delta to current value.
     @MainActor
     func adjustExposureBias(by delta: Float) {
         let newBias = exposureBias + delta
-        exposureService.updateExposureTargetBias(newBias)
+        exposureService?.updateExposureTargetBias(newBias)
     }
 
     // MARK: - Shutter Priority Re-application (NEW)
@@ -1945,15 +1954,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         logger.info("[ensureShutterPriorityConsistency] Applying 180° shutter duration: \(String(format: "%.5f", targetDurationSeconds))s")
         // Apply shutter priority with the calculated duration and cached ISO if available
         if let lastISO = lastSPISO {
-            exposureService.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
+            exposureService?.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
         } else {
-            exposureService.enableShutterPriority(duration: targetDuration)
+            exposureService?.enableShutterPriority(duration: targetDuration)
         }
         // If currently recording and exposure lock is enabled during recording, re-lock
         if isRecording && settingsModel.isExposureLockEnabledDuringRecording {
             logger.info("[ensureShutterPriorityConsistency] Re-locking exposure for ongoing recording")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                self?.exposureService.lockExposureForRecording()
+                self?.exposureService?.lockExposureForRecording()
             }
         }
     }
@@ -1990,19 +1999,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 
     func setAutoExposureEnabled(_ enabled: Bool) {
-        exposureService.setAutoExposureEnabled(enabled)
+        exposureService?.setAutoExposureEnabled(enabled)
     }
 
     func enableShutterPriority(duration: CMTime, initialISO: Float? = nil) {
-        exposureService.enableShutterPriority(duration: duration, initialISO: initialISO)
+        exposureService?.enableShutterPriority(duration: duration, initialISO: initialISO)
     }
 
     func disableShutterPriority() {
-        exposureService.disableShutterPriority()
+        exposureService?.disableShutterPriority()
     }
 
     func setExposureLock(locked: Bool) {
-        exposureService.setExposureLock(locked: locked)
+        exposureService?.setExposureLock(locked: locked)
     }
 
     private struct ExposureState {
@@ -2030,12 +2039,12 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         case .shutterPriority:
             enableShutterPriority(duration: state.duration, initialISO: state.iso)
         case .locked:
-            exposureService.setExposureLock(locked: true)
+            exposureService?.setExposureLock(locked: true)
         case .manual:
-            exposureService.setAutoExposureEnabled(false)
-            exposureService.setCustomExposure(duration: state.duration, iso: state.iso)
+            exposureService?.setAutoExposureEnabled(false)
+            exposureService?.setCustomExposure(duration: state.duration, iso: state.iso)
         case .auto:
-            exposureService.setAutoExposureEnabled(true)
+            exposureService?.setAutoExposureEnabled(true)
         }
         exposureUI?.updateExposureMode(state.mode)
     }
@@ -2094,10 +2103,10 @@ extension CameraViewModel: CameraSetupServiceDelegate {
         }
         
         // Set the device on all services that need it
-        exposureService.setDevice(device)
-        recordingService.setDevice(device)
-        cameraDeviceService.setDevice(device)
-        videoFormatService.setDevice(device)
+        exposureService?.setDevice(device)
+        recordingService?.setDevice(device)
+        cameraDeviceService?.setDevice(device)
+        videoFormatService?.setDevice(device)
         
         // Initialize available lenses - move to main thread
         DispatchQueue.main.async {
@@ -2263,7 +2272,7 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
                     let targetDuration = CMTimeMakeWithSeconds(targetDurationSeconds, preferredTimescale: 1_000_000)
                     let lastISO = device.iso
                     self.logger.info("[didUpdateCurrentLens] Pre-calc for SP: frameRate=\(frameRate), duration=\(targetDurationSeconds)s, ISO=\(lastISO)")
-                    self.exposureService.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
+                    self.exposureService?.enableShutterPriority(duration: targetDuration, initialISO: lastISO)
                 }
                 // --- Apply SP ASAP (no debounce, call synchronously) ---
                 self.ensureShutterPriorityConsistency()

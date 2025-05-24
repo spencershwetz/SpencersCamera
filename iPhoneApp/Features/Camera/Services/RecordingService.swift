@@ -300,11 +300,12 @@ class RecordingService: NSObject {
                 audioInput.expectsMediaDataInRealTime = true
                 
                 // Add audio input to writer
-                if assetWriter!.canAdd(audioInput) {
-                    assetWriter!.add(audioInput)
+                if let writer = assetWriter,
+                   writer.canAdd(audioInput) {
+                    writer.add(audioInput)
                     logger.info("Added audio input to asset writer")
                 } else {
-                    let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding audio input"])
+                    let error = assetWriter?.error ?? NSError(domain: "RecordingService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding audio input"])
                     logger.error("Could not add audio input to asset writer: \(error.localizedDescription)")
                     // Continue without audio instead of failing
                 }
@@ -321,16 +322,23 @@ class RecordingService: NSObject {
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ]
             
+            guard let videoInput = assetWriterInput else {
+                logger.error("Asset writer video input is nil")
+                delegate?.didEncounterError(.custom(message: "Failed to create video input"))
+                return
+            }
+            
             assetWriterPixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
-                assetWriterInput: assetWriterInput!,
+                assetWriterInput: videoInput,
                 sourcePixelBufferAttributes: sourcePixelBufferAttributes
             )
             
             // Add inputs to writer
-            if assetWriter!.canAdd(assetWriterInput!) {
-                assetWriter!.add(assetWriterInput!)
+            if let writer = assetWriter,
+               writer.canAdd(videoInput) {
+                writer.add(videoInput)
             } else {
-                let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding video input"]) // Capture or create error
+                let error = assetWriter?.error ?? NSError(domain: "RecordingService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding video input"]) // Capture or create error
                 logger.error("Could not add video input to asset writer: \(error.localizedDescription)")
                 assetWriter = nil
                 delegate?.didEncounterError(.custom(message: "Failed to add video input: \(error.localizedDescription)"))
@@ -345,8 +353,14 @@ class RecordingService: NSObject {
             
             // Start writing
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)
-            assetWriter!.startWriting()
-            assetWriter!.startSession(atSourceTime: self.recordingStartTime!)
+            guard let writer = assetWriter,
+                  let startTime = recordingStartTime else {
+                logger.error("Asset writer or start time is nil")
+                delegate?.didEncounterError(.custom(message: "Failed to start recording"))
+                return
+            }
+            writer.startWriting()
+            writer.startSession(atSourceTime: startTime)
 
             isRecording = true
             delegate?.didStartRecording()

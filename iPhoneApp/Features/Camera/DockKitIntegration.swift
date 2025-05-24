@@ -40,12 +40,12 @@ extension CameraViewModel: CameraCaptureDelegate {
         } else {
             nextLens = .wide
         }
-        cameraDeviceService.switchToLens(nextLens)
+        cameraDeviceService?.switchToLens(nextLens)
     }
 
     func zoom(type: CameraZoomType, factor: CGFloat) {
-        let newZoom = max(1.0, min(CGFloat(currentZoomFactor) + (type == .increase ? factor : -factor), CGFloat(cameraDeviceService.currentDevice?.maxAvailableVideoZoomFactor ?? 10)))
-        cameraDeviceService.setZoomFactor(newZoom, currentLens: currentLens, availableLenses: availableLenses)
+        let newZoom = max(1.0, min(CGFloat(currentZoomFactor) + (type == .increase ? factor : -factor), CGFloat(cameraDeviceService?.currentDevice?.maxAvailableVideoZoomFactor ?? 10)))
+        cameraDeviceService?.setZoomFactor(newZoom, currentLens: currentLens, availableLenses: availableLenses)
     }
 
     // Convert DockKit-normalized rect (0…1) in video space to view-space coordinates used by overlay UI.

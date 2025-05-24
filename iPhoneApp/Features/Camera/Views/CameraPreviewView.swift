@@ -12,7 +12,7 @@ struct CameraPreviewView: UIViewRepresentable {
     var onTap: ((CGPoint, Bool) -> Void)? = nil  // Added Bool parameter for lock state
     
     // Logger for CameraPreviewView (UIViewRepresentable part)
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "CameraPreviewViewRepresentable")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "CameraPreviewViewRepresentable")
 
     // ---> ADD INIT LOG <---
     init(session: AVCaptureSession, lutManager: LUTManager, viewModel: CameraViewModel, onTap: ((CGPoint, Bool) -> Void)? = nil) {
@@ -31,7 +31,10 @@ struct CameraPreviewView: UIViewRepresentable {
         mtkView.translatesAutoresizingMaskIntoConstraints = false
 
         // Create and assign the delegate with rotation support
-        let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager)
+        guard let metalDelegate = MetalPreviewView(mtkView: mtkView, lutManager: lutManager) else {
+            logger.critical("Failed to create MetalPreviewView")
+            return mtkView
+        }
         // Force initial rotation to Portrait (90 degrees)
         metalDelegate.updateRotation(angle: 90)
         viewModel.metalPreviewDelegate = metalDelegate

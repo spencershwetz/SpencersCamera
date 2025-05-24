@@ -36,16 +36,16 @@ struct RotatingView<Content: View>: UIViewControllerRepresentable {
 class RotatingViewController<Content: View>: UIViewController {
     private var cancellables = Set<AnyCancellable>()
     private var orientationViewModel: DeviceOrientationViewModel
-    private var hostingController: UIHostingController<Content>!
+    private var hostingController: UIHostingController<Content>?
     private let invertRotation: Bool
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "RotatingView.Controller")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "RotatingView.Controller")
     
     init(rootView: Content, orientationViewModel: DeviceOrientationViewModel, invertRotation: Bool) {
         self.invertRotation = invertRotation
         self.orientationViewModel = orientationViewModel
         super.init(nibName: nil, bundle: nil)
         hostingController = UIHostingController(rootView: rootView)
-        hostingController.view.backgroundColor = .clear
+        hostingController?.view.backgroundColor = .clear
         
         // Use the provided orientation view model
         orientationViewModel.$orientation
@@ -66,6 +66,7 @@ class RotatingViewController<Content: View>: UIViewController {
     }
     
     private func setupHostingController() {
+        guard let hostingController = hostingController else { return }
         addChild(hostingController)
         view.addSubview(hostingController.view)
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
@@ -79,7 +80,7 @@ class RotatingViewController<Content: View>: UIViewController {
     }
     
     func updateContent(_ newContent: Content) {
-        hostingController.rootView = newContent
+        hostingController?.rootView = newContent
     }
     
     func updateOrientation(_ orientation: UIDeviceOrientation) {
@@ -97,7 +98,7 @@ class RotatingViewController<Content: View>: UIViewController {
         }
         
         UIView.animate(withDuration: 0.3) {
-            self.hostingController.view.transform = transform
+            self.hostingController?.view.transform = transform
         }
     }
 } 

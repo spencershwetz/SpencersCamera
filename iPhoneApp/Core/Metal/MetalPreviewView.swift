@@ -5,27 +5,28 @@ import os.log
 
 // Helper to convert FourCharCode to String
 fileprivate func FourCCString(_ code: FourCharCode) -> String {
-    let c = [ (code >> 24) & 0xff, (code >> 16) & 0xff, (code >> 8) & 0xff, code & 0xff ].map { Character(UnicodeScalar($0)!) }
+    let c = [ (code >> 24) & 0xff, (code >> 16) & 0xff, (code >> 8) & 0xff, code & 0xff ].compactMap { UnicodeScalar($0) }.map { Character($0) }
     return String(c)
 }
 
 class MetalPreviewView: NSObject, MTKViewDelegate {
     
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "MetalPreviewView")
-    private var device: MTLDevice!
-    private var commandQueue: MTLCommandQueue!
-    private var textureCache: CVMetalTextureCache!
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "MetalPreviewView")
+    private var device: MTLDevice?
+    private var commandQueue: MTLCommandQueue?
+    private var textureCache: CVMetalTextureCache?
     private var inFlightSemaphore = DispatchSemaphore(value: 3) // Triple buffering
     private let lutManager: LUTManager
     private var rotationAngle: Double = 0.0 {
         didSet {
             if abs(oldValue - rotationAngle) > 0.01 { // Only update if change is significant
+                guard let buffer = rotationBuffer else { return }
                 var rotation = Float(rotationAngle * Double.pi / 180.0)
-                memcpy(rotationBuffer.contents(), &rotation, MemoryLayout<Float>.size)
+                memcpy(buffer.contents(), &rotation, MemoryLayout<Float>.size)
             }
         }
     }
-    private var rotationBuffer: MTLBuffer!
+    private var rotationBuffer: MTLBuffer?
     
     // Texture properties for different formats
     private var bgraTexture: MTLTexture?
@@ -34,14 +35,14 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     private var currentPixelFormat: OSType = 0
     
     // Pipeline states
-    private var rgbPipelineState: MTLRenderPipelineState!
-    private var yuvPipelineState: MTLRenderPipelineState!
+    private var rgbPipelineState: MTLRenderPipelineState?
+    private var yuvPipelineState: MTLRenderPipelineState?
     
     // Keep track of the owning MTKView
     private weak var mtkView: MTKView?
     
-    private var isLUTActiveBuffer: MTLBuffer! // Add buffer for LUT active flag
-    private var isBT709Buffer: MTLBuffer! // Add buffer for BT.709 flag
+    private var isLUTActiveBuffer: MTLBuffer? // Add buffer for LUT active flag
+    private var isBT709Buffer: MTLBuffer? // Add buffer for BT.709 flag
     
     // Frame synchronization
     private let frameQueue = DispatchQueue(label: "com.camera.frameQueue", qos: .userInteractive)
@@ -57,21 +58,21 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     // Frame counter for texture cache management
     private var frameCounter = 0
     
-    init(mtkView: MTKView, lutManager: LUTManager) {
+    init?(mtkView: MTKView, lutManager: LUTManager) {
         self.lutManager = lutManager
         super.init()
         self.mtkView = mtkView
         
         guard let defaultDevice = MTLCreateSystemDefaultDevice() else {
             logger.critical("Metal is not supported on this device")
-            fatalError("Metal is not supported on this device")
+            return nil
         }
         self.device = defaultDevice
         mtkView.device = self.device
         
-        guard let newCommandQueue = self.device.makeCommandQueue() else {
+        guard let newCommandQueue = defaultDevice.makeCommandQueue() else {
             logger.critical("Could not create Metal command queue")
-            fatalError("Could not create Metal command queue")
+            return nil
         }
         self.commandQueue = newCommandQueue
         
@@ -80,21 +81,28 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             kCVMetalTextureCacheMaximumTextureAgeKey as String: 0
         ]
         var textureCache: CVMetalTextureCache?
-        CVMetalTextureCacheCreate(kCFAllocatorDefault, cacheAttributes as CFDictionary, device, nil, &textureCache)
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, cacheAttributes as CFDictionary, defaultDevice, nil, &textureCache)
         guard let unwrappedTextureCache = textureCache else {
             logger.critical("Could not create texture cache")
-            fatalError("Could not create texture cache")
+            return nil
         }
         self.textureCache = unwrappedTextureCache
         
         // Create rotation buffer
         var initialRotation: Float = 0.0
-        rotationBuffer = device.makeBuffer(bytes: &initialRotation,
+        guard let rotBuffer = defaultDevice.makeBuffer(bytes: &initialRotation,
                                          length: MemoryLayout<Float>.size,
-                                         options: [.storageModeShared])
+                                         options: [.storageModeShared]) else {
+            logger.critical("Could not create rotation buffer")
+            return nil
+        }
+        rotationBuffer = rotBuffer
         
         // Setup render pipelines
-        setupRenderPipelines()
+        guard setupRenderPipelines() else {
+            logger.critical("Failed to setup render pipelines")
+            return nil
+        }
         
         // Configure MTKView for maximum performance
         mtkView.delegate = self
@@ -107,28 +115,39 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // Create uniform buffers with options for frequent updates
         var isLUTActiveValue: Bool = false
-        isLUTActiveBuffer = device.makeBuffer(bytes: &isLUTActiveValue, 
+        guard let lutActiveBuffer = defaultDevice.makeBuffer(bytes: &isLUTActiveValue, 
                                             length: MemoryLayout<Bool>.size, 
-                                            options: [.storageModeShared])
+                                            options: [.storageModeShared]) else {
+            logger.critical("Could not create LUT active buffer")
+            return nil
+        }
+        isLUTActiveBuffer = lutActiveBuffer
         
         var isBT709Value: Bool = false
-        isBT709Buffer = device.makeBuffer(bytes: &isBT709Value, 
+        guard let bt709Buffer = defaultDevice.makeBuffer(bytes: &isBT709Value, 
                                         length: MemoryLayout<Bool>.size, 
-                                        options: [.storageModeShared])
+                                        options: [.storageModeShared]) else {
+            logger.critical("Could not create BT709 buffer")
+            return nil
+        }
+        isBT709Buffer = bt709Buffer
         
         // Add observer for LUT changes
         lutManager.onLUTChanged = { [weak self] isActive in
-            guard let self = self else { return }
+            guard let self = self,
+                  let buffer = self.isLUTActiveBuffer else { return }
             var isLUTActiveValue = isActive
-            memcpy(self.isLUTActiveBuffer.contents(), &isLUTActiveValue, MemoryLayout<Bool>.size)
+            memcpy(buffer.contents(), &isLUTActiveValue, MemoryLayout<Bool>.size)
         }
         
-        logger.info("MetalPreviewView initialized with device: \(self.device.name)")
+        logger.info("MetalPreviewView initialized with device: \(defaultDevice.name)")
     }
     
     public func prepareForNewSession() {
         logger.info("Preparing MetalPreviewView for new session. Flushing texture cache and resetting textures.")
-        CVMetalTextureCacheFlush(textureCache, 0)
+        if let cache = textureCache {
+            CVMetalTextureCacheFlush(cache, 0)
+        }
         // Nil out textures to ensure they are recreated
         self.bgraTexture = nil
         self.lumaTexture = nil
@@ -145,10 +164,11 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
     }
     
     // Renamed and modified to create both pipelines
-    private func setupRenderPipelines() {
-        guard let library = device.makeDefaultLibrary() else {
+    private func setupRenderPipelines() -> Bool {
+        guard let device = device,
+              let library = device.makeDefaultLibrary() else {
             logger.critical("Could not create Metal library")
-            fatalError("Could not create Metal library")
+            return false
         }
         
         // --- RGB Pipeline --- 
@@ -161,7 +181,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             rgbPipelineState = try device.makeRenderPipelineState(descriptor: rgbPipelineDescriptor)
         } catch {
             logger.critical("Failed to create RGB render pipeline state: \(error.localizedDescription)")
-            fatalError("Failed to create RGB render pipeline state: \(error.localizedDescription)")
+            return false
         }
         
         // --- YUV Pipeline --- 
@@ -174,8 +194,10 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             yuvPipelineState = try device.makeRenderPipelineState(descriptor: yuvPipelineDescriptor)
         } catch {
             logger.critical("Failed to create YUV render pipeline state: \(error.localizedDescription)")
-            fatalError("Failed to create YUV render pipeline state: \(error.localizedDescription)")
+            return false
         }
+        
+        return true
     }
     
     func updateTexture(with sampleBuffer: CMSampleBuffer) {
@@ -197,13 +219,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
             // Always flush the texture cache when the format changes
             if pixelFormat != self.currentPixelFormat {
-                CVMetalTextureCacheFlush(self.textureCache, 0)
+                if let cache = self.textureCache {
+                    CVMetalTextureCacheFlush(cache, 0)
+                }
                 self.currentPixelFormat = pixelFormat
             } else {
                 // Periodically flush cache even when format doesn't change (every 30 frames)
                 self.frameCounter += 1
                 if self.frameCounter >= 30 {
-                    CVMetalTextureCacheFlush(self.textureCache, 0)
+                    if let cache = self.textureCache {
+                        CVMetalTextureCacheFlush(cache, 0)
+                    }
                     self.frameCounter = 0
                 }
             }
@@ -223,11 +249,17 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             if pixelFormat == kCVPixelFormatType_32BGRA {
                 // Reset BT.709 flag for non-BT.709 formats
                 var isBT709Value = false
-                memcpy(self.isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
+                if let contents = self.isBT709Buffer?.contents() {
+                    memcpy(contents, &isBT709Value, MemoryLayout<Bool>.size)
+                }
                 
+                guard let textureCache = self.textureCache else {
+                    self.inFlightSemaphore.signal()
+                    return
+                }
                 var textureRef: CVMetalTexture?
                 let result = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .bgra8Unorm, width, height, 0, &textureRef
                 )
                 
@@ -240,12 +272,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             } else if pixelFormat == 2016686642 { // 'x422' Apple Log
                 // Reset BT.709 flag
                 var isBT709Value = false
-                memcpy(self.isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
+                if let contents = self.isBT709Buffer?.contents() {
+                    memcpy(contents, &isBT709Value, MemoryLayout<Bool>.size)
+                }
+                
+                guard let textureCache = self.textureCache else {
+                    self.inFlightSemaphore.signal()
+                    return
+                }
                 
                 // Create Luma texture
                 var lumaTextureRef: CVMetalTexture?
                 let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .r16Unorm,
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
@@ -256,7 +295,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 // Create Chroma texture
                 var chromaTextureRef: CVMetalTexture?
                 let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .rg16Unorm,
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
@@ -275,11 +314,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             } else if pixelFormat == 875704438 { // '420v' - BT.709 video range
                 // Set BT.709 flag for shader
                 var isBT709Value = true
-                memcpy(self.isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
+                if let contents = self.isBT709Buffer?.contents() {
+                    memcpy(contents, &isBT709Value, MemoryLayout<Bool>.size)
+                }
+                
+                guard let textureCache = self.textureCache else {
+                    self.inFlightSemaphore.signal()
+                    return
+                }
+                
                 // Create Luma (Y) texture (Plane 0)
                 var lumaTextureRef: CVMetalTexture?
                 let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .r8Unorm,
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
@@ -290,7 +337,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 // Create Chroma (CbCr) texture (Plane 1)
                 var chromaTextureRef: CVMetalTexture?
                 let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .rg8Unorm,
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
@@ -312,11 +359,19 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             } else if pixelFormat == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange { // '420v' format
                 // Reset BT.709 flag when not BT.709
                 var isBT709Value = false
-                memcpy(self.isBT709Buffer.contents(), &isBT709Value, MemoryLayout<Bool>.size)
+                if let contents = self.isBT709Buffer?.contents() {
+                    memcpy(contents, &isBT709Value, MemoryLayout<Bool>.size)
+                }
+                
+                guard let textureCache = self.textureCache else {
+                    self.inFlightSemaphore.signal()
+                    return
+                }
+                
                 // Create Luma (Y) texture (Plane 0)
                 var lumaTextureRef: CVMetalTexture?
                 let lumaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .r8Unorm, // Use 8-bit single channel for luma
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
@@ -327,7 +382,7 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
                 // Create Chroma (CbCr) texture (Plane 1)
                 var chromaTextureRef: CVMetalTexture?
                 let chromaResult = CVMetalTextureCacheCreateTextureFromImage(
-                    kCFAllocatorDefault, self.textureCache, pixelBuffer, nil,
+                    kCFAllocatorDefault, textureCache, pixelBuffer, nil,
                     .rg8Unorm, // Use 8-bit 2-channel for chroma
                     CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
                     CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
@@ -398,7 +453,8 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         }
         
         // Get command buffer from the command queue
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+        guard let commandQueue = commandQueue,
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
             logger.error("Failed to create command buffer")
             return
         }
@@ -411,7 +467,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         
         // Set the render pipeline state based on texture format
         if let bgraTexture = self.bgraTexture {
-            renderEncoder.setRenderPipelineState(rgbPipelineState)
+            guard let rgbPipeline = rgbPipelineState else { 
+                renderEncoder.endEncoding()
+                commandBuffer.commit()
+                return
+            }
+            renderEncoder.setRenderPipelineState(rgbPipeline)
             renderEncoder.setFragmentTexture(bgraTexture, index: 0)
             if let lutTexture = lutManager.currentLUTTexture {
                 // Only log if the texture actually changed
@@ -430,7 +491,12 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
             }
             renderEncoder.setFragmentBuffer(isLUTActiveBuffer, offset: 0, index: 0)
         } else if let lumaTexture = self.lumaTexture, let chromaTexture = self.chromaTexture {
-            renderEncoder.setRenderPipelineState(yuvPipelineState)
+            guard let yuvPipeline = yuvPipelineState else {
+                renderEncoder.endEncoding()
+                commandBuffer.commit()
+                return
+            }
+            renderEncoder.setRenderPipelineState(yuvPipeline)
             renderEncoder.setFragmentTexture(lumaTexture, index: 0)
             renderEncoder.setFragmentTexture(chromaTexture, index: 1)
             if let lutTexture = lutManager.currentLUTTexture {
@@ -460,13 +526,13 @@ class MetalPreviewView: NSObject, MTKViewDelegate {
         renderEncoder.setVertexBuffer(rotationBuffer, offset: 0, index: 1)
         
         // Draw the quad
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        renderEncoder.drawPrimitives(type: MTLPrimitiveType.triangleStrip, vertexStart: 0, vertexCount: 4)
         
         // End encoding
         renderEncoder.endEncoding()
         
         // Add completion handler
-        commandBuffer.addCompletedHandler { [weak self] _ in
+        commandBuffer.addCompletedHandler { [weak self] (_: MTLCommandBuffer) in
             self?.needsNewFrame = true
         }
         

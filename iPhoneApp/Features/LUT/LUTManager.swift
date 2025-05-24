@@ -6,7 +6,7 @@ import Metal
 
 class LUTManager: ObservableObject {
     
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "LUTManager")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.spencerscamera", category: "LUTManager")
     private let device: MTLDevice
     
     @Published var currentLUTFilter: CIFilter?
