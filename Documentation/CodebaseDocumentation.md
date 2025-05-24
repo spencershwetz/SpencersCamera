@@ -169,7 +169,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
         *   (Orientation logic fully delegated: Relies on `DeviceOrientationViewModel` for physical orientation, `AppDelegate`/`OrientationFixView` for interface lock, `RotatingView` for UI element rotation, and `CameraDeviceService`/`RecordingService` for preview/file metadata respectively).
-        *   Handles the "Lock Exposure During Recording" setting: If enabled, it stores the previous exposure state before recording. If Shutter Priority is *not* active, it calls `ExposureService.setExposureLock(locked: true)`. If Shutter Priority *is* active, it calls `ExposureService.lockShutterPriorityExposureForRecording()` to initiate the SP-specific lock. On stop, it calls the corresponding unlock/restore methods (`ExposureService.unlockShutterPriorityExposureAfterRecording()` or standard restore logic). Logic is designed to prevent conflicts between the standard AE lock (`isExposureLocked` state) and the internal SP recording lock.
+        *   Handles the "Lock Exposure During Recording" setting: If enabled, it calls `ExposureService.lockExposureForRecording()` which uses the state machine to enter `recordingLocked` state, preserving the current exposure state. On stop, it calls `ExposureService.unlockExposureAfterRecording()` which restores the previous state. The state machine handles all modes (auto, manual, SP) uniformly.
         *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
         *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
         *   **New (2025-05-02):** Implements debounced and atomic shutter priority re-application after lens switches, with device readiness checks and ISO caching for SP mode to prevent exposure jumps and race conditions.
@@ -187,7 +187,7 @@ This document provides a detailed overview of key classes, components, and their
         *   Manages `FlashlightManager` state based on recording and settings.
         *   Handles Watch Connectivity communication (sending state, receiving commands).
         *   (Orientation logic fully delegated: Relies on `DeviceOrientationViewModel` for physical orientation, `AppDelegate`/`OrientationFixView` for interface lock, `RotatingView` for UI element rotation, and `CameraDeviceService`/`RecordingService` for preview/file metadata respectively).
-        *   Handles the "Lock Exposure During Recording" setting: If enabled, it stores the previous exposure state before recording. If Shutter Priority is *not* active, it calls `ExposureService.setExposureLock(locked: true)`. If Shutter Priority *is* active, it calls `ExposureService.lockShutterPriorityExposureForRecording()` to initiate the SP-specific lock. On stop, it calls the corresponding unlock/restore methods (`ExposureService.unlockShutterPriorityExposureAfterRecording()` or standard restore logic). Logic is designed to prevent conflicts between the standard AE lock (`isExposureLocked` state) and the internal SP recording lock.
+        *   Handles the "Lock Exposure During Recording" setting: If enabled, it calls `ExposureService.lockExposureForRecording()` which uses the state machine to enter `recordingLocked` state, preserving the current exposure state. On stop, it calls `ExposureService.unlockExposureAfterRecording()` which restores the previous state. The state machine handles all modes (auto, manual, SP) uniformly.
         *   Handles `toggleShutterPriority()`: Calculates the 180° target duration and calls `ExposureService.enable/disableShutterPriority()`. Ensures the standard AE lock UI (`isExposureLocked`) is disabled when SP is enabled.
         *   Handles `toggleExposureLock()`: Toggles the standard AE lock *only* if Shutter Priority is not active.
         *   **New (2025-05-02):** Implements debounced and atomic shutter priority re-application after lens switches, with device readiness checks and ISO caching for SP mode to prevent exposure jumps and race conditions.
@@ -216,13 +216,26 @@ This document provides a detailed overview of key classes, components, and their
             *   **HDR Logic**: Correctly configures HDR based on whether Apple Log is requested *and* supported by the selected format. For Apple Log, it disables `automaticallyAdjustsVideoHDREnabled` and manually sets `isVideoHDREnabled = true`. For non-Log modes, it ensures `automaticallyAdjustsVideoHDREnabled = true` and *avoids* manually setting `isVideoHDREnabled` to prevent crashes.
             *   **Memory Management**: Implements resource cleanup during lens transitions by releasing Metal textures and flushing texture caches. Uses autoreleasepool blocks for high-memory operations. Posts notifications to coordinate memory cleanup with other components. Properly manages device input/output connections to prevent resource leaks.
         *   `VideoFormatService`: Finds and applies `AVCaptureDevice.Format` based on resolution, FPS, and Apple Log requirement (`findBestFormat`). Updates frame rate durations (`updateFrameRate`). Configures device for Apple Log or resets it (`configureAppleLog`, `resetAppleLog`). Reapplies color space based on `isAppleLogEnabled` state (`reapplyColorSpaceSettings`).
-        *   `ExposureService`: Holds a reference to the current `AVCaptureDevice`. Initializes its internal `isAutoExposureEnabled` state based on the device's state when `setDevice` is called, attempting to set `.continuousAutoExposure` if supported. Uses KVO to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` properties on the `AVCaptureDevice` to report real-time value changes to the delegate, ensuring UI reflects actual camera state. Provides methods to update white balance (`updateWhiteBalance`), ISO (`updateISO`), shutter speed (`updateShutterSpeed`), shutter angle (`updateShutterAngle`), tint (`updateTint`), and exposure lock (`setExposureLock`).
+        *   `ExposureService`: Manages exposure control using a state machine pattern. Holds a reference to the current `AVCaptureDevice`. Uses KVO to monitor `iso`, `exposureDuration`, `deviceWhiteBalanceGains`, and `exposureTargetOffset` properties on the `AVCaptureDevice` to report real-time value changes to the delegate.
+            *   **State Machine (2025-05)**:
+                *   Uses `ExposureStateMachine` to manage all exposure states and transitions
+                *   States: `auto`, `manual(iso, duration)`, `shutterPriority(targetDuration, manualISO)`, `locked(iso, duration)`, `recordingLocked(previousState)`
+                *   Thread-safe with dedicated `stateQueue` and `exposureAdjustmentQueue`
+                *   Handles all exposure mode transitions through state machine events
+            *   **Exposure Methods**:
+                *   `updateWhiteBalance()`, `updateISO()`, `updateShutterSpeed()`: Apply manual exposure settings
+                *   `setExposureLock()`: Toggles exposure lock via state machine
+                *   `lockExposureForRecording()`/`unlockExposureAfterRecording()`: Manages recording lock state
             *   **Shutter Priority**:
-                *   `enableShutterPriority(duration:)`: Sets mode to `.custom` with fixed `duration` and current ISO. Activates KVO on `exposureTargetOffset`.
-                *   `disableShutterPriority()`: Deactivates SP state and reverts exposure mode to `.continuousAutoExposure`.
-                *   `handleExposureTargetOffsetUpdate(change:)`: KVO handler. If SP is active and not temporarily locked (`isTemporarilyLockedForRecording`), calculates ideal ISO based on offset, clamps it, checks thresholds/rate limits, and applies the new ISO using `setExposureModeCustom(duration:iso:)`.
-                *   `lockShutterPriorityExposureForRecording()`: Sets exposure mode to `.custom` with the current SP duration and ISO, then sets `isTemporarilyLockedForRecording = true`
-            *   **New (2025-05-02):** All KVO and device property changes are now performed on a serial queue for thread safety. Supports initialISO parameter for SP mode to restore last ISO after lens switch.
+                *   `enableShutterPriority(duration:)`: Transitions to SP state with fixed shutter duration
+                *   `disableShutterPriority()`: Returns to auto exposure mode
+                *   Monitors `exposureTargetOffset` via KVO to adjust ISO automatically in SP mode
+                *   Supports manual ISO override in SP mode via state machine events
+            *   **Enhanced Features (2025-05)**:
+                *   Smooth ISO transitions with multi-step interpolation
+                *   Exposure stability monitoring with variance detection
+                *   Automatic error recovery with state restoration
+                *   Robust lens switch handling with state preservation
     *   **`DockKitIntegration` (`DockKitIntegration.swift`)**:
         *   Extension to `CameraViewModel` implementing `CameraCaptureDelegate`.
         *   Handles DockKit-initiated camera actions:

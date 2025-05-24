@@ -6,6 +6,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Fixed: Exposure lock during recording now properly maintained when switching lenses:
+    *   Fixed issue where exposure would unlock when changing lenses during recording with auto-lock enabled
+    *   Updated exposure lock state check to include both manual and recording lock states
+    *   Removed interference from lens switching that was incorrectly calling setExposureLock(false)
+    *   Device exposure mode now actually locks during recording instead of just tracking state conceptually
+    *   Consolidated three different exposure lock behaviors into unified system
+
+*   Enhanced: Implemented exposure state machine for robust state management:
+    *   Created ExposureStateMachine with clear state transitions and validation
+    *   Replaced complex boolean flags (isManualISOInSP, recordingLocked) with unified state enum
+    *   Centralized all exposure state transition logic in state machine
+    *   Improved thread safety with dedicated state queue
+    *   Better separation of concerns between state tracking and device control
+    *   Eliminates race conditions and makes exposure behavior more predictable
+    *   Fixed color space changes when exiting settings view
+
+*   Enhanced: Improved Auto ISO behavior in Shutter Priority mode:
+    *   Auto button now properly toggles between auto ISO and manual ISO override in SP mode
+    *   When auto ISO is enabled in SP, camera adjusts ISO automatically while maintaining fixed shutter
+    *   When manual ISO is set in SP, it overrides the auto adjustment
+    *   Eliminated delay when switching from manual to auto ISO - instant adjustment without gradual transition
+    *   Prevents ISO value reports during initial SP setup to avoid UI flicker
+    *   Fixed state machine to handle clearManualISOOverride event as no-op when not in SP mode
+
+*   UI: Improved ISO wheel scale and behavior:
+    *   Changed ISO wheel so large tick marks appear at 100 ISO increments (100, 200, 300, etc.)
+    *   Small tick marks now represent 10 ISO increments
+    *   Values displayed in whole ISO units on labels
+    *   Auto ISO button now properly toggles between auto and manual modes
+    *   ISO wheel and Auto button now match EV bias scale/button in appearance and behavior
+
 *   Enhanced: Added haptic feedback to all adjustment controls:
     *   Added tactile feedback to all lens selection buttons (0.5×, 1×, 2×, 5×)
     *   Added haptic feedback to base menu buttons (Lens, Shutter, ISO, WB)
