@@ -2155,7 +2155,6 @@ extension CameraViewModel: ExposureServiceDelegate {
                 self.logger.debug("KVO ISO update ignored due to manual ISO override: \(isoFromDevice)")
                 return
             }
-            self.logger.debug("KVO ISO update applied: \(isoFromDevice)")
             self.iso = isoFromDevice
         }
     }
@@ -2202,7 +2201,7 @@ extension CameraViewModel: RecordingServiceDelegate {
 
 extension CameraViewModel: CameraDeviceServiceDelegate {
     var isExposureCurrentlyLocked: Bool {
-        return self.isExposureLocked
+        return self.isExposureLocked || (self.isRecording && self.settingsModel.isExposureLockEnabledDuringRecording)
     }
     
     var isVideoStabilizationCurrentlyEnabled: Bool {

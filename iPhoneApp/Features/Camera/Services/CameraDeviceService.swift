@@ -372,11 +372,9 @@ class CameraDeviceService {
                 if self.delegate?.isExposureCurrentlyLocked == true {
                     self.logger.info("🔄 Lens switch (Delayed): Exposure lock is active, re-applying lock via ExposureService...")
                     self.exposureService.setExposureLock(locked: true)
-                } else {
-                    self.logger.info("🔄 Lens switch (Delayed): Exposure lock is not active, ensuring device is in auto/custom mode.")
-                    // Explicitly ensure it's NOT locked if the delegate says it shouldn't be
-                    self.exposureService.setExposureLock(locked: false)
                 }
+                // Note: We don't call setExposureLock(locked: false) anymore as it can interfere
+                // with recording locks. The exposure service maintains its own state properly.
             }
             
             // Notify delegate *after* orientation is set and digital zoom (if any) is applied

@@ -162,10 +162,13 @@ class ExposureService: NSObject {
                     }
                     
                 case .recordingLocked(let previousState):
-                    // Don't change the device exposure mode at all
-                    // The "lock" is conceptual - we're just preventing changes
-                    // This avoids interfering with color space or other settings
-                    logger.debug("Recording lock applied, maintaining current device state")
+                    // Lock the device's exposure mode to prevent changes during recording
+                    if device.isExposureModeSupported(.locked) {
+                        device.exposureMode = .locked
+                        logger.debug("Recording lock applied, device exposure mode set to .locked")
+                    } else {
+                        logger.warning("Device does not support locked exposure mode during recording")
+                    }
                 }
                 
                 device.unlockForConfiguration()
@@ -241,7 +244,6 @@ class ExposureService: NSObject {
                 break
             }
             
-            self.logger.debug("KVO ISO update applied: \(newISO)")
             DispatchQueue.main.async {
                 self.delegate?.didUpdateISO(newISO)
             }
