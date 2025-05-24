@@ -134,7 +134,6 @@ class ExposureUIViewModel: ObservableObject {
     /// Updates ISO value through the camera
     func updateISO(_ iso: Float) {
         let clampedISO = min(max(iso, minISO), maxISO)
-        logger.debug("ExposureUIViewModel.updateISO: \(clampedISO), mode: \(currentExposureMode)")
         
         // Handle auto exposure toggle and SP mode logic
         if cameraViewModel?.isAutoExposureEnabled == true {
