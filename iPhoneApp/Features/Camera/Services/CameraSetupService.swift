@@ -84,12 +84,8 @@ class CameraSetupService {
                 logger.error("Failed to add video input to session")
             }
             
-            if let audioDevice = AVCaptureDevice.default(for: .audio),
-               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
-               session.canAddInput(audioInput) {
-                session.addInput(audioInput)
-                logger.info("Added audio input to session")
-            }
+            // Check microphone permissions and add audio input if available
+            checkAndSetupAudioInput()
             
             delegate?.didInitializeCamera(device: videoDevice)
             
@@ -117,6 +113,71 @@ class CameraSetupService {
         
         // Request camera permissions if needed
         checkCameraPermissionsAndStart()
+    }
+    
+    private func checkAndSetupAudioInput() {
+        let audioAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        
+        // Update the view model with current audio permission status
+        DispatchQueue.main.async { [weak self] in
+            self?.viewModelDelegate?.audioPermissionStatus = audioAuthorizationStatus
+        }
+        
+        switch audioAuthorizationStatus {
+        case .authorized:
+            // Try to add audio input
+            if let audioDevice = AVCaptureDevice.default(for: .audio),
+               let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+               session.canAddInput(audioInput) {
+                session.addInput(audioInput)
+                logger.info("Added audio input to session")
+                DispatchQueue.main.async { [weak self] in
+                    self?.viewModelDelegate?.isAudioAvailable = true
+                }
+            } else {
+                logger.warning("Could not add audio input despite authorization")
+                DispatchQueue.main.async { [weak self] in
+                    self?.viewModelDelegate?.isAudioAvailable = false
+                }
+            }
+            
+        case .notDetermined:
+            logger.info("Microphone permission not determined, requesting access...")
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+                guard let self = self else { return }
+                
+                DispatchQueue.main.async {
+                    self.viewModelDelegate?.audioPermissionStatus = granted ? .authorized : .denied
+                    self.viewModelDelegate?.isAudioAvailable = granted
+                }
+                
+                if granted {
+                    // Try to add audio input after permission granted
+                    self.session.beginConfiguration()
+                    if let audioDevice = AVCaptureDevice.default(for: .audio),
+                       let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+                       self.session.canAddInput(audioInput) {
+                        self.session.addInput(audioInput)
+                        self.logger.info("Added audio input after permission granted")
+                    }
+                    self.session.commitConfiguration()
+                } else {
+                    self.logger.info("Microphone access denied by user - will record video only")
+                }
+            }
+            
+        case .denied, .restricted:
+            logger.info("Microphone access denied or restricted - will record video only")
+            DispatchQueue.main.async { [weak self] in
+                self?.viewModelDelegate?.isAudioAvailable = false
+            }
+            
+        @unknown default:
+            logger.warning("Unknown microphone authorization status")
+            DispatchQueue.main.async { [weak self] in
+                self?.viewModelDelegate?.isAudioAvailable = false
+            }
+        }
     }
     
     private func checkCameraPermissionsAndStart() {

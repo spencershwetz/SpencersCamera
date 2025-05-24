@@ -78,6 +78,15 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Add thumbnail property
     @Published var lastRecordedVideoThumbnail: UIImage?
     
+    // Audio availability
+    @Published var isAudioAvailable: Bool = true {
+        didSet {
+            recordingService?.setAudioAvailable(self.isAudioAvailable)
+            logger.info("Audio availability changed to: \(self.isAudioAvailable)")
+        }
+    }
+    @Published var audioPermissionStatus: AVAuthorizationStatus = .notDetermined
+    
     // Exposure Lock
     @Published var isExposureLocked: Bool = false {
         didSet {
@@ -807,6 +816,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         
         // Explicitly set the Bake-in LUT state *before* starting recording
         recordingService?.setBakeInLUTEnabled(self.settingsModel.isBakeInLUTEnabled)
+        
+        // Ensure audio availability is up-to-date
+        recordingService?.setAudioAvailable(isAudioAvailable)
         
         // Begin location updates for GPS tagging
         locationService.startUpdating()

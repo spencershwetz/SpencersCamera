@@ -233,6 +233,27 @@ struct CameraView: View {
                 .frame(maxWidth: .infinity)
                 .opacity(viewModel.isRecording ? 1 : 0)
                 .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)
+            
+            // Audio status indicator
+            if viewModel.isRecording && !viewModel.isAudioAvailable {
+                VStack {
+                    HStack {
+                        Image(systemName: "mic.slash.fill")
+                            .foregroundColor(.red)
+                        Text("NO AUDIO")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(8)
+                    .padding(.top, geometry.safeAreaInsets.top + 50)
+                    Spacer()
+                }
+                .padding(.top, 20)
+            }
         }
         .overlay(
             focusSquare

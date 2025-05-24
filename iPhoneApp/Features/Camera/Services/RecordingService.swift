@@ -30,6 +30,7 @@ class RecordingService: NSObject {
     private var metalFrameProcessor: MetalFrameProcessor?
     private var isAppleLogEnabled = false
     private var isBakeInLUTEnabled = false // Default bake-in to false
+    private var isAudioAvailable = false // Track if audio is available for recording
     
     // Recording properties
     private var assetWriter: AVAssetWriter?
@@ -65,9 +66,8 @@ class RecordingService: NSObject {
             autoreleaseFrequency: .workItem
         )
         super.init()
-        // Only setup audio output now
-        setupAudioDataOutput()
-        logger.info("REC_PERF: RecordingService initialized with audio output configured.")
+        // Audio output setup will be called later if audio is available
+        logger.info("REC_PERF: RecordingService initialized.")
     }
     
     func setDevice(_ device: AVCaptureDevice) {
@@ -99,22 +99,31 @@ class RecordingService: NSObject {
         self.selectedCodec = codec
     }
     
+    func setAudioAvailable(_ available: Bool) {
+        self.isAudioAvailable = available
+        logger.info("Audio availability set to: \(available)")
+    }
+    
     func setupAudioDataOutput() {
-        // --- AUDIO OUTPUT DISABLED FOR HAPTIC TEST ---
-        /*
+        guard isAudioAvailable else {
+            logger.info("Audio not available, skipping audio output setup")
+            return
+        }
+        
         guard audioDataOutput == nil else {
             logger.info("Audio data output already configured.")
             return
         }
+        
         audioDataOutput = AVCaptureAudioDataOutput()
         audioDataOutput?.setSampleBufferDelegate(self, queue: processingQueue)
+        
         if session.canAddOutput(audioDataOutput!) {
             session.addOutput(audioDataOutput!)
             logger.info("Added audio data output to session")
         } else {
             logger.error("Failed to add audio data output to session")
         }
-        */
     }
     
     func startRecording(orientation: CGFloat) async {
@@ -275,21 +284,33 @@ class RecordingService: NSObject {
             
             logger.info("Created asset writer input with settings: \(videoSettings)")
             
-            // Configure audio settings
-            /*
-            let audioSettings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-                AVLinearPCMIsNonInterleaved: false
-            ]
-            // Create audio input
-            let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-            audioInput.expectsMediaDataInRealTime = true
-            */
+            // Configure audio settings if audio is available
+            if isAudioAvailable {
+                let audioSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: 48000,
+                    AVNumberOfChannelsKey: 2,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                    AVLinearPCMIsNonInterleaved: false
+                ]
+                // Create audio input
+                let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                audioInput.expectsMediaDataInRealTime = true
+                
+                // Add audio input to writer
+                if assetWriter!.canAdd(audioInput) {
+                    assetWriter!.add(audioInput)
+                    logger.info("Added audio input to asset writer")
+                } else {
+                    let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding audio input"])
+                    logger.error("Could not add audio input to asset writer: \(error.localizedDescription)")
+                    // Continue without audio instead of failing
+                }
+            } else {
+                logger.info("Recording video only - audio not available")
+            }
             
             // Create pixel buffer adaptor with appropriate format
             let sourcePixelBufferAttributes: [String: Any] = [
@@ -315,23 +336,12 @@ class RecordingService: NSObject {
                 delegate?.didEncounterError(.custom(message: "Failed to add video input: \(error.localizedDescription)"))
                 return
             }
-            // --- AUDIO INPUT DISABLED FOR HAPTIC TEST ---
-            /*
-            if assetWriter!.canAdd(audioInput) {
-                assetWriter!.add(audioInput)
-            } else {
-                let error = assetWriter!.error ?? NSError(domain: "RecordingService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unknown error adding audio input"]) // Capture or create error
-                logger.error("Could not add audio input to asset writer: \(error.localizedDescription)")
-                assetWriter = nil
-                delegate?.didEncounterError(.custom(message: "Failed to add audio input: \(error.localizedDescription)"))
-                return
-            }
-            */
             
             // Ensure video and audio outputs are configured
-            // REMOVED: setupVideoDataOutput()
-            // REMOVED: setupAudioDataOutput()
-            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After setup outputs (skipped, done in init)") // LOG TIME
+            // Video output is set up in CameraViewModel
+            // Setup audio output only if available
+            setupAudioDataOutput()
+            logger.info("REC_PERF: startRecording [\(String(format: "%.3f", Date.nowTimestamp() - startTime))s] After setup outputs") // LOG TIME
             
             // Start writing
             recordingStartTime = CMTime(seconds: CACurrentMediaTime(), preferredTimescale: 1000000)

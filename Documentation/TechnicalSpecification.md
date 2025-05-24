@@ -64,7 +64,12 @@ This document outlines the technical specifications and requirements for the Spe
 *   **Video Recording**: 
     *   Handled by `RecordingService` using `AVAssetWriter`.
     *   Video Input (`AVAssetWriterInput`): Configured with dimensions from active format, codec type (`.hevc` or `.proRes422HQ`), and compression properties (bitrate, keyframe interval, profile level, color primaries based on `isAppleLogEnabled`).
-    *   Audio Input (`AVAssetWriterInput`): Configured for Linear PCM (48kHz, 16-bit stereo).
+    *   Audio Input (`AVAssetWriterInput`): Configured for Linear PCM (48kHz, 16-bit stereo) when microphone is available. Audio recording is conditional based on microphone permissions:
+        *   `CameraSetupService` checks `AVCaptureDevice.authorizationStatus(for: .audio)` on startup
+        *   If permission is `.notDetermined`, requests access via `AVCaptureDevice.requestAccess(for: .audio)`
+        *   If permission is `.denied` or `.restricted`, or if audio device is unavailable, recording proceeds as video-only
+        *   `CameraViewModel` tracks audio availability via `isAudioAvailable` and `audioPermissionStatus` properties
+        *   UI displays "NO AUDIO" indicator when recording without audio
     *   Orientation: `CGAffineTransform` is applied to the video input based on device/interface orientation at the start of recording to ensure correct playback rotation.
     *   Pixel Processing: Video frames (`CMSampleBuffer`) are received via delegate (`AVCaptureVideoDataOutputSampleBufferDelegate`). If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), the `CVPixelBuffer` is passed to `MetalFrameProcessor.processPixelBuffer` before being appended to the `AVAssetWriterInputPixelBufferAdaptor`. (Note: Default bake-in state is off).
     *   Saving: Finished `.mov` file saved to `PHPhotoLibrary` using `PHPhotoLibrary.shared().performChanges`.

@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Added: Video-only recording when microphone is unavailable (Issue #1):
+    *   App now checks microphone permissions on startup
+    *   Recording continues with video-only when microphone access is denied or unavailable
+    *   Added "NO AUDIO" indicator in the UI when recording without audio
+    *   Graceful handling of audio permission requests and failures
+    *   Prevents app crashes when microphone is not available
+
 *   Fixed: ISO scale now properly adapts to different lens capabilities (Issue #9):
     *   ISO wheel min/max values now update when switching lenses to match each lens's supported ISO range
     *   Added `didSwitchToDevice` delegate method to `CameraDeviceService` to notify of lens changes
