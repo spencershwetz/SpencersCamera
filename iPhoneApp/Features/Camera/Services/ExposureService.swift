@@ -161,10 +161,11 @@ class ExposureService: NSObject {
                         device.exposureMode = .locked
                     }
                     
-                case .recordingLocked:
-                    if device.isExposureModeSupported(.locked) {
-                        device.exposureMode = .locked
-                    }
+                case .recordingLocked(let previousState):
+                    // Don't change the device exposure mode at all
+                    // The "lock" is conceptual - we're just preventing changes
+                    // This avoids interfering with color space or other settings
+                    logger.debug("Recording lock applied, maintaining current device state")
                 }
                 
                 device.unlockForConfiguration()
@@ -378,6 +379,12 @@ class ExposureService: NSObject {
             return 
         }
         
+        // Prevent changes while recording is locked
+        if case .recordingLocked = stateMachine.currentState {
+            logger.warning("Cannot update ISO while recording with exposure lock")
+            return
+        }
+        
         // Get the current device's supported ISO range
         let minISO = device.activeFormat.minISO
         let maxISO = device.activeFormat.maxISO
@@ -418,6 +425,12 @@ class ExposureService: NSObject {
     func updateShutterSpeed(_ speed: CMTime) {
         guard let device = device else {
             logger.error("No camera device available for shutter speed update")
+            return
+        }
+        
+        // Prevent changes while recording is locked
+        if case .recordingLocked = stateMachine.currentState {
+            logger.warning("Cannot update shutter speed while recording with exposure lock")
             return
         }
         
@@ -480,6 +493,12 @@ class ExposureService: NSObject {
     
     func setAutoExposureEnabled(_ enabled: Bool) {
         guard let device = device else { return }
+        
+        // Prevent changes while recording is locked
+        if case .recordingLocked = stateMachine.currentState {
+            logger.warning("Cannot change exposure mode while recording with exposure lock")
+            return
+        }
         
         // Check if we're in shutter priority mode
         if case .shutterPriority(_, let manualISO) = stateMachine.currentState {
@@ -751,6 +770,12 @@ class ExposureService: NSObject {
     func updateExposureTargetBias(_ bias: Float) {
         guard let device = device else {
             logger.error("[ExposureBias] No camera device available to set exposure bias")
+            return
+        }
+        
+        // Prevent changes while recording is locked
+        if case .recordingLocked = stateMachine.currentState {
+            logger.warning("[ExposureBias] Cannot change exposure bias while recording with exposure lock")
             return
         }
 

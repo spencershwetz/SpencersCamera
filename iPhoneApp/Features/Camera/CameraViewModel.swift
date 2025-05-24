@@ -1378,34 +1378,48 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     if let currentDevice = self.device {
                         self.logger.info("[SessionControl] Re-attaching ExposureService observers for device: \\(currentDevice.localizedName)")
                         self.exposureService.setDevice(currentDevice)
-                        // --- Ensure Apple Log (or selected color space) is re-applied after session start ---
-                        if self.isAppleLogEnabled && self.isAppleLogSupported {
-                            self.logger.info("[SessionControl] Re-applying Apple Log color space after session start...")
-                            Task {
-                                do {
-                                    try await self.videoFormatService.configureAppleLog()
-                                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
-                                    self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
-                                    // Reapply video stabilization setting after AppleLog reconfiguration - ensure this doesn't cause another full output rebuild if not needed
-                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
-                                } catch {
-                                    self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \\(error)")
+                        // Check if we actually need to reconfigure color space
+                        let activeFormat = currentDevice.activeFormat
+                            let currentColorSpace = currentDevice.activeColorSpace
+                            let isUsingAppleLog = currentColorSpace == .appleLog
+                            let needsReconfiguration = (self.isAppleLogEnabled && !isUsingAppleLog) || 
+                                                     (!self.isAppleLogEnabled && isUsingAppleLog)
+                            
+                            self.logger.info("[SessionControl] Color space check - Current: \(currentColorSpace.rawValue), Apple Log enabled: \(self.isAppleLogEnabled), Needs reconfig: \(needsReconfiguration)")
+                            
+                            if needsReconfiguration {
+                                self.logger.info("[SessionControl] Color space mismatch detected. Need to reconfigure.")
+                                if self.isAppleLogEnabled && self.isAppleLogSupported {
+                                    self.logger.info("[SessionControl] Re-applying Apple Log color space after session start...")
+                                    Task {
+                                        do {
+                                            try await self.videoFormatService.configureAppleLog()
+                                            try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                            self.logger.info("✅ [SessionControl] Successfully re-applied Apple Log color space after session start.")
+                                            // Reapply video stabilization setting after AppleLog reconfiguration
+                                            self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
+                                        } catch {
+                                            self.logger.error("❌ [SessionControl] Failed to re-apply Apple Log color space after session start: \\(error)")
+                                        }
+                                    }
+                                } else if !self.isAppleLogEnabled {
+                                    self.logger.info("[SessionControl] Re-applying Rec. 709 / P3 color space after session start...")
+                                    Task {
+                                        do {
+                                            try await self.videoFormatService.resetAppleLog()
+                                            try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
+                                            self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
+                                            self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
+                                        } catch {
+                                            self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \\(error)")
+                                        }
+                                    }
                                 }
+                            } else {
+                                self.logger.info("[SessionControl] Color space is already correct (\(currentColorSpace.rawValue)). No reconfiguration needed.")
+                                // Just update stabilization without full reconfiguration
+                                self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
                             }
-                        } else if !self.isAppleLogEnabled {
-                            self.logger.info("[SessionControl] Re-applying Rec. 709 / P3 color space after session start...")
-                            Task {
-                                do {
-                                    try await self.videoFormatService.resetAppleLog()
-                                    try await self.cameraDeviceService.reconfigureSessionForCurrentDevice()
-                                    self.logger.info("✅ [SessionControl] Successfully re-applied Rec. 709 / P3 color space after session start.")
-                                    self.updateVideoStabilizationMode(enabled: self.settingsModel.isVideoStabilizationEnabled, forceReconfigure: false)
-                                } catch {
-                                    self.logger.error("❌ [SessionControl] Failed to re-apply Rec. 709 / P3 color space after session start: \\(error)")
-                                }
-                            }
-                        }
-                        // --- END color space re-application ---
                     } else {
                         self.logger.warning("[SessionControl] Session started but device is nil. Cannot re-attach ExposureService observers.")
                     }
