@@ -194,6 +194,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             // Update settingsModel value
             settingsModel.selectedFrameRate = selectedFrameRate
             
+            // Update ExposureUIViewModel
+            exposureUI?.selectedFrameRate = selectedFrameRate
+            
             if isShutterPriorityEnabled {
                 logger.info("Frame rate changed to \(self.selectedFrameRate) while Shutter Priority is active. Re-applying 180° shutter.")
                 updateShutterAngle(180.0)
@@ -361,6 +364,9 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     internal var cameraDeviceService: CameraDeviceService!
     private var videoFormatService: VideoFormatService!
     
+    // UI ViewModels
+    @Published var exposureUI: ExposureUIViewModel!
+    
     @Published var lastLensSwitchTimestamp = Date()
     @Published var exposureBias: Float = 0.0
     private var lastExposureBias: Float = 0.0  // Store last EV bias value
@@ -390,16 +396,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     // Flag to prevent session/camera/color space reconfiguration during LUT removal
     private var isLUTBeingRemoved = false
 
-    enum ExposureMode: String, Codable, Equatable {
-        case auto
-        case manual
-        case shutterPriority
-        case locked
-    }
-
-    @Published var currentExposureMode: ExposureMode = .auto
-
-    @Published var isManualISOInSP: Bool = false
+    // ExposureMode moved to ExposureUIViewModel
+    // Legacy computed properties for backwards compatibility
+    var currentExposureMode: ExposureMode { exposureUI?.currentExposureMode ?? .auto }
+    var isManualISOInSP: Bool { exposureUI?.isManualISOInSP ?? false }
 
     // MARK: - Public Exposure Bias Setter
     func setExposureBias(_ bias: Float) {
@@ -551,6 +551,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             return self?.settingsModel.isVideoStabilizationEnabled ?? false
         }
         
+        // Initialize ExposureUIViewModel
+        exposureUI = ExposureUIViewModel(cameraViewModel: self)
+        exposureUI.selectedFrameRate = selectedFrameRate
+        
         // Initialize video format service early as it's needed by other services
         videoFormatService = VideoFormatService(session: session, delegate: self)
         
@@ -616,40 +620,25 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
     
     func updateISO(_ isoValue: Float) {
-        // If auto exposure is on, trying to set ISO manually should turn it off.
-        if self.isAutoExposureEnabled {
-            DispatchQueue.main.async { self.isAutoExposureEnabled = false }
-            logger.info("ISO updated manually, disabling isAutoExposureEnabled.")
-        }
-        // If in SP mode, mark manual ISO override if not already set
-        if currentExposureMode == .shutterPriority {
-            if !isManualISOInSP {
-                DispatchQueue.main.async { self.isManualISOInSP = true }
-                logger.info("Manual ISO override set in SP mode (updateISO).")
-                exposureService.setManualISOInSP(true)
-            } else {
-                logger.debug("Manual ISO override already active in SP mode.")
-            }
-        }
-        logger.debug("updateISO called with value: \(isoValue)")
-        exposureService.updateISO(isoValue, fromUser: true)
+        exposureUI?.updateISO(isoValue)
     }
     
     /// Resets manual ISO override in SP mode, returning to SP-calculated ISO
     func resetManualISOInSP() {
-        isManualISOInSP = false
-        logger.info("Manual ISO override reset in SP mode.")
-        exposureService.setManualISOInSP(false)
-        // Don't re-apply SP here - the state machine transition will handle it properly
-        // with the new logic that calculates ideal ISO immediately
+        exposureUI?.setManualISOInSP(false)
+    }
+    
+    /// Sets manual ISO override in SP mode
+    func setManualISOInSP(_ manual: Bool) {
+        exposureUI?.setManualISOInSP(manual)
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
-        exposureService.updateShutterSpeed(speed)
+        exposureUI?.updateShutterSpeed(speed)
     }
     
     func updateShutterAngle(_ angle: Double) {
-        exposureService.updateShutterAngle(angle, frameRate: selectedFrameRate)
+        exposureUI?.updateShutterAngle(angle)
     }
     
     func updateFrameRate(_ fps: Double) {
@@ -665,7 +654,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         // Cast the incoming Double to Float before clamping and setting
         let floatValue = Float(newValue)
         currentTint = floatValue.clamped(to: tintRange)
-        exposureService.updateTint(currentTint, currentWhiteBalance: whiteBalance)
+        exposureUI?.updateTint(currentTint)
     }
     
     func switchToLens(_ lens: CameraLens) {
@@ -1966,26 +1955,19 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
     }
 
     func setAutoExposureEnabled(_ enabled: Bool) {
-        // Only update if the state actually changes
-        guard isAutoExposureEnabled != enabled else { return }
-        isAutoExposureEnabled = enabled
-        currentExposureMode = enabled ? .auto : .manual
         exposureService.setAutoExposureEnabled(enabled)
     }
 
     func enableShutterPriority(duration: CMTime, initialISO: Float? = nil) {
         exposureService.enableShutterPriority(duration: duration, initialISO: initialISO)
-        currentExposureMode = .shutterPriority
     }
 
     func disableShutterPriority() {
         exposureService.disableShutterPriority()
-        currentExposureMode = .auto
     }
 
     func setExposureLock(locked: Bool) {
         exposureService.setExposureLock(locked: locked)
-        currentExposureMode = locked ? .locked : (isAutoExposureEnabled ? .auto : .manual)
     }
 
     private struct ExposureState {
@@ -2020,7 +2002,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         case .auto:
             exposureService.setAutoExposureEnabled(true)
         }
-        currentExposureMode = state.mode
+        exposureUI?.updateExposureMode(state.mode)
     }
 }
 
@@ -2059,6 +2041,17 @@ extension CameraViewModel: CameraSetupServiceDelegate {
     func didInitializeCamera(device: AVCaptureDevice) {
         self.device = device
         logger.info("[CameraViewModel] Camera initialized with device: \(device.localizedName)")
+        
+        // Update ExposureUIViewModel with device limits
+        exposureUI?.updateDeviceLimits(
+            minISO: device.activeFormat.minISO,
+            maxISO: device.activeFormat.maxISO,
+            minBias: device.minExposureTargetBias,
+            maxBias: device.maxExposureTargetBias
+        )
+        
+        // Sync exposure mode from service
+        exposureUI?.syncExposureMode()
         
         // Set Apple Log support flag based on device capabilities
         self.isAppleLogSupported = device.formats.contains { format in
@@ -2123,6 +2116,9 @@ extension CameraViewModel: ExposureServiceDelegate {
         DispatchQueue.main.async {
             self.logger.debug("didUpdateWhiteBalance: Device Temp=\(temperatureFromDevice), Tint=\(tint). AutoWB=\(self.isWhiteBalanceAuto)")
 
+            // Update ExposureUIViewModel
+            self.exposureUI?.updateCurrentWhiteBalance(temperature: temperatureFromDevice, tint: tint)
+
             // Always update tint as it's coupled and not directly set by a separate picker here
             if abs(self.currentTint - tint) > 0.01 { // Only update if meaningfully different
                  self.currentTint = tint
@@ -2150,6 +2146,9 @@ extension CameraViewModel: ExposureServiceDelegate {
     
     func didUpdateISO(_ isoFromDevice: Float) {
         DispatchQueue.main.async {
+            // Update ExposureUIViewModel
+            self.exposureUI?.updateCurrentISO(isoFromDevice)
+            
             // Block ISO updates from KVO if manual ISO override is active
             if self.isManualISOInSP {
                 self.logger.debug("KVO ISO update ignored due to manual ISO override: \(isoFromDevice)")
@@ -2161,12 +2160,16 @@ extension CameraViewModel: ExposureServiceDelegate {
     
     func didUpdateShutterSpeed(_ speed: CMTime) {
         DispatchQueue.main.async {
+            // Update ExposureUIViewModel
+            self.exposureUI?.updateCurrentShutterSpeed(speed)
             self.shutterSpeed = speed
         }
     }
     
     func didUpdateExposureTargetBias(_ bias: Float) {
         DispatchQueue.main.async {
+            // Update ExposureUIViewModel
+            self.exposureUI?.updateCurrentExposureBias(bias)
             self.exposureBias = bias
         }
     }

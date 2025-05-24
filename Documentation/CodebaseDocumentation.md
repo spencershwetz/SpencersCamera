@@ -59,6 +59,18 @@ This document provides a detailed overview of key classes, components, and their
     - Left-to-right swipe (from left edge toward right): hides the EV slider.
 - This gesture is handled in `CameraView.swift` and animates the slider in/out without interfering with other camera controls.
 
+### Architecture Refactoring (2025-05-23)
+- **ExposureUIViewModel Decoupling**: 
+    - Extracted exposure-specific UI logic from `CameraViewModel` into dedicated `ExposureUIViewModel`
+    - Reduces `CameraViewModel` complexity from 800+ lines with mixed responsibilities
+    - Creates clear boundaries between device control (services) and UI state (UI ViewModels)
+    - **Benefits**: Better testability, clearer code organization, easier maintenance
+    - **Files affected**: 
+        - `ExposureUIViewModel.swift`: New focused ViewModel for exposure UI state
+        - `Models/ExposureMode.swift`: Shared enum for exposure mode states
+        - `CameraViewModel.swift`: Reduced complexity, delegates exposure UI to ExposureUIViewModel
+        - Service layer remains unchanged, ensuring device control logic stays isolated
+
 ## iPhoneApp
 
 ### App (`iPhoneApp/App`)

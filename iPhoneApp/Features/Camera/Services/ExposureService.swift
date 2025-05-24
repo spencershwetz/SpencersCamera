@@ -1045,10 +1045,4 @@ class ExposureService: NSObject {
     }
 }
 
-// ExposureMode moved to match the one in CameraViewModel
-enum ExposureMode: String, Codable, Equatable {
-    case auto
-    case manual
-    case shutterPriority
-    case locked
-} 
+// ExposureMode moved to ExposureUIViewModel for UI state management 

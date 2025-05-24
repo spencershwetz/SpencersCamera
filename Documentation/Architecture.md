@@ -37,8 +37,12 @@ This document describes the high-level architecture and directory structure of t
 The application primarily follows the **MVVM (Model-View-ViewModel)** architecture pattern, particularly within the SwiftUI features (`CameraView`, `SettingsView`, `VideoLibraryView`, `Watch App/ContentView`).
 
 *   **Views (SwiftUI)**: Responsible for UI layout, presentation, and user interaction. They observe ViewModels for state changes and forward user actions to the ViewModel.
-*   **ViewModels (`ObservableObject`)**: Contain UI state (`@Published` properties) and business logic. They interact with Services to perform tasks (camera control, recording, data fetching) and expose processed data/state to the Views. Communication often involves Combine publishers and subscribers (e.g., `DeviceOrientationViewModel`, `WatchConnectivityService`, `CameraViewModel` reacting to service delegate calls or notifications).
-*   **Models (`Struct`, `Enum`)**: Represent data structures (e.g., `CameraLens`, `CameraError`, `VideoAsset`, `SettingsModel`). Value types are preferred.
+*   **ViewModels (`ObservableObject`)**: Contain UI state (`@Published` properties) and business logic. They interact with Services to perform tasks (camera control, recording, data fetching) and expose processed data/state to the Views. Communication often involves Combine publishers and subscribers.
+    *   **CameraViewModel**: Main orchestrator for camera functionality, delegates exposure UI logic to ExposureUIViewModel
+    *   **ExposureUIViewModel**: Focused ViewModel for exposure-specific UI state and controls (ISO, shutter speed, exposure modes, white balance)
+    *   **DeviceOrientationViewModel**: Handles device orientation changes
+    *   **WatchConnectivityService**: Manages Apple Watch communication
+*   **Models (`Struct`, `Enum`)**: Represent data structures (e.g., `CameraLens`, `CameraError`, `VideoAsset`, `SettingsModel`, `ExposureMode`). Value types are preferred.
 *   **Services**: Encapsulate specific functionalities, often interacting with system frameworks (AVFoundation, Metal, Photos, WatchConnectivity, DockKit). They communicate back to ViewModels typically via delegate protocols or Combine publishers.
     *   **Service Singletons** (not ObservableObjects):
         *   `HapticManager.shared`: Manages haptic feedback with UIKit generators and Core Haptics engine

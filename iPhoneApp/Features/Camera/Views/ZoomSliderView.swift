@@ -272,9 +272,8 @@ struct ZoomSliderView: View {
                 // Only set manual override if the value actually changes
                 if clamped != viewModel.iso {
                     if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
-                        viewModel.isManualISOInSP = true
+                        viewModel.setManualISOInSP(true)
                         viewModel.logger.info("Manual ISO override set in SP mode (isoBinding set).")
-                        viewModel.exposureService.setManualISOInSP(true)
                     }
                     viewModel.isAutoExposureEnabled = false
                 }
@@ -400,9 +399,8 @@ struct ISOMenuView: View {
                 let clamped = Float(rounded.clamped(to: CGFloat(viewModel.minISO)...CGFloat(viewModel.maxISO)))
                 if clamped != viewModel.iso {
                     if viewModel.currentExposureMode == .shutterPriority && !viewModel.isManualISOInSP {
-                        viewModel.isManualISOInSP = true
+                        viewModel.setManualISOInSP(true)
                         viewModel.logger.info("Manual ISO override set in SP mode (isoBinding set).")
-                        viewModel.exposureService.setManualISOInSP(true)
                     }
                     viewModel.isAutoExposureEnabled = false
                 }
