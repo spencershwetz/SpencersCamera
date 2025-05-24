@@ -40,6 +40,10 @@ The application primarily follows the **MVVM (Model-View-ViewModel)** architectu
 *   **ViewModels (`ObservableObject`)**: Contain UI state (`@Published` properties) and business logic. They interact with Services to perform tasks (camera control, recording, data fetching) and expose processed data/state to the Views. Communication often involves Combine publishers and subscribers (e.g., `DeviceOrientationViewModel`, `WatchConnectivityService`, `CameraViewModel` reacting to service delegate calls or notifications).
 *   **Models (`Struct`, `Enum`)**: Represent data structures (e.g., `CameraLens`, `CameraError`, `VideoAsset`, `SettingsModel`). Value types are preferred.
 *   **Services**: Encapsulate specific functionalities, often interacting with system frameworks (AVFoundation, Metal, Photos, WatchConnectivity, DockKit). They communicate back to ViewModels typically via delegate protocols or Combine publishers.
+    *   **Service Singletons** (not ObservableObjects):
+        *   `HapticManager.shared`: Manages haptic feedback with UIKit generators and Core Haptics engine
+        *   `LocationService.shared`: Provides GPS location for video tagging during recording
+        *   `FlashlightManager.shared`: Controls torch/flashlight for recording indicator
 *   **UI Components**: Reusable SwiftUI views like `SimpleWheelPicker` (handles its own state for smooth interaction, updates binding on scroll settle).
 *   **Adjustment Controls (2025-05-08)**:
         * Replaces legacy lens button row with `ZoomSliderView` redesign.
@@ -79,6 +83,8 @@ The project is organized into the following main components:
 │   │   │   ├── OrientationFixView.swift
 │   │   │   └── RotatingView.swift
 │   │   └── Services/      # Core services
+│   │       ├── HapticManager.swift         # Haptic feedback management
+│   │       └── LocationService.swift       # GPS location for video tagging
 │   ├── Features/
 │   │   ├── Camera/
 │   │   │   ├── DockKitIntegration.swift    # DockKit integration with CameraViewModel
@@ -87,11 +93,13 @@ The project is organized into the following main components:
 │   │   │   ├── Models/
 │   │   │   │   ├── CameraError.swift
 │   │   │   │   ├── CameraLens.swift
+│   │   │   │   ├── FunctionButtonAbility.swift  # Function button assignments
 │   │   │   │   └── ShutterAngle.swift
 │   │   │   ├── Services/
 │   │   │   │   ├── CameraDeviceService.swift
 │   │   │   │   ├── CameraSetupService.swift
 │   │   │   │   ├── ExposureService.swift
+│   │   │   │   ├── ExposureStateMachine.swift  # State machine for exposure control
 │   │   │   │   ├── RecordingService.swift
 │   │   │   │   ├── VideoFormatService.swift
 │   │   │   │   ├── VideoOutputDelegate.swift
@@ -146,8 +154,9 @@ The project is organized into the following main components:
     *   `CameraView` observes `CameraViewModel`. It uses `@StateObject` to manage an `AppLifecycleObserver` instance.
     *   `AppLifecycleObserver` manages the `UIApplication.didBecomeActiveNotification` observer lifecycle and publishes an event when the app becomes active.
     *   `CameraView` receives the event from `AppLifecycleObserver` and calls `startSession()` on the `CameraViewModel` to ensure the camera restarts when the app returns from the background.
-    *   User tap (push) on the preview sets the focus point only (push-to-focus). Exposure point is not set by user tap.
-    *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
+    *   User tap (push) on the preview sets the focus point only (push-to-focus). Long press locks focus. Exposure point is not set by user tap.
+    *   `CameraViewModel` orchestrates `CameraSetupService`, `CameraDeviceService`, `VideoFormatService`, `ExposureService`, `RecordingService`, `LocationService`, and `DockControlService`. It manages Shutter Priority state and coordinates exposure locking logic (standard AE vs. SP temporary lock) with `ExposureService` based on settings.
+    *   **GPS Tagging**: When recording starts, `LocationService.startUpdating()` is called to begin GPS location updates. When recording stops, `LocationService.stopUpdating()` is called. The location data is attached to the video file metadata.
     *   **Exposure State Machine (2025-05):**
         *   Exposure is managed by `ExposureStateMachine` which provides clear state transitions and validation
         *   States are defined in `ExposureState` enum: `auto`, `manual(iso, duration)`, `shutterPriority(targetDuration, manualISO)`, `locked(iso, duration)`, `recordingLocked(previousState)`

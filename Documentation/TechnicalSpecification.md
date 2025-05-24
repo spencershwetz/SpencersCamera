@@ -8,6 +8,10 @@ This document outlines the technical specifications and requirements for the Spe
 
 *   **Target Platform**: iOS & watchOS
 *   **Minimum iOS Version**: 18.0
+*   **Feature-Specific iOS Requirements**:
+    *   iOS 17.2+: Volume button recording control (AVCaptureEventInteraction)
+    *   iOS 18.0+: DockKit accessory support
+    *   iOS 16.0+: Certain UI features (availability checks in code)
 *   **Minimum watchOS Version**: 11.0 (Implied for iOS 18 compatibility)
 *   **Target Devices**: 
     *   iOS: iPhone models with Metal support and necessary camera hardware (Wide required, Ultra-Wide/Telephoto optional).
@@ -64,6 +68,7 @@ This document outlines the technical specifications and requirements for the Spe
     *   Orientation: `CGAffineTransform` is applied to the video input based on device/interface orientation at the start of recording to ensure correct playback rotation.
     *   Pixel Processing: Video frames (`CMSampleBuffer`) are received via delegate (`AVCaptureVideoDataOutputSampleBufferDelegate`). If LUT bake-in is enabled (`SettingsModel.isBakeInLUTEnabled`), the `CVPixelBuffer` is passed to `MetalFrameProcessor.processPixelBuffer` before being appended to the `AVAssetWriterInputPixelBufferAdaptor`. (Note: Default bake-in state is off).
     *   Saving: Finished `.mov` file saved to `PHPhotoLibrary` using `PHPhotoLibrary.shared().performChanges`.
+    *   GPS Tagging: `LocationService` provides location data during recording. Location metadata is embedded in the video file when available.
     *   Manages transitions between `.continuousAutoExposure` and `.custom` exposure modes via `setAutoExposureEnabled` and `updateExposureMode`. Ensures values (like ISO) are clamped within device limits when setting custom exposure.
     *   Communicates errors and manual value updates (ISO, WB, Shutter) back to the delegate (`CameraViewModel`). The initial auto mode state is primarily managed and verified by `CameraSetupService` after the session starts.
     *   Uses Key-Value Observing (KVO) on `iso`, `exposureDuration`, and `deviceWhiteBalanceGains` properties of the `AVCaptureDevice` to report real-time value changes to the delegate, ensuring the UI reflects the actual camera state even in automatic or locked modes.
@@ -103,6 +108,11 @@ This document outlines the technical specifications and requirements for the Spe
     *   Triple buffering managed via `DispatchSemaphore` in `MetalPreviewView`.
 *   **Recording Light**: 
     *   `FlashlightManager` uses `AVCaptureDevice.setTorchModeOn(level:)`.
+*   **Function Buttons**:
+    *   Two configurable function buttons in the UI
+    *   Abilities defined by `FunctionButtonAbility` enum: None, Lock Exposure, Shutter Priority
+    *   Settings persisted in `UserDefaults` via `SettingsModel`
+    *   `FunctionButtonsView` handles button display and action dispatch
     *   Intensity controlled via the `level` parameter (clamped 0.001-1.0).
     *   Startup sequence implemented with `Task.sleep` for timing.
 *   **Settings**: 

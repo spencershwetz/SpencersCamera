@@ -149,6 +149,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+*   Feature: Added GPS location tagging for videos:
+    *   LocationService automatically starts when recording begins
+    *   Requests location permissions when needed
+    *   Tags video files with geographic coordinates
+    *   Stops location updates when recording ends to save battery
+
+*   Feature: Added function button customization:
+    *   Function buttons can be assigned different abilities (None, Lock Exposure, Shutter Priority)
+    *   Settings are persisted in UserDefaults
+    *   Currently supports two function buttons with expandable architecture
+
 *   Feature: Added DockKit integration (iOS 18.0+) for accessory control and tracking:
     *   Added `DockControlService` actor for managing DockKit interactions.
     *   Added support for subject tracking, framing modes, and ROI.
