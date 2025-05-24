@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Fixed: ISO scale now properly adapts to different lens capabilities (Issue #9):
+    *   ISO wheel min/max values now update when switching lenses to match each lens's supported ISO range
+    *   Added `didSwitchToDevice` delegate method to `CameraDeviceService` to notify of lens changes
+    *   `CameraViewModel` now updates `ExposureUIViewModel` with new device limits when lenses are switched
+    *   Eliminates confusion where ISO wheel showed incorrect ranges for different lenses
+
 *   Performance: Optimized Exposure System for improved efficiency and responsiveness:
     *   Replaced simple throttling (100ms) with intelligent Combine-based debouncing
     *   Implemented batched UI updates with 33ms debouncing (~30fps maximum update frequency)

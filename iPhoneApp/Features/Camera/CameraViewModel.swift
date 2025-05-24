@@ -2255,6 +2255,19 @@ extension CameraViewModel: CameraDeviceServiceDelegate {
             self.error = error
         }
     }
+    
+    func didSwitchToDevice(_ device: AVCaptureDevice) {
+        self.device = device
+        logger.info("[CameraViewModel] Lens switched to device: \(device.localizedName)")
+        
+        // Update ExposureUIViewModel with new device limits (same as didInitializeCamera)
+        exposureUI?.updateDeviceLimits(
+            minISO: device.activeFormat.minISO,
+            maxISO: device.activeFormat.maxISO,
+            minBias: device.minExposureTargetBias,
+            maxBias: device.maxExposureTargetBias
+        )
+    }
 }
 
 // MARK: - WCSessionDelegate

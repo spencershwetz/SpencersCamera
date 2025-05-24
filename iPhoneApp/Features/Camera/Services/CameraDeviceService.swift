@@ -7,6 +7,7 @@ protocol CameraDeviceServiceDelegate: AnyObject {
     func didUpdateCurrentLens(_ lens: CameraLens)
     func didUpdateZoomFactor(_ factor: CGFloat)
     func didEncounterError(_ error: CameraError)
+    func didSwitchToDevice(_ device: AVCaptureDevice)
     var isExposureCurrentlyLocked: Bool { get }
     var isVideoStabilizationCurrentlyEnabled: Bool { get }
 }
@@ -413,6 +414,7 @@ class CameraDeviceService {
                 }
                 logger.debug("🔄 Lens switch: Notifying delegate about logical lens update: \(finalLens.rawValue)x, physical: \(lens.rawValue)x, final zoom: \(zoomFactor)")
                 self.delegate?.didUpdateCurrentLens(finalLens) // Notify with the logical lens
+                self.delegate?.didSwitchToDevice(newDevice) // Notify delegate about device switch for ISO limit updates
             }
             
             logger.info("✅ Successfully switched to \(lens.rawValue)× lens")
