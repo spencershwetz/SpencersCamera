@@ -105,9 +105,13 @@ class ExposureStateMachine {
             // Auto mode transitions
             case (.auto, .enableManual(let iso, let duration)):
                 if let device = device {
+                    #if !os(macOS)
                     let actualISO = iso ?? device.iso
                     let actualDuration = duration ?? device.exposureDuration
                     newState = .manual(iso: actualISO, duration: actualDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }
@@ -117,7 +121,11 @@ class ExposureStateMachine {
                 
             case (.auto, .lock):
                 if let device = device {
+                    #if !os(macOS)
                     newState = .locked(iso: device.iso, duration: device.exposureDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }
@@ -134,20 +142,28 @@ class ExposureStateMachine {
                 
             case (.manual, .enableManual(let iso, let duration)):
                 if let device = device {
+                    #if !os(macOS)
                     let actualISO = iso ?? device.iso
                     let actualDuration = duration ?? device.exposureDuration
                     newState = .manual(iso: actualISO, duration: actualDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }
                 
             // Shutter Priority mode transitions
-            case (.shutterPriority(let targetDuration, _), .enableAuto):
+            case (.shutterPriority(_, _), .enableAuto):
                 newState = .auto
                 
             case (.shutterPriority(let targetDuration, _), .enableManual(_, _)):
                 if let device = device {
+                    #if !os(macOS)
                     newState = .manual(iso: device.iso, duration: targetDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }
@@ -160,25 +176,44 @@ class ExposureStateMachine {
                 
             case (.shutterPriority(let targetDuration, let manualISO), .lock):
                 if let device = device {
+                    #if !os(macOS)
                     let lockISO = manualISO ?? device.iso
                     newState = .locked(iso: lockISO, duration: targetDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }
                 
             // Locked mode transitions
-            case (.locked, .unlock):
-                // Return to auto by default when unlocking
-                newState = .auto
+            case (.locked(let iso, let duration), .unlock):
+                // Intelligently restore to the appropriate mode based on device state
+                if let device = device {
+                    // If we were in a mode that uses custom exposure settings, restore to manual
+                    // Otherwise, restore to auto
+                    if device.exposureMode == .custom {
+                        newState = .manual(iso: iso, duration: duration)
+                    } else {
+                        newState = .auto
+                    }
+                } else {
+                    // Default to auto if no device info
+                    newState = .auto
+                }
                 
             case (.locked, .enableAuto):
                 newState = .auto
                 
             case (.locked, .enableManual(let iso, let duration)):
                 if let device = device {
+                    #if !os(macOS)
                     let actualISO = iso ?? device.iso
                     let actualDuration = duration ?? device.exposureDuration
                     newState = .manual(iso: actualISO, duration: actualDuration)
+                    #else
+                    newState = currentState
+                    #endif
                 } else {
                     newState = currentState
                 }

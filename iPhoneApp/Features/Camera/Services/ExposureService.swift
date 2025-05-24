@@ -688,28 +688,28 @@ class ExposureService: NSObject {
     }
     // --------------------------
 
-    // MARK: - Shutter Priority Recording Lock
+    // MARK: - Recording Lock
     
-    /// Locks exposure for recording when Shutter Priority is active
-    func lockShutterPriorityExposureForRecording() {
+    /// Locks exposure for recording, preserving the current state
+    func lockExposureForRecording() {
         guard let device = device else {
-            logger.error("No camera device available for SP recording lock")
+            logger.error("No camera device available for recording lock")
             return
         }
         
         _ = stateMachine.processEvent(.startRecording, device: device)
-        logger.info("🔒 Locked SP exposure for recording")
+        logger.info("🔒 Locked exposure for recording (state: \(String(describing: self.stateMachine.currentState)))")
     }
     
-    /// Unlocks exposure after recording when Shutter Priority is active
-    func unlockShutterPriorityExposureAfterRecording() {
+    /// Unlocks exposure after recording, restoring the previous state
+    func unlockExposureAfterRecording() {
         guard let device = device else {
-            logger.error("No camera device available for SP recording unlock")
+            logger.error("No camera device available for recording unlock")
             return
         }
         
         _ = stateMachine.processEvent(.stopRecording, device: device)
-        logger.info("🔓 Unlocked SP exposure after recording")
+        logger.info("🔓 Unlocked exposure after recording (restored state: \(String(describing: self.stateMachine.currentState)))")
     }
     
     // MARK: - Safe White Balance Conversion (NEW HELPER)
