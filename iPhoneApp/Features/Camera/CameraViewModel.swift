@@ -240,7 +240,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                     try await videoFormatService.updateCameraFormat(for: selectedResolution)
                 } catch {
                     print("Error updating camera format: \(error)")
-                    self.error = .configurationFailed
+                    self.error = .configurationFailed(message: nil)
                 }
             }
         }
@@ -646,7 +646,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
             try videoFormatService.updateFrameRate(fps)
         } catch {
             print("❌ Frame rate error: \(error)")
-            self.error = .configurationFailed
+            self.error = .configurationFailed(message: nil)
         }
     }
     
@@ -1449,6 +1449,29 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
                 self.isSessionRunning = false
                 self.logger.info("[SessionControl] Session stopped.")
             }
+        }
+    }
+    
+    /// Restart the camera session - useful for error recovery
+    func restartSession() {
+        logger.info("[SessionControl] Restarting camera session for error recovery")
+        
+        // Clear any existing errors
+        DispatchQueue.main.async {
+            self.error = nil
+        }
+        
+        // Stop session if running
+        if isSessionRunning {
+            stopSession()
+            
+            // Wait a bit before restarting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.startSession()
+            }
+        } else {
+            // Just start the session
+            startSession()
         }
     }
 

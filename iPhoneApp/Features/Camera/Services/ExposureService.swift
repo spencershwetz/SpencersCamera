@@ -59,6 +59,9 @@ enum ExposureServiceError: Error {
     case invalidState
     case transitionFailed
     case lockFailed
+    case circuitBreakerOpen
+    case retryExhausted
+    case custom(message: String)
     
     var userMessage: String {
         switch self {
@@ -66,6 +69,9 @@ enum ExposureServiceError: Error {
         case .invalidState: return "Invalid camera state"
         case .transitionFailed: return "Failed to change exposure settings"
         case .lockFailed: return "Failed to lock exposure"
+        case .circuitBreakerOpen: return "Too many errors. Please wait a moment and try again"
+        case .retryExhausted: return "Failed after multiple attempts"
+        case .custom(let message): return message
         }
     }
 }
@@ -81,6 +87,9 @@ class ExposureService: NSObject {
     
     // State machine for exposure management
     private let stateMachine = ExposureStateMachine()
+    
+    // Error recovery system
+    private let errorRecovery = ExposureErrorRecovery()
     
     // --- Shutter Priority State ---
     private var targetShutterDuration: CMTime?
@@ -151,16 +160,23 @@ class ExposureService: NSObject {
         exposureAdjustmentQueue.async { [weak self] in
             guard let self = self else { return }
             
-            do {
-                try device.lockForConfiguration()
-                
-                switch newState {
-                case .auto:
-                    if device.isExposureModeSupported(.continuousAutoExposure) {
-                        device.exposureMode = .continuousAutoExposure
-                    }
+            var retryCount = 0
+            let maxRetries = 3
+            var lastError: Error?
+            
+            while retryCount < maxRetries {
+                do {
+                    try device.lockForConfiguration()
                     
-                case .manual(let iso, let duration):
+                    switch newState {
+                    case .auto:
+                        if device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposureMode = .continuousAutoExposure
+                        } else {
+                            throw ExposureServiceError.invalidState
+                        }
+                        
+                    case .manual(let iso, let duration):
                     if device.isExposureModeSupported(.custom) {
                         device.exposureMode = .custom
                         // Clamp ISO to device limits before setting
@@ -231,9 +247,27 @@ class ExposureService: NSObject {
                 }
                 
                 device.unlockForConfiguration()
+                // Success - break out of retry loop
+                return
+                
             } catch {
-                self.logger.error("Failed to apply exposure state: \(error.localizedDescription)")
-                self.delegate?.didEncounterError(.configurationFailed)
+                lastError = error
+                device.unlockForConfiguration()
+                retryCount += 1
+                
+                self.logger.error("Failed to apply exposure state (attempt \(retryCount)/\(maxRetries)): \(error.localizedDescription)")
+                
+                if retryCount < maxRetries {
+                    // Wait before retry with exponential backoff
+                    let delay = Double(retryCount) * 0.1
+                    Thread.sleep(forTimeInterval: delay)
+                } else {
+                    // All retries exhausted
+                    self.delegate?.didEncounterError(.configurationFailed(message: "Failed to apply exposure state after \(maxRetries) attempts: \(error.localizedDescription)"))
+                    // Attempt recovery
+                    self.recoverFromFailedExposureOperation()
+                }
+            }
             }
         }
     }
@@ -483,6 +517,7 @@ class ExposureService: NSObject {
     func updateISO(_ iso: Float, fromUser: Bool = false) {
         guard let device = device else { 
             logger.error("No camera device available")
+            delegate?.didEncounterError(.deviceUnavailable)
             return 
         }
         
@@ -526,6 +561,32 @@ class ExposureService: NSObject {
         case .locked, .recordingLocked:
             logger.warning("Cannot update ISO while exposure is locked")
             return
+        }
+        
+        // Create retry operation for ISO update
+        let operation = ExposureErrorRecovery.ExposureOperation(
+            type: .setISO,
+            execute: { [weak self] in
+                guard let self = self, let device = self.device else {
+                    throw ExposureServiceError.deviceUnavailable
+                }
+                
+                // The actual ISO setting is handled by handleStateTransition
+                // This is just to track the operation for retry purposes
+            },
+            validate: { [weak self] in
+                guard let self = self else { return false }
+                return self.device != nil && self.device!.activeFormat.minISO <= clampedISO && clampedISO <= self.device!.activeFormat.maxISO
+            }
+        )
+        
+        Task {
+            do {
+                try await errorRecovery.executeWithRetry(operation)
+            } catch {
+                logger.error("Failed to update ISO after retries: \(error)")
+                delegate?.didEncounterError(.configurationFailed(message: "Failed to set ISO: \(error.localizedDescription)"))
+            }
         }
     }
     
@@ -924,14 +985,30 @@ class ExposureService: NSObject {
 
     func prepareForLensSwitch() {
         lastKnownGoodState = stateMachine.currentState
+        
+        // Notify error recovery system about transition
+        Task {
+            await errorRecovery.beginTransition()
+        }
     }
 
     func restoreAfterLensSwitch() {
         guard let state = lastKnownGoodState,
-              let device = device else { return }
+              let device = device else { 
+            logger.error("Cannot restore after lens switch - missing state or device")
+            return 
+        }
         
-        // Restore the state machine state
-        switch state {
+        // End transition and process queued operations
+        Task {
+            await errorRecovery.endTransition()
+        }
+        
+        // Adapt state to new device capabilities
+        let adaptedState = adaptStateToDeviceCapabilities(state, device: device)
+        
+        // Restore the adapted state
+        switch adaptedState {
         case .auto:
             _ = stateMachine.processEvent(.enableAuto, device: device)
         case .manual(let iso, let duration):
@@ -948,6 +1025,59 @@ class ExposureService: NSObject {
             // Should not happen during lens switch
             logger.warning("Unexpected recording locked state during lens switch restore")
         }
+    }
+    
+    /// Adapts exposure state values to new device capabilities
+    private func adaptStateToDeviceCapabilities(_ state: ExposureState, device: AVCaptureDevice) -> ExposureState {
+        switch state {
+        case .manual(let iso, let duration):
+            // Clamp ISO to new device limits
+            let clampedISO = min(max(device.activeFormat.minISO, iso), device.activeFormat.maxISO)
+            // Clamp duration to new device limits
+            let clampedDuration = clampDurationToDevice(duration, device: device)
+            
+            if clampedISO != iso || clampedDuration != duration {
+                logger.info("Adapted manual state: ISO \(iso)→\(clampedISO), duration \(CMTimeGetSeconds(duration))→\(CMTimeGetSeconds(clampedDuration))")
+            }
+            
+            return .manual(iso: clampedISO, duration: clampedDuration)
+            
+        case .shutterPriority(let duration, let manualISO):
+            let clampedDuration = clampDurationToDevice(duration, device: device)
+            var clampedManualISO: Float? = nil
+            
+            if let iso = manualISO {
+                clampedManualISO = min(max(device.activeFormat.minISO, iso), device.activeFormat.maxISO)
+                if clampedManualISO != iso {
+                    logger.info("Adapted SP manual ISO: \(iso)→\(clampedManualISO!)")
+                }
+            }
+            
+            return .shutterPriority(targetDuration: clampedDuration, manualISO: clampedManualISO)
+            
+        case .locked(let iso, let duration):
+            let clampedISO = min(max(device.activeFormat.minISO, iso), device.activeFormat.maxISO)
+            let clampedDuration = clampDurationToDevice(duration, device: device)
+            return .locked(iso: clampedISO, duration: clampedDuration)
+            
+        default:
+            return state
+        }
+    }
+    
+    /// Clamps exposure duration to device's supported range
+    private func clampDurationToDevice(_ duration: CMTime, device: AVCaptureDevice) -> CMTime {
+        let format = device.activeFormat
+        let minDuration = format.minExposureDuration
+        let maxDuration = format.maxExposureDuration
+        
+        if CMTimeCompare(duration, minDuration) < 0 {
+            return minDuration
+        } else if CMTimeCompare(duration, maxDuration) > 0 {
+            return maxDuration
+        }
+        
+        return duration
     }
 
     private func smoothTransitionToNewExposure(targetISO: Float, duration: CMTime) {
@@ -1025,7 +1155,7 @@ class ExposureService: NSObject {
             queueUpdate(.whiteBalance(temperature: currentTempAndTint.temperature, tint: currentTempAndTint.tint))
         } catch {
             logger.error("Failed to change white-balance mode: \(error.localizedDescription)")
-            delegate?.didEncounterError(.configurationFailed)
+            delegate?.didEncounterError(.configurationFailed(message: nil))
         }
     }
 

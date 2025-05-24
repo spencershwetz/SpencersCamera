@@ -133,11 +133,27 @@ struct CameraView: View {
                 */
             }
             .alert(item: $viewModel.error) { error in
-                Alert(
-                    title: Text("Error"),
-                    message: Text(error.description),
-                    dismissButton: .default(Text("OK"))
-                )
+                if let recoveryAction = error.recoveryAction {
+                    return Alert(
+                        title: Text("Camera Error"),
+                        message: Text(error.description),
+                        primaryButton: .default(Text(recoveryAction)) {
+                            handleErrorRecovery(error)
+                        },
+                        secondaryButton: .cancel(Text("Dismiss"))
+                    )
+                } else {
+                    return Alert(
+                        title: Text("Camera Error"),
+                        message: Text(error.description),
+                        dismissButton: .default(Text("OK")) {
+                            // Clear recoverable errors automatically
+                            if error.isRecoverable {
+                                viewModel.error = nil
+                            }
+                        }
+                    )
+                }
             }
             .fullScreenCover(isPresented: $isShowingSettings) {
                 SettingsView(
@@ -581,6 +597,30 @@ struct CameraView: View {
             return String(format: "1/%.0f (%.0f°)", 1.0/seconds, angle)
         } else {
             return String(format: "%.2fs (%.0f°)", seconds, angle)
+        }
+    }
+    
+    // MARK: - Error Recovery
+    private func handleErrorRecovery(_ error: CameraError) {
+        switch error {
+        case .unauthorized:
+            // Open settings
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsURL)
+            }
+        case .mediaServicesWereReset:
+            // Restart the app
+            viewModel.restartSession()
+        case .circuitBreakerOpen:
+            // Clear error and wait
+            viewModel.error = nil
+            // The circuit breaker will auto-recover after timeout
+        case .sessionInterrupted:
+            // Session should auto-recover
+            viewModel.error = nil
+        default:
+            // For other errors, try restarting the session
+            viewModel.restartSession()
         }
     }
     

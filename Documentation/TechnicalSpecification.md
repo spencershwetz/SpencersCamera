@@ -236,6 +236,43 @@ This document outlines the technical specifications and requirements for the Spe
     - Automatic state restoration after switch completion
     - Error recovery for failed state restoration
 
+### Exposure Error Recovery System (2025-05-24)
+- **Retry Mechanism**:
+    - `ExposureErrorRecovery` actor manages retry logic with exponential backoff
+    - Configurable retry count (default: 3) with base delay of 100ms
+    - Jittered backoff calculation prevents thundering herd problems
+    - Maximum delay capped at 2 seconds
+- **Circuit Breaker Pattern**:
+    - Prevents cascading failures after 5 consecutive errors
+    - 10-second recovery timeout before allowing new operations
+    - Half-open state allows testing system recovery
+    - Automatic closure on successful operation
+- **Operation Queuing**:
+    - Queues exposure operations during lens transitions
+    - Processes queued operations after transition completes
+    - Prevents data loss during state changes
+    - Clears queue on device changes to prevent invalid operations
+- **Capability Adaptation**:
+    - Detects device capability changes during lens switches
+    - Automatically clamps ISO/duration values to new device limits
+    - Logs capability adaptations for debugging
+    - Preserves user intent while respecting hardware constraints
+- **Error Classification**:
+    - Distinguishes permanent vs transient errors
+    - Permanent errors (unauthorized, device unavailable) skip retry
+    - Transient errors (configuration failed, lock failed) trigger retry
+    - AVFoundation error codes mapped to appropriate actions
+- **User Interface Integration**:
+    - Enhanced `CameraError` with recovery actions and suggestions
+    - Alert dialogs provide actionable recovery options
+    - Automatic session restart for recoverable errors
+    - Deep links to Settings for permission errors
+- **State Machine Integration**:
+    - Error events integrated into `ExposureStateMachine`
+    - State preserved during error recovery attempts
+    - Graceful fallback to auto mode on critical failures
+    - Thread-safe error state transitions
+
 ### Additional Components (2025-04-30)
 - **RotatingViewController**: UIViewController subclass for applying rotation transforms to SwiftUI content.
 - **OrientationFixViewController**: Locks interface orientation for embedded SwiftUI views.

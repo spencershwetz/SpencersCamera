@@ -12,6 +12,16 @@ All notable changes to this project will be documented in this file.
     *   `CameraViewModel` now updates `ExposureUIViewModel` with new device limits when lenses are switched
     *   Eliminates confusion where ISO wheel showed incorrect ranges for different lenses
 
+*   Enhanced: Improved exposure error recovery mechanisms (Issue #5):
+    *   Added `ExposureErrorRecovery` actor with retry logic and exponential backoff
+    *   Implemented circuit breaker pattern to prevent cascading failures
+    *   Added queue for exposure operations during lens transitions
+    *   Enhanced error handling with more specific error types and user-friendly messages
+    *   Added capability detection and adaptation when switching between lenses
+    *   Improved error recovery UI with actionable recovery options
+    *   Automatic retry for transient failures with configurable limits
+    *   Better handling of device capability changes during lens switches
+
 *   Performance: Optimized Exposure System for improved efficiency and responsiveness:
     *   Replaced simple throttling (100ms) with intelligent Combine-based debouncing
     *   Implemented batched UI updates with 33ms debouncing (~30fps maximum update frequency)

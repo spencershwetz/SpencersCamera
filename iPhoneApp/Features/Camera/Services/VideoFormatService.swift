@@ -46,7 +46,7 @@ class VideoFormatService {
     func updateCameraFormat(for resolution: CameraViewModel.Resolution) async throws {
         guard let device = device else { 
             logger.error("No camera device available")
-            throw CameraError.configurationFailed 
+            throw CameraError.configurationFailed(message: nil)
         }
         
         logger.info("Updating camera format to \(resolution.rawValue)")
@@ -85,7 +85,7 @@ class VideoFormatService {
                 if wasRunning {
                     session.startRunning()
                 }
-                throw CameraError.configurationFailed
+                throw CameraError.configurationFailed(message: nil)
             }
             
             // Begin configuration
@@ -124,7 +124,7 @@ class VideoFormatService {
     func updateFrameRate(_ fps: Double) throws {
         guard let device = device else { 
             logger.error("No camera device available")
-            throw CameraError.configurationFailed 
+            throw CameraError.configurationFailed(message: nil)
         }
         
         do {
@@ -425,7 +425,7 @@ class VideoFormatService {
         
         guard let device = device else {
             logger.error("❌ [configureAppleLog] Failed: No camera device available.")
-            throw CameraError.configurationFailed
+            throw CameraError.configurationFailed(message: nil)
         }
         logger.debug("Using device: \(device.localizedName)")
         
@@ -501,7 +501,7 @@ class VideoFormatService {
             logger.debug("🧐 [configureAppleLog] Verifying selected format supports Apple Log...")
             guard selectedFormat.supportedColorSpaces.contains(.appleLog) else {
                 logger.error("❌ [configureAppleLog] Failed: Selected format \(selectedFormat.description) does not support Apple Log despite findBestFormat.")
-                throw CameraError.configurationFailed
+                throw CameraError.configurationFailed(message: nil)
             }
             logger.debug("✅ [configureAppleLog] Format supports Apple Log.")
             
@@ -541,7 +541,7 @@ class VideoFormatService {
         
         guard let device = device else {
             logger.error("❌ [resetAppleLog] Failed: No camera device available.")
-            throw CameraError.configurationFailed
+            throw CameraError.configurationFailed(message: nil)
         }
          logger.debug("Using device: \(device.localizedName)")
 

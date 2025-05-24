@@ -431,7 +431,7 @@ class CameraDeviceService {
             } else {
                 // If we can't even switch to wide angle, notify delegate of error
                 DispatchQueue.main.async { [weak self] in
-                    self?.delegate?.didEncounterError(.configurationFailed)
+                    self?.delegate?.didEncounterError(.configurationFailed(message: nil))
                 }
             }
             */
@@ -489,7 +489,7 @@ class CameraDeviceService {
         } catch {
             logger.error("❌ Failed to set zoom: \(error.localizedDescription)")
             DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didEncounterError(.configurationFailed)
+                self?.delegate?.didEncounterError(.configurationFailed(message: nil))
             }
         }
     }
@@ -553,7 +553,7 @@ class CameraDeviceService {
             currentDevice.unlockForConfiguration()
         } catch {
             logger.error("Failed to set zoom smoothly via slider: \(error.localizedDescription)")
-            self.delegate?.didEncounterError(.configurationFailed)
+            self.delegate?.didEncounterError(.configurationFailed(message: nil))
         }
     }
     

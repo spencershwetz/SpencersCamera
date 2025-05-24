@@ -199,7 +199,7 @@ class RecordingService: NSObject {
             // Get dimensions from current format
             guard let device = device else {
                 logger.error("Camera device is nil in startRecording")
-                throw CameraError.configurationFailed
+                throw CameraError.configurationFailed(message: nil)
             }
             
             // Get active format
@@ -208,7 +208,7 @@ class RecordingService: NSObject {
             // Now safely get dimensions
             guard let dimensions = format.dimensions else {
                 logger.error("Could not get dimensions from active format: \(format)")
-                throw CameraError.configurationFailed
+                throw CameraError.configurationFailed(message: nil)
             }
             
             // Set dimensions based on the native format dimensions
