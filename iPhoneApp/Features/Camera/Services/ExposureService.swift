@@ -131,13 +131,26 @@ class ExposureService: NSObject {
                                 }
                             }
                         } else {
-                            // No manual ISO - let the camera auto-adjust ISO for the fixed shutter
-                            // Use current ISO as starting point but camera will adjust as needed
+                            // No manual ISO - calculate proper ISO for current lighting conditions
+                            // to avoid slow transition from previous manual ISO value
                             let currentISO = device.iso
-                            device.setExposureModeCustom(duration: targetDuration, iso: currentISO) { _ in
+                            let targetOffset = device.exposureTargetOffset
+                            
+                            // Calculate ideal ISO to achieve zero EV offset
+                            // idealISO = currentISO / 2^(targetOffset)
+                            var idealISO = currentISO / pow(2.0, targetOffset)
+                            
+                            // Clamp to device limits
+                            let minISO = device.activeFormat.minISO
+                            let maxISO = device.activeFormat.maxISO
+                            idealISO = min(max(idealISO, minISO), maxISO)
+                            
+                            self.logger.info("SP transition to auto: Current ISO \(currentISO), Target Offset \(targetOffset)EV, Setting ISO to \(idealISO)")
+                            
+                            device.setExposureModeCustom(duration: targetDuration, iso: idealISO) { _ in
                                 DispatchQueue.main.async {
                                     self.delegate?.didUpdateShutterSpeed(targetDuration)
-                                    // Don't report ISO here - let KVO handle it as it auto-adjusts
+                                    self.delegate?.didUpdateISO(idealISO)
                                 }
                             }
                         }

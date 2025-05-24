@@ -643,10 +643,8 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         isManualISOInSP = false
         logger.info("Manual ISO override reset in SP mode.")
         exposureService.setManualISOInSP(false)
-        // Re-apply SP to restore auto ISO
-        if currentExposureMode == .shutterPriority {
-            ensureShutterPriorityConsistency()
-        }
+        // Don't re-apply SP here - the state machine transition will handle it properly
+        // with the new logic that calculates ideal ISO immediately
     }
     
     func updateShutterSpeed(_ speed: CMTime) {
