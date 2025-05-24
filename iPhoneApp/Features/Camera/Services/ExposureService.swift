@@ -1,6 +1,7 @@
 import AVFoundation
 import os.log
 import CoreMedia
+import Combine
 
 protocol ExposureServiceDelegate: AnyObject {
     func didUpdateWhiteBalance(_ temperature: Float, tint: Float)
@@ -8,6 +9,48 @@ protocol ExposureServiceDelegate: AnyObject {
     func didUpdateShutterSpeed(_ speed: CMTime)
     func didEncounterError(_ error: CameraError)
     func didUpdateExposureTargetBias(_ bias: Float)
+}
+
+// MARK: - Performance Optimization Data Structures
+
+/// Represents a single exposure update type
+enum ExposureUpdate {
+    case iso(Float)
+    case shutterSpeed(CMTime)
+    case whiteBalance(temperature: Float, tint: Float)
+    case exposureBias(Float)
+}
+
+/// Batches multiple exposure updates to reduce UI thrashing
+struct ExposureUpdateBatch {
+    var iso: Float?
+    var shutterSpeed: CMTime?
+    var whiteBalance: (temperature: Float, tint: Float)?
+    var exposureBias: Float?
+    
+    mutating func add(_ update: ExposureUpdate) {
+        switch update {
+        case .iso(let value):
+            iso = value
+        case .shutterSpeed(let value):
+            shutterSpeed = value
+        case .whiteBalance(let temperature, let tint):
+            whiteBalance = (temperature, tint)
+        case .exposureBias(let value):
+            exposureBias = value
+        }
+    }
+    
+    mutating func clear() {
+        iso = nil
+        shutterSpeed = nil
+        whiteBalance = nil
+        exposureBias = nil
+    }
+    
+    var isEmpty: Bool {
+        return iso == nil && shutterSpeed == nil && whiteBalance == nil && exposureBias == nil
+    }
 }
 
 // Add at the top after imports
@@ -42,12 +85,19 @@ class ExposureService: NSObject {
     // --- Shutter Priority State ---
     private var targetShutterDuration: CMTime?
     private var exposureTargetOffsetObservation: NSKeyValueObservation?
-    private var lastIsoAdjustmentTime: Date = .distantPast // For rate limiting
+    // Intelligent debouncing for shutter priority adjustments
+    private var shutterPriorityDebouncer: AnyCancellable?
+    private let shutterPrioritySubject = PassthroughSubject<Float, Never>()
 
-    // --- Tuning Parameters (Adjust as needed) ---
-    private let isoAdjustmentInterval: TimeInterval = 0.1 // Max 10 ISO adjustments/sec
+    // --- Tuning Parameters (Optimized for performance) ---
     private let isoPercentageThreshold: Float = 0.05 // 5% change needed to trigger adjustment
     private let evOffsetThreshold: Float = 0.1 // 0.1 EV offset needed to trigger adjustment
+    
+    // --- Debouncing and Batching ---
+    private var updateDebouncer: AnyCancellable?
+    private let updateSubject = PassthroughSubject<ExposureUpdate, Never>()
+    private var pendingUpdates = ExposureUpdateBatch()
+    private let batchLock = NSLock()
 
     // --- Dispatch Queue ---
     // Add a dedicated serial queue for exposure adjustments to avoid blocking KVO/session queues
@@ -63,6 +113,7 @@ class ExposureService: NSObject {
     // Add new properties
     private let stateQueue = DispatchQueue(label: "com.camera.exposureState", qos: .userInitiated)
     private var lastKnownGoodState: ExposureState?
+    private var cancellables = Set<AnyCancellable>()
     
     // Computed property to get current exposure mode
     var currentExposureMode: ExposureMode {
@@ -86,6 +137,8 @@ class ExposureService: NSObject {
         stateMachine.onStateChange = { [weak self] oldState, newState in
             self?.handleStateTransition(from: oldState, to: newState)
         }
+        
+        setupUpdateBatching()
     }
     
     // Handle state transitions
@@ -120,10 +173,9 @@ class ExposureService: NSObject {
                         }
                         
                         device.setExposureModeCustom(duration: duration, iso: clampedISO) { _ in
-                            DispatchQueue.main.async {
-                                self.delegate?.didUpdateISO(clampedISO)
-                                self.delegate?.didUpdateShutterSpeed(duration)
-                            }
+                            // Queue batched updates instead of immediate dispatch
+                            self.queueUpdate(.iso(clampedISO))
+                            self.queueUpdate(.shutterSpeed(duration))
                         }
                     }
                     
@@ -134,10 +186,9 @@ class ExposureService: NSObject {
                         if let manualISO = manualISO {
                             // Manual ISO override is set
                             device.setExposureModeCustom(duration: targetDuration, iso: manualISO) { _ in
-                                DispatchQueue.main.async {
-                                    self.delegate?.didUpdateISO(manualISO)
-                                    self.delegate?.didUpdateShutterSpeed(targetDuration)
-                                }
+                                // Queue batched updates instead of immediate dispatch
+                                self.queueUpdate(.iso(manualISO))
+                                self.queueUpdate(.shutterSpeed(targetDuration))
                             }
                         } else {
                             // No manual ISO - calculate proper ISO for current lighting conditions
@@ -157,10 +208,9 @@ class ExposureService: NSObject {
                             self.logger.info("SP transition to auto: Current ISO \(currentISO), Target Offset \(targetOffset)EV, Setting ISO to \(idealISO)")
                             
                             device.setExposureModeCustom(duration: targetDuration, iso: idealISO) { _ in
-                                DispatchQueue.main.async {
-                                    self.delegate?.didUpdateShutterSpeed(targetDuration)
-                                    self.delegate?.didUpdateISO(idealISO)
-                                }
+                                // Queue batched updates instead of immediate dispatch
+                                self.queueUpdate(.shutterSpeed(targetDuration))
+                                self.queueUpdate(.iso(idealISO))
                             }
                         }
                     }
@@ -191,7 +241,60 @@ class ExposureService: NSObject {
     // Clean up observers on deinitialization
     deinit {
         removeDeviceObservers()
+        cancellables.removeAll()
         logger.info("ExposureService deinitialized, observers removed.")
+    }
+    
+    // MARK: - Performance Optimization Methods
+    
+    /// Sets up intelligent debouncing for exposure updates
+    private func setupUpdateBatching() {
+        updateDebouncer = updateSubject
+            .debounce(for: .milliseconds(33), scheduler: DispatchQueue.main) // ~30fps max updates
+            .sink { [weak self] _ in
+                self?.flushPendingUpdates()
+            }
+        updateDebouncer?.store(in: &cancellables)
+        
+        // Setup shutter priority debouncing with longer delay for stability
+        shutterPriorityDebouncer = shutterPrioritySubject
+            .debounce(for: .milliseconds(100), scheduler: exposureAdjustmentQueue) // 100ms for exposure stability
+            .sink { [weak self] offset in
+                self?.performShutterPriorityAdjustment(offset: offset)
+            }
+        shutterPriorityDebouncer?.store(in: &cancellables)
+    }
+    
+    /// Adds an update to the pending batch
+    private func queueUpdate(_ update: ExposureUpdate) {
+        batchLock.lock()
+        pendingUpdates.add(update)
+        batchLock.unlock()
+        updateSubject.send(update)
+    }
+    
+    /// Flushes all pending updates to the delegate in a single batch
+    private func flushPendingUpdates() {
+        batchLock.lock()
+        let batch = pendingUpdates
+        pendingUpdates.clear()
+        batchLock.unlock()
+        
+        guard !batch.isEmpty else { return }
+        
+        // Deliver all batched updates
+        if let iso = batch.iso {
+            delegate?.didUpdateISO(iso)
+        }
+        if let shutterSpeed = batch.shutterSpeed {
+            delegate?.didUpdateShutterSpeed(shutterSpeed)
+        }
+        if let whiteBalance = batch.whiteBalance {
+            delegate?.didUpdateWhiteBalance(whiteBalance.temperature, tint: whiteBalance.tint)
+        }
+        if let exposureBias = batch.exposureBias {
+            delegate?.didUpdateExposureTargetBias(exposureBias)
+        }
     }
     
     func setDevice(_ device: AVCaptureDevice?) {
@@ -253,19 +356,16 @@ class ExposureService: NSObject {
                 break
             }
             
-            DispatchQueue.main.async {
-                self.delegate?.didUpdateISO(newISO)
-            }
+            // Queue update for batching instead of immediate dispatch
+            self.queueUpdate(.iso(newISO))
         }
         
         // Observe exposure duration (shutter speed) changes
         exposureDurationObservation = device.observe(\.exposureDuration, options: [.new]) { [weak self] device, change in
             guard let self = self, let newDuration = change.newValue else { return }
             if device.exposureMode == .continuousAutoExposure || device.exposureMode == .locked {
-                // logger.debug("[KVO] Exposure duration changed to: \(CMTimeGetSeconds(newDuration))")
-                DispatchQueue.main.async {
-                    self.delegate?.didUpdateShutterSpeed(newDuration)
-                }
+                // Queue update for batching instead of immediate dispatch
+                self.queueUpdate(.shutterSpeed(newDuration))
             }
         }
         
@@ -284,9 +384,8 @@ class ExposureService: NSObject {
         // Observe exposure target bias changes
         exposureBiasObservation = device.observe(\.exposureTargetBias, options: [.new]) { [weak self] device, change in
             guard let self = self, let newBias = change.newValue else { return }
-            DispatchQueue.main.async {
-                self.delegate?.didUpdateExposureTargetBias(newBias)
-            }
+            // Queue update for batching instead of immediate dispatch
+            self.queueUpdate(.exposureBias(newBias))
         }
         
         // Report initial values immediately after setting observers
@@ -313,35 +412,35 @@ class ExposureService: NSObject {
     func reportCurrentDeviceValues() {
         guard let device = device else { return }
         logger.debug("Reporting initial device values after observer setup.")
-        DispatchQueue.main.async { [weak self] in
-             guard let self = self else { return }
-             // Report ISO - Allow reporting in .custom mode as well
-             if device.exposureMode == .continuousAutoExposure || 
-                device.exposureMode == .locked || 
-                device.exposureMode == .custom { // <-- Allow reporting in .custom mode
-                 self.delegate?.didUpdateISO(device.iso)
-                 logger.debug("Reporting current ISO: \(device.iso) in mode \(device.exposureMode.rawValue)")
-             }
-             // Report Shutter Speed - Allow reporting in .custom mode as well
-             if device.exposureMode == .continuousAutoExposure || 
-                device.exposureMode == .locked || 
-                device.exposureMode == .custom { // <-- Allow reporting in .custom mode
-                 self.delegate?.didUpdateShutterSpeed(device.exposureDuration)
-                  logger.debug("Reporting current Shutter: \(CMTimeGetSeconds(device.exposureDuration))s in mode \(device.exposureMode.rawValue)")
-             }
-             // Report White Balance (Using Safe Helper)
-             if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
-                 // Use the safe helper function
-                 if let tempAndTint = self.safeGetTemperatureAndTint(for: device.deviceWhiteBalanceGains) {
-                     self.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint) // Pass tint here too
-                     logger.debug("Reporting current WB Temp: \(tempAndTint.temperature), Tint: \(tempAndTint.tint)")
-                 } else {
-                     logger.warning("Could not report initial white balance - conversion failed or gains invalid.")
-                 }
-             }
-             // Report exposure bias
-             self.delegate?.didUpdateExposureTargetBias(device.exposureTargetBias)
+        
+        // Report ISO - Allow reporting in .custom mode as well
+        if device.exposureMode == .continuousAutoExposure || 
+           device.exposureMode == .locked || 
+           device.exposureMode == .custom {
+            queueUpdate(.iso(device.iso))
+            logger.debug("Reporting current ISO: \(device.iso) in mode \(device.exposureMode.rawValue)")
         }
+        
+        // Report Shutter Speed - Allow reporting in .custom mode as well
+        if device.exposureMode == .continuousAutoExposure || 
+           device.exposureMode == .locked || 
+           device.exposureMode == .custom {
+            queueUpdate(.shutterSpeed(device.exposureDuration))
+            logger.debug("Reporting current Shutter: \(CMTimeGetSeconds(device.exposureDuration))s in mode \(device.exposureMode.rawValue)")
+        }
+        
+        // Report White Balance (Using Safe Helper)
+        if device.whiteBalanceMode == .continuousAutoWhiteBalance || device.whiteBalanceMode == .locked {
+            if let tempAndTint = safeGetTemperatureAndTint(for: device.deviceWhiteBalanceGains) {
+                queueUpdate(.whiteBalance(temperature: tempAndTint.temperature, tint: tempAndTint.tint))
+                logger.debug("Reporting current WB Temp: \(tempAndTint.temperature), Tint: \(tempAndTint.tint)")
+            } else {
+                logger.warning("Could not report initial white balance - conversion failed or gains invalid.")
+            }
+        }
+        
+        // Report exposure bias
+        queueUpdate(.exposureBias(device.exposureTargetBias))
     }
     
     func updateWhiteBalance(_ temperature: Float) {
@@ -365,11 +464,8 @@ class ExposureService: NSObject {
                 device.whiteBalanceMode = .locked
                 device.setWhiteBalanceModeLocked(with: gains) { [weak self] _ in
                     // Report the value back via delegate *after* it's set
-                    // Also need to read the tint value after setting
                     let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
-                    DispatchQueue.main.async {
-                        self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint) // Pass both
-                    }
+                    self?.queueUpdate(.whiteBalance(temperature: currentTempAndTint.temperature, tint: currentTempAndTint.tint))
                 }
             } else {
                  logger.warning("Locked white balance mode not supported.")
@@ -586,11 +682,8 @@ class ExposureService: NSObject {
                 device.whiteBalanceMode = .locked
                 device.setWhiteBalanceModeLocked(with: gains) { [weak self] _ in
                     // Report the value back via delegate *after* it's set
-                    // Need to read the actual temp/tint after setting gains
                     let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
-                    DispatchQueue.main.async {
-                        self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint)
-                    }
+                    self?.queueUpdate(.whiteBalance(temperature: currentTempAndTint.temperature, tint: currentTempAndTint.tint))
                 }
             } else {
                  logger.warning("Locked white balance mode not supported.")
@@ -661,59 +754,55 @@ class ExposureService: NSObject {
     }
     // --------------------------------
 
-    // --- Add new method here ---
+    // --- Optimized exposure target offset handling ---
     private func handleExposureTargetOffsetUpdate(change: NSKeyValueObservedChange<Float>) {
         // Check if we're in shutter priority mode
-        guard case .shutterPriority(let targetDuration, let manualISO) = stateMachine.currentState,
+        guard case .shutterPriority(_, let manualISO) = stateMachine.currentState,
               manualISO == nil, // Only adjust if no manual ISO override
               let newOffset = change.newValue else {
             return
         }
-        // Throttle adjustments
-        let now = Date()
-        guard now.timeIntervalSince(lastIsoAdjustmentTime) > isoAdjustmentInterval else {
-             // logger.debug("SP Adjust: KVO ignored (Rate limited)")
-            return
-        }
+        
         // Only adjust if EV offset is significant
         guard abs(newOffset) > evOffsetThreshold else {
-            // logger.debug("SP Adjust: KVO ignored (EV offset \(newOffset) within threshold \(evOffsetThreshold))")
             return
         }
-        // Perform calculations and device interaction on the dedicated queue
-        exposureAdjustmentQueue.async { [weak self] in
-             guard let self = self, 
-                   case .shutterPriority = self.stateMachine.currentState,
-                   let currentDevice = self.device else { return } // Re-check state inside async block
-            let currentISO = currentDevice.iso
-            let minISO = currentDevice.activeFormat.minISO
-            let maxISO = currentDevice.activeFormat.maxISO
-            // Calculate the ideal ISO to compensate for the offset
-            // newISO = currentISO / 2^(offset)
-            var idealISO = currentISO / pow(2.0, newOffset)
-            // Clamp ISO to device limits
-            idealISO = min(max(idealISO, minISO), maxISO)
-            // Only adjust if the change is significant enough
-            let percentageChange = abs(idealISO - currentISO) / currentISO
-            guard percentageChange > self.isoPercentageThreshold else {
-                // self.logger.debug("SP Adjust: KVO ignored (ISO change \(percentageChange * 100)% within threshold \(self.isoPercentageThreshold * 100)%)")
-                return
+        
+        // Send to debounced handler instead of immediate processing
+        shutterPrioritySubject.send(newOffset)
+    }
+    
+    /// Performs the actual shutter priority adjustment after debouncing
+    private func performShutterPriorityAdjustment(offset: Float) {
+        guard case .shutterPriority(let targetDuration, let manualISO) = stateMachine.currentState,
+              manualISO == nil,
+              let currentDevice = device else { return }
+        
+        let currentISO = currentDevice.iso
+        let minISO = currentDevice.activeFormat.minISO
+        let maxISO = currentDevice.activeFormat.maxISO
+        
+        // Calculate the ideal ISO to compensate for the offset
+        var idealISO = currentISO / pow(2.0, offset)
+        idealISO = min(max(idealISO, minISO), maxISO)
+        
+        // Only adjust if the change is significant enough
+        let percentageChange = abs(idealISO - currentISO) / currentISO
+        guard percentageChange > isoPercentageThreshold else {
+            return
+        }
+        
+        logger.debug("SP Adjust: Offset \(String(format: "%.2f", offset))EV, Current ISO \(String(format: "%.1f", currentISO)), Ideal ISO \(String(format: "%.1f", idealISO))")
+        
+        do {
+            try currentDevice.lockForConfiguration()
+            currentDevice.setExposureModeCustom(duration: targetDuration, iso: idealISO) { [weak self] _ in
+                self?.logger.debug("SP Adjustment Applied: ISO set to \(String(format: "%.1f", idealISO))")
             }
-            self.logger.debug("SP Adjust: Offset \(String(format: "%.2f", newOffset))EV, Current ISO \(String(format: "%.1f", currentISO)), Ideal ISO \(String(format: "%.1f", idealISO))")
-            do {
-                try currentDevice.lockForConfiguration()
-                // Re-apply custom exposure with the fixed duration and newly calculated ISO
-                currentDevice.setExposureModeCustom(duration: targetDuration, iso: idealISO) { [weak self] _ in
-                    // Note: KVO for 'iso' should fire and update the delegate/UI separately
-                    self?.logger.debug("SP Adjustment Applied: ISO set attempt to \(String(format: "%.1f", idealISO))")
-                }
-                self.lastIsoAdjustmentTime = now // Update timestamp only if adjustment was attempted
-                currentDevice.unlockForConfiguration()
-            } catch {
-                self.logger.error("SP Adjust: Error setting custom exposure: \(error.localizedDescription)")
-                // Attempt to unlock configuration if lock failed during change
-                currentDevice.unlockForConfiguration()
-            }
+            currentDevice.unlockForConfiguration()
+        } catch {
+            logger.error("SP Adjust: Error setting custom exposure: \(error.localizedDescription)")
+            currentDevice.unlockForConfiguration()
         }
     }
     // --------------------------
@@ -768,9 +857,8 @@ class ExposureService: NSObject {
         
         // Use the safe helper function that clamps gains
         if let tempAndTint = safeGetTemperatureAndTint(for: newGains) {
-            DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didUpdateWhiteBalance(tempAndTint.temperature, tint: tempAndTint.tint)
-            }
+            // Queue update for batching instead of immediate dispatch
+            queueUpdate(.whiteBalance(temperature: tempAndTint.temperature, tint: tempAndTint.tint))
         }
     }
 
@@ -806,10 +894,7 @@ class ExposureService: NSObject {
         do {
             try device.lockForConfiguration()
             device.setExposureTargetBias(clampedBias) { [weak self] _ in
-                guard let self = self else { return }
-                DispatchQueue.main.async {
-                    self.delegate?.didUpdateExposureTargetBias(clampedBias)
-                }
+                self?.queueUpdate(.exposureBias(clampedBias))
             }
             device.unlockForConfiguration()
         } catch {
@@ -937,9 +1022,7 @@ class ExposureService: NSObject {
 
             // Notify delegate of the current WB state so UI can update immediately.
             let currentTempAndTint = device.temperatureAndTintValues(for: device.deviceWhiteBalanceGains)
-            DispatchQueue.main.async { [weak self] in
-                self?.delegate?.didUpdateWhiteBalance(currentTempAndTint.temperature, tint: currentTempAndTint.tint)
-            }
+            queueUpdate(.whiteBalance(temperature: currentTempAndTint.temperature, tint: currentTempAndTint.tint))
         } catch {
             logger.error("Failed to change white-balance mode: \(error.localizedDescription)")
             delegate?.didEncounterError(.configurationFailed)

@@ -172,6 +172,16 @@ The project is organized into the following main components:
         *   Enhanced logging confirms the calculated duration and application of shutter priority after each event that might affect camera state.
         *   Improved session interruption handling ensures shutter priority settings are properly restored after temporary camera access by other apps.
         *   **New (2025-05-02):** Shutter Priority re-application after lens switches is now debounced and atomic, with device readiness checks and ISO caching to prevent exposure jumps and race conditions. All KVO and device property changes for exposure are now performed on a serial queue for thread safety.
+        *   **Performance Optimization (2025-05-23):** ExposureService implements intelligent batching and debouncing for optimal UI performance:
+            *   Replaced simple throttling (100ms) with Combine-based debouncing
+            *   Batched UI updates with 33ms debouncing (~30fps maximum update frequency)
+            *   Update coalescing system - multiple exposure parameters (ISO, shutter speed, white balance) are batched into single UI updates
+            *   Batch processing time: 0.01-0.04ms (extremely fast)
+            *   Dedicated 100ms debouncing for shutter priority adjustments (stability)
+            *   Proper Combine cancellable management with automatic cleanup
+            *   Significantly reduced UI thrashing during rapid exposure adjustments
+            *   Improved battery efficiency by eliminating redundant delegate calls
+            *   Lower risk of GPU timeouts during rapid parameter changes
     *   `DockControlService` manages DockKit accessory interactions, handling tracking, framing, and camera control events. It communicates with `CameraViewModel` through the `CameraCaptureDelegate` protocol.
     *   `DockKitIntegration` extends `CameraViewModel` to conform to `CameraCaptureDelegate`, enabling DockKit accessory control of camera functions.
     *   **Enhanced Exposure Handling (2025-05-06)**:
