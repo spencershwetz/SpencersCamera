@@ -110,9 +110,18 @@ class ExposureService: NSObject {
                 case .manual(let iso, let duration):
                     if device.isExposureModeSupported(.custom) {
                         device.exposureMode = .custom
-                        device.setExposureModeCustom(duration: duration, iso: iso) { _ in
+                        // Clamp ISO to device limits before setting
+                        let minISO = device.activeFormat.minISO
+                        let maxISO = device.activeFormat.maxISO
+                        let clampedISO = min(max(iso, minISO), maxISO)
+                        
+                        if clampedISO != iso {
+                            self.logger.warning("Clamped ISO from \(iso) to \(clampedISO) to stay within device limits [\(minISO), \(maxISO)]")
+                        }
+                        
+                        device.setExposureModeCustom(duration: duration, iso: clampedISO) { _ in
                             DispatchQueue.main.async {
-                                self.delegate?.didUpdateISO(iso)
+                                self.delegate?.didUpdateISO(clampedISO)
                                 self.delegate?.didUpdateShutterSpeed(duration)
                             }
                         }

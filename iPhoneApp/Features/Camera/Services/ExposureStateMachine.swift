@@ -106,9 +106,20 @@ class ExposureStateMachine {
             case (.auto, .enableManual(let iso, let duration)):
                 if let device = device {
                     #if !os(macOS)
-                    let actualISO = iso ?? device.iso
+                    // Get device limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    
+                    // Get the actual ISO, clamping to device limits
+                    let deviceISO = device.iso
+                    let clampedDeviceISO = min(max(deviceISO, minISO), maxISO)
+                    let actualISO = iso ?? clampedDeviceISO
+                    
+                    // Ensure the final ISO is within limits
+                    let finalISO = min(max(actualISO, minISO), maxISO)
                     let actualDuration = duration ?? device.exposureDuration
-                    newState = .manual(iso: actualISO, duration: actualDuration)
+                    
+                    newState = .manual(iso: finalISO, duration: actualDuration)
                     #else
                     newState = currentState
                     #endif
@@ -122,7 +133,12 @@ class ExposureStateMachine {
             case (.auto, .lock):
                 if let device = device {
                     #if !os(macOS)
-                    newState = .locked(iso: device.iso, duration: device.exposureDuration)
+                    // Get device limits and clamp ISO
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    let clampedISO = min(max(device.iso, minISO), maxISO)
+                    
+                    newState = .locked(iso: clampedISO, duration: device.exposureDuration)
                     #else
                     newState = currentState
                     #endif
@@ -143,9 +159,20 @@ class ExposureStateMachine {
             case (.manual, .enableManual(let iso, let duration)):
                 if let device = device {
                     #if !os(macOS)
-                    let actualISO = iso ?? device.iso
+                    // Get device limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    
+                    // Get the actual ISO, clamping to device limits
+                    let deviceISO = device.iso
+                    let clampedDeviceISO = min(max(deviceISO, minISO), maxISO)
+                    let actualISO = iso ?? clampedDeviceISO
+                    
+                    // Ensure the final ISO is within limits
+                    let finalISO = min(max(actualISO, minISO), maxISO)
                     let actualDuration = duration ?? device.exposureDuration
-                    newState = .manual(iso: actualISO, duration: actualDuration)
+                    
+                    newState = .manual(iso: finalISO, duration: actualDuration)
                     #else
                     newState = currentState
                     #endif
@@ -160,7 +187,12 @@ class ExposureStateMachine {
             case (.shutterPriority(let targetDuration, _), .enableManual(_, _)):
                 if let device = device {
                     #if !os(macOS)
-                    newState = .manual(iso: device.iso, duration: targetDuration)
+                    // Get device limits and clamp ISO
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    let clampedISO = min(max(device.iso, minISO), maxISO)
+                    
+                    newState = .manual(iso: clampedISO, duration: targetDuration)
                     #else
                     newState = currentState
                     #endif
@@ -169,7 +201,16 @@ class ExposureStateMachine {
                 }
                 
             case (.shutterPriority(let targetDuration, _), .overrideISOInShutterPriority(let iso)):
-                newState = .shutterPriority(targetDuration: targetDuration, manualISO: iso)
+                if let device = device {
+                    // Clamp ISO to device limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    let clampedISO = min(max(iso, minISO), maxISO)
+                    newState = .shutterPriority(targetDuration: targetDuration, manualISO: clampedISO)
+                } else {
+                    // If no device, still update state but can't validate ISO
+                    newState = .shutterPriority(targetDuration: targetDuration, manualISO: iso)
+                }
                 
             case (.shutterPriority(let targetDuration, _), .clearManualISOOverride):
                 newState = .shutterPriority(targetDuration: targetDuration, manualISO: nil)
@@ -177,7 +218,18 @@ class ExposureStateMachine {
             case (.shutterPriority(let targetDuration, let manualISO), .lock):
                 if let device = device {
                     #if !os(macOS)
-                    let lockISO = manualISO ?? device.iso
+                    // Get device limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    
+                    // Use manual ISO if provided, otherwise clamp device ISO
+                    let lockISO: Float
+                    if let manualISO = manualISO {
+                        lockISO = min(max(manualISO, minISO), maxISO)
+                    } else {
+                        lockISO = min(max(device.iso, minISO), maxISO)
+                    }
+                    
                     newState = .locked(iso: lockISO, duration: targetDuration)
                     #else
                     newState = currentState
@@ -208,9 +260,20 @@ class ExposureStateMachine {
             case (.locked, .enableManual(let iso, let duration)):
                 if let device = device {
                     #if !os(macOS)
-                    let actualISO = iso ?? device.iso
+                    // Get device limits
+                    let minISO = device.activeFormat.minISO
+                    let maxISO = device.activeFormat.maxISO
+                    
+                    // Get the actual ISO, clamping to device limits
+                    let deviceISO = device.iso
+                    let clampedDeviceISO = min(max(deviceISO, minISO), maxISO)
+                    let actualISO = iso ?? clampedDeviceISO
+                    
+                    // Ensure the final ISO is within limits
+                    let finalISO = min(max(actualISO, minISO), maxISO)
                     let actualDuration = duration ?? device.exposureDuration
-                    newState = .manual(iso: actualISO, duration: actualDuration)
+                    
+                    newState = .manual(iso: finalISO, duration: actualDuration)
                     #else
                     newState = currentState
                     #endif

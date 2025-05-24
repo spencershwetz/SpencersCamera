@@ -139,8 +139,19 @@ class CameraDeviceService {
         }
 
         if newDevice.activeColorSpace != targetColorSpace {
-            newDevice.activeColorSpace = targetColorSpace
-            logger.info("✅ [configureSession] Set activeColorSpace to \(targetColorSpace.rawValue).")
+            // Verify the color space is supported by the active format before setting
+            if selectedFormat.supportedColorSpaces.contains(targetColorSpace) {
+                newDevice.activeColorSpace = targetColorSpace
+                logger.info("✅ [configureSession] Set activeColorSpace to \(targetColorSpace.rawValue).")
+            } else {
+                logger.error("❌ [configureSession] Target color space \(targetColorSpace.rawValue) is not supported by selected format")
+                logger.info("ℹ️ [configureSession] Supported color spaces: \(selectedFormat.supportedColorSpaces.map { $0.rawValue })")
+                // Fall back to first supported color space
+                if let fallbackColorSpace = selectedFormat.supportedColorSpaces.first {
+                    newDevice.activeColorSpace = fallbackColorSpace
+                    logger.info("⚠️ [configureSession] Using fallback color space: \(fallbackColorSpace.rawValue)")
+                }
+            }
         } else {
              logger.info("ℹ️ [configureSession] activeColorSpace already set to \(targetColorSpace.rawValue).")
         }
@@ -193,8 +204,19 @@ class CameraDeviceService {
 
         // === MOVE color space setting to after all other device configuration ===
         if newDevice.activeColorSpace != targetColorSpace {
-            newDevice.activeColorSpace = targetColorSpace
-            logger.info("✅ [configureSession] (FINAL) Set activeColorSpace to \(targetColorSpace.rawValue) after all configuration.")
+            // Verify the color space is supported by the active format before setting
+            if selectedFormat.supportedColorSpaces.contains(targetColorSpace) {
+                newDevice.activeColorSpace = targetColorSpace
+                logger.info("✅ [configureSession] (FINAL) Set activeColorSpace to \(targetColorSpace.rawValue) after all configuration.")
+            } else {
+                logger.error("❌ [configureSession] (FINAL) Target color space \(targetColorSpace.rawValue) is not supported by selected format")
+                logger.info("ℹ️ [configureSession] (FINAL) Supported color spaces: \(selectedFormat.supportedColorSpaces.map { $0.rawValue })")
+                // Fall back to first supported color space
+                if let fallbackColorSpace = selectedFormat.supportedColorSpaces.first {
+                    newDevice.activeColorSpace = fallbackColorSpace
+                    logger.info("⚠️ [configureSession] (FINAL) Using fallback color space: \(fallbackColorSpace.rawValue)")
+                }
+            }
         } else {
             logger.info("ℹ️ [configureSession] (FINAL) activeColorSpace already set to \(targetColorSpace.rawValue) after all configuration.")
         }

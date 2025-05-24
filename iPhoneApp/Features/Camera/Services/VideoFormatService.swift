@@ -331,14 +331,22 @@ class VideoFormatService {
             // *** ADDED: Explicitly set the active color space ***
             if device.activeColorSpace != targetColorSpace {
                 logger.info("🎨 [reapplyColorSpaceSettings] Setting activeColorSpace to \(targetColorSpace.rawValue)...")
-                device.activeColorSpace = targetColorSpace
-                // Add verification
-                if device.activeColorSpace == targetColorSpace {
-                    logger.info("✅ [reapplyColorSpaceSettings] Successfully set activeColorSpace to \(targetColorSpace.rawValue).")
+                
+                // Verify the color space is supported by the active format before setting
+                if currentFormat.supportedColorSpaces.contains(targetColorSpace) {
+                    device.activeColorSpace = targetColorSpace
+                    
+                    // Add verification
+                    if device.activeColorSpace == targetColorSpace {
+                        logger.info("✅ [reapplyColorSpaceSettings] Successfully set activeColorSpace to \(targetColorSpace.rawValue).")
+                    } else {
+                        logger.error("❌ [reapplyColorSpaceSettings] FAILED to set activeColorSpace to \(targetColorSpace.rawValue). Current space: \(device.activeColorSpace.rawValue)")
+                        throw CameraError.configurationFailed(message: "Failed to set target color space during reapply.")
+                    }
                 } else {
-                    logger.error("❌ [reapplyColorSpaceSettings] FAILED to set activeColorSpace to \(targetColorSpace.rawValue). Current space: \(device.activeColorSpace.rawValue)")
-                    // Decide if we should throw an error here
-                    throw CameraError.configurationFailed(message: "Failed to set target color space during reapply.")
+                    logger.error("❌ [reapplyColorSpaceSettings] Target color space \(targetColorSpace.rawValue) is not supported by active format")
+                    logger.info("ℹ️ [reapplyColorSpaceSettings] Supported color spaces: \(supportedSpaces)")
+                    throw CameraError.configurationFailed(message: "Target color space \(targetColorSpace.rawValue) not supported by active format")
                 }
             } else {
                  logger.info("ℹ️ [reapplyColorSpaceSettings] activeColorSpace is already set to the target value (\(targetColorSpace.rawValue)).")
@@ -465,14 +473,28 @@ class VideoFormatService {
                 throw CameraError.configurationFailed(message: "Selected format does not support Apple Log color space")
             }
             
-            do {
-                try device.lockForConfiguration()
-                device.activeColorSpace = .appleLog
-                device.unlockForConfiguration()
-                logger.info("✅ [configureAppleLog] Successfully configured Apple Log color space")
-            } catch {
-                logger.error("❌ [configureAppleLog] Failed to configure color space: \(error)")
-                throw CameraError.configurationFailed(message: "Failed to configure color space: \(error)")
+            // Check if color space is already set to avoid unnecessary operations
+            if device.activeColorSpace != .appleLog {
+                do {
+                    try device.lockForConfiguration()
+                    
+                    // Verify the color space is supported before setting
+                    if device.activeFormat.supportedColorSpaces.contains(.appleLog) {
+                        device.activeColorSpace = .appleLog
+                        logger.info("✅ [configureAppleLog] Successfully configured Apple Log color space")
+                    } else {
+                        device.unlockForConfiguration()
+                        logger.error("❌ [configureAppleLog] Active format does not support Apple Log color space")
+                        throw CameraError.configurationFailed(message: "Active format does not support Apple Log color space")
+                    }
+                    
+                    device.unlockForConfiguration()
+                } catch {
+                    logger.error("❌ [configureAppleLog] Failed to configure color space: \(error)")
+                    throw CameraError.configurationFailed(message: "Failed to configure color space: \(error)")
+                }
+            } else {
+                logger.info("ℹ️ [configureAppleLog] Color space is already set to Apple Log")
             }
 
             // Verify the format supports Apple Log
@@ -560,12 +582,19 @@ class VideoFormatService {
             // Explicitly set the color space to standard
             logger.info("🎨 [resetAppleLog] Setting activeColorSpace to standard...")
             let supportedColorSpaces = selectedFormat.supportedColorSpaces
-            guard supportedColorSpaces.contains(.sRGB) else {
-                logger.error("❌ [resetAppleLog] Selected format does not support sRGB color space")
-                throw CameraError.configurationFailed(message: "Format does not support sRGB color space")
-            }
             
-            device.activeColorSpace = .sRGB
+            // Check if color space change is needed
+            if device.activeColorSpace != .sRGB {
+                guard supportedColorSpaces.contains(.sRGB) else {
+                    logger.error("❌ [resetAppleLog] Selected format does not support sRGB color space")
+                    logger.info("ℹ️ [resetAppleLog] Supported color spaces: \(supportedColorSpaces.map { $0.rawValue })")
+                    throw CameraError.configurationFailed(message: "Format does not support sRGB color space")
+                }
+                
+                device.activeColorSpace = .sRGB
+            } else {
+                logger.info("ℹ️ [resetAppleLog] Color space already set to sRGB")
+            }
             
             // Verify the color space was reset
             if device.activeColorSpace == .sRGB {

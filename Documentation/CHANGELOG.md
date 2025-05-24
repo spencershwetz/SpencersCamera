@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+*   Fixed: Critical crash when tapping Auto ISO button:
+    *   Fixed NSRangeException crash caused by unclamped ISO values during exposure state transitions
+    *   Added ISO value clamping to device limits in ExposureStateMachine for all state transitions
+    *   ISO values are now validated against activeFormat.minISO and activeFormat.maxISO before setting
+    *   Prevents crashes when device reports ISO values outside supported range during auto-to-manual transitions
+
+*   Fixed: Critical crash during Apple Log configuration after code changes:
+    *   Fixed NSInvalidArgumentException when setting activeColorSpace without format support validation
+    *   Added checks to verify color space is supported by active format before setting
+    *   Prevents direct activeColorSpace assignment when format doesn't support the target color space
+    *   Added fallback mechanisms to gracefully handle unsupported color space requests
+    *   Eliminates need to reboot device after code changes that affect camera configuration
+
 *   Fixed: Exposure lock during recording now properly maintained when switching lenses:
     *   Fixed issue where exposure would unlock when changing lenses during recording with auto-lock enabled
     *   Updated exposure lock state check to include both manual and recording lock states
